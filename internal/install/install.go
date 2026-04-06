@@ -174,7 +174,7 @@ func Install(sourceFile string) error {
 		return fmt.Errorf("не удалось установить права на выполнение: %v", err)
 	}
 
-	fmt.Printf("Успешно установлено в %s\n", targetPath)
+	fmt.Printf("Успешно установлено как %s\n", targetPath)
 	// Проверяем, находится ли директория в PATH
 	pathEnv := os.Getenv("PATH")
 	pathDirs := strings.Split(pathEnv, ":")
