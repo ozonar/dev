@@ -10,10 +10,10 @@ import (
 	"dev/internal/cache"
 	"dev/internal/detector"
 	"dev/internal/docker"
+	"dev/internal/install"
 	"dev/internal/logs"
 	"dev/internal/prepare"
 	"dev/internal/run"
-	"dev/internal/selfinstall"
 	"dev/internal/virus"
 
 	"github.com/fatih/color"
@@ -74,11 +74,19 @@ var prepareCmd = &cobra.Command{
 	},
 }
 
-var selfInstallCmd = &cobra.Command{
-	Use:   "self-install",
-	Short: "Install dev into ~/bin with executable permissions",
+var installCmd = &cobra.Command{
+	Use:   "install [file]",
+	Short: "Install dev (or specified file) to system",
+	Long: `Install copies the dev executable (or a specified file) to a system directory.
+If no file argument is provided, installs the currently running dev binary.
+You will be prompted to choose installation directory: /usr/local/bin (default) or ~/bin.`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runSelfInstall()
+		var file string
+		if len(args) > 0 {
+			file = args[0]
+		}
+		runInstall(file)
 	},
 }
 
@@ -241,11 +249,11 @@ func runPrepare() {
 	color.Green("Project prepared successfully.")
 }
 
-func runSelfInstall() {
-	color.Cyan("Installing dev to ~/bin...")
-	err := selfinstall.SelfInstall()
+func runInstall(file string) {
+	color.Cyan("Installing dev...")
+	err := install.Install(file)
 	if err != nil {
-		color.Red("Self-install failed: %v", err)
+		color.Red("Install failed: %v", err)
 		return
 	}
 	color.Green("Installation successful.")
@@ -268,7 +276,7 @@ func main() {
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(dcrCmd)
 	rootCmd.AddCommand(prepareCmd)
-	rootCmd.AddCommand(selfInstallCmd)
+	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(virusCmd)
 	// Default action is analyze
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
