@@ -1,0 +1,32 @@
+# Binaries
+dev
+/dev.exe
+/dev
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Vendor
+vendor/
+node_modules/
+__pycache__/
+*.pyc
