@@ -152,12 +152,28 @@ func Install(sourceFile string) error {
 
 	targetPath := filepath.Join(targetDir, baseName)
 
+	// Проверяем, не пытаемся ли установить файл в самого себя
+	srcAbs, err := filepath.Abs(srcPath)
+	if err != nil {
+		srcAbs = srcPath
+	}
+	targetAbs, err := filepath.Abs(targetPath)
+	if err != nil {
+		targetAbs = targetPath
+	}
+	if srcAbs == targetAbs {
+		return fmt.Errorf("Попытка установить %[1]s в %[1]s.\n", targetPath)
+	}
+
 	// Копируем файл
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
 		return fmt.Errorf("не удалось открыть исходный файл %s: %v", srcPath, err)
 	}
 	defer srcFile.Close()
+
+	// Пытаемся удалить существующий файл
+	os.Remove(targetPath)
 
 	dstFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
