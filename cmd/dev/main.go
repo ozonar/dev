@@ -14,6 +14,7 @@ import (
 	"dev/internal/logs"
 	"dev/internal/prepare"
 	"dev/internal/run"
+	"dev/internal/version"
 	"dev/internal/virus"
 
 	"github.com/fatih/color"
@@ -112,7 +113,9 @@ func runAnalyze() {
 	red := color.New(color.FgRed).SprintFunc()
 	cyan := color.New(color.FgCyan).SprintFunc()
 
+	fmt.Printf("Dev version: %s\n", cyan(version.Version))
 	fmt.Println()
+
 	color.Cyan("=== Project Analysis ===")
 	fmt.Printf("Language:  %s\n", green(info.Language))
 	fmt.Printf("Framework: %s\n", green(info.Framework))
