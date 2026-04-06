@@ -105,7 +105,6 @@ func findDockerServices(root string) []string {
 	if !fileExists(composePath) {
 		return nil
 	}
-	// Simple parsing: look for services: block
 	data, err := os.ReadFile(composePath)
 	if err != nil {
 		return nil
@@ -113,24 +112,52 @@ func findDockerServices(root string) []string {
 	lines := strings.Split(string(data), "\n")
 	var services []string
 	inServices := false
+	servicesIndent := -1
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "services:") {
-			inServices = true
+		if trimmed == "" {
 			continue
 		}
-		if inServices && strings.Contains(trimmed, ":") && !strings.HasPrefix(trimmed, " ") && !strings.HasPrefix(trimmed, "\t") {
-			// New top-level key (maybe end of services)
-			if strings.Contains(trimmed, "volumes:") || strings.Contains(trimmed, "networks:") {
+		// Определяем отступ (количество пробелов в начале строки)
+		indent := 0
+		for _, ch := range line {
+			if ch == ' ' {
+				indent++
+			} else if ch == '\t' {
+				indent += 4 // считаем таб как 4 пробела
+			} else {
 				break
 			}
-			// Service name is before colon
+		}
+		if strings.HasPrefix(trimmed, "services:") {
+			inServices = true
+			servicesIndent = indent
+			continue
+		}
+		if !inServices {
+			continue
+		}
+		// Если отступ меньше или равен отступу services: и строка не пустая,
+		// значит, мы вышли из блока services (например, volumes:, networks:)
+		if indent <= servicesIndent && trimmed != "" {
+			// Проверяем, не является ли это другим top-level ключом
+			if strings.Contains(trimmed, ":") {
+				break
+			}
+		}
+		// Игнорируем строки, которые начинаются с '-'
+		if strings.HasPrefix(trimmed, "-") {
+			continue
+		}
+		// Сервис должен иметь отступ ровно на 2 пробела больше, чем services:
+		// (обычно servicesIndent = 0, indent = 2)
+		expectedIndent := servicesIndent + 2
+		if indent == expectedIndent && strings.Contains(trimmed, ":") {
+			// Извлекаем имя сервиса (часть до двоеточия)
 			parts := strings.Split(trimmed, ":")
-			if len(parts) > 0 {
-				svc := strings.TrimSpace(parts[0])
-				if svc != "" {
-					services = append(services, svc)
-				}
+			svc := strings.TrimSpace(parts[0])
+			if svc != "" {
+				services = append(services, svc)
 			}
 		}
 	}
