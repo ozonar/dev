@@ -57,7 +57,7 @@ func buildGo() error {
 	// Имя исполняемого файла: если путь содержит cmd/, берём имя поддиректории внутри cmd
 	output := outputName(target)
 
-	fmt.Printf("Сборка %s в %s...\n", target, output)
+	fmt.Printf("Build %s to %s...\n", target, output)
 	cmd := exec.Command("go", "build", "-o", output, target)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
