@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dev/internal/build"
 	"dev/internal/cache"
 	"dev/internal/detector"
 	"dev/internal/docker"
@@ -97,6 +98,14 @@ var virusCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runVirus(args[0])
+	},
+}
+
+var buildCmd = &cobra.Command{
+	Use:   "build",
+	Short: "Build the project",
+	Run: func(cmd *cobra.Command, args []string) {
+		runBuild()
 	},
 }
 
@@ -272,6 +281,23 @@ func runVirus(path string) {
 	color.Green("Copy successful.")
 }
 
+func runBuild() {
+	cwd, _ := os.Getwd()
+	info, err := detector.DetectProject(cwd)
+	if err != nil {
+		color.Red("Error detecting project: %v", err)
+		return
+	}
+
+	color.Green("Building project: %s (%s)", info.Framework, info.Language)
+	err = build.BuildProject(info.Framework, info.Language)
+	if err != nil {
+		color.Red("Build failed: %v", err)
+		return
+	}
+	color.Green("Build successful.")
+}
+
 func main() {
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(cacheCmd)
@@ -281,6 +307,7 @@ func main() {
 	rootCmd.AddCommand(prepareCmd)
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(virusCmd)
+	rootCmd.AddCommand(buildCmd)
 	// Default action is analyze
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
 		runAnalyze()
