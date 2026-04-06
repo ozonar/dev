@@ -175,18 +175,5 @@ func Install(sourceFile string) error {
 	}
 
 	fmt.Printf("Успешно установлено как %s\n", targetPath)
-	// Проверяем, находится ли директория в PATH
-	pathEnv := os.Getenv("PATH")
-	pathDirs := strings.Split(pathEnv, ":")
-	inPath := false
-	for _, dir := range pathDirs {
-		if dir == targetDir {
-			inPath = true
-			break
-		}
-	}
-	if !inPath {
-		fmt.Printf("Внимание: директория %s не находится в PATH. Возможно, команда не будет доступна из оболочки.\n", targetDir)
-	}
 	return nil
 }
