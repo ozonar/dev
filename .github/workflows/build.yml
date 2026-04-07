@@ -79,8 +79,22 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f
 
-      - name: Create release assets
+      - name: Upload Linux executable
+        uses: actions/upload-release-asset@v1
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload ${{ github.event.release.tag_name }} artifacts/**/*
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: artifacts/dev-linux-amd64/dev
+          asset_name: dev-linux-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows executable
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: artifacts/dev-windows-amd64.exe/dev.exe
+          asset_name: dev-windows-amd64.exe
+          asset_content_type: application/octet-stream
