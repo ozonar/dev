@@ -1,6 +1,7 @@
 package build
 
 import (
+	"dev/internal/common"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,9 +42,16 @@ func main() {
 	mainBar := filepath.Join(cmdBarDir, "main.go")
 	os.WriteFile(mainBar, []byte("package main\nfunc main(){}"), 0644)
 
-	mains := findGoMain()
+	mains, err := common.FindGoMain(".", common.FindGoMainOptions{
+		SearchInCmdFirst: true,
+		ExcludeDirs:      []string{"vendor/", "internal/", ".git/"},
+		OnlyMainGo:       false,
+	})
+	if err != nil {
+		t.Fatalf("FindGoMain вернула ошибку: %v", err)
+	}
 	if len(mains) != 2 {
-		t.Fatalf("findGoMain вернула %d файлов, ожидалось 2: %v", len(mains), mains)
+		t.Fatalf("FindGoMain вернула %d файлов, ожидалось 2: %v", len(mains), mains)
 	}
 	// Проверяем, что пути содержат ожидаемые имена
 	expected := map[string]bool{
@@ -78,9 +86,16 @@ func TestFindGoMainOutsideCmd(t *testing.T) {
 	os.MkdirAll(vendorDir, 0755)
 	os.WriteFile(filepath.Join(vendorDir, "main.go"), []byte("package main\nfunc main(){}"), 0644)
 
-	mains := findGoMain()
+	mains, err := common.FindGoMain(".", common.FindGoMainOptions{
+		SearchInCmdFirst: true,
+		ExcludeDirs:      []string{"vendor/", "internal/", ".git/"},
+		OnlyMainGo:       true,
+	})
+	if err != nil {
+		t.Fatalf("FindGoMain вернула ошибку: %v", err)
+	}
 	if len(mains) != 1 {
-		t.Fatalf("findGoMain вернула %d файлов, ожидался 1: %v", len(mains), mains)
+		t.Fatalf("FindGoMain вернула %d файлов, ожидался 1: %v", len(mains), mains)
 	}
 	if !strings.HasSuffix(mains[0], "main.go") {
 		t.Errorf("ожидался main.go, получили %s", mains[0])

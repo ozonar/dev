@@ -1,11 +1,10 @@
 package run
 
 import (
+	"dev/internal/common"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 )
 
 func RunProject(framework, language string) error {
@@ -26,7 +25,14 @@ func RunProject(framework, language string) error {
 		return fmt.Errorf("artisan not found")
 	case "go":
 		// Find main.go in cmd/ or root
-		mainFiles := findGoMain()
+		mainFiles, err := common.FindGoMain(".", common.FindGoMainOptions{
+			SearchInCmdFirst: false,
+			ExcludeDirs:      []string{},
+			OnlyMainGo:       false,
+		})
+		if err != nil {
+			return fmt.Errorf("ошибка поиска main файлов: %v", err)
+		}
 		if len(mainFiles) == 0 {
 			return fmt.Errorf("no Go main files found")
 		}
@@ -74,26 +80,4 @@ func RunProject(framework, language string) error {
 		}
 		return fmt.Errorf("unsupported framework: %s", framework)
 	}
-}
-
-func findGoMain() []string {
-	var mains []string
-	filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if strings.HasSuffix(info.Name(), ".go") {
-			// Simple check: file contains "package main" and "func main"
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-			content := string(data)
-			if strings.Contains(content, "package main") && strings.Contains(content, "func main") {
-				mains = append(mains, path)
-			}
-		}
-		return nil
-	})
-	return mains
 }

@@ -2,6 +2,7 @@ package build
 
 import (
 	"bufio"
+	"dev/internal/common"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,7 +27,14 @@ func BuildProject(framework, language string) error {
 // buildGo собирает Go проект
 func buildGo() error {
 	// Ищем все main файлы
-	mainFiles := findGoMain()
+	mainFiles, err := common.FindGoMain(".", common.FindGoMainOptions{
+		SearchInCmdFirst: true,
+		ExcludeDirs:      []string{"vendor/", "internal/", ".git/"},
+		OnlyMainGo:       false,
+	})
+	if err != nil {
+		return fmt.Errorf("ошибка поиска main файлов: %v", err)
+	}
 	if len(mainFiles) == 0 {
 		return fmt.Errorf("не найден ни один main файл Go")
 	}
@@ -75,62 +83,6 @@ func buildNode() error {
 	cmd.Stderr = os.Stderr
 	fmt.Println("Запуск npm run build...")
 	return cmd.Run()
-}
-
-// findGoMain ищет Go файлы с package main и func main
-// 1. Сначала ищет в директории cmd/
-// 2. Если не находит, ищет по всему проекту файлы с именем main.go
-func findGoMain() []string {
-	var mains []string
-
-	// Шаг 1: поиск в cmd/
-	if _, err := os.Stat("cmd"); err == nil {
-		filepath.Walk("cmd", func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return nil
-			}
-			if strings.HasSuffix(info.Name(), ".go") {
-				data, err := os.ReadFile(path)
-				if err != nil {
-					return nil
-				}
-				content := string(data)
-				if strings.Contains(content, "package main") && strings.Contains(content, "func main") {
-					mains = append(mains, path)
-				}
-			}
-			return nil
-		})
-	}
-
-	// Если нашли в cmd, возвращаем
-	if len(mains) > 0 {
-		return mains
-	}
-
-	// Шаг 2: поиск всех main.go файлов в проекте (кроме vendor, internal)
-	filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		// Пропускаем служебные директории
-		if strings.Contains(path, "vendor/") || strings.Contains(path, "internal/") || strings.Contains(path, ".git/") {
-			return nil
-		}
-		if info.Name() == "main.go" {
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-			content := string(data)
-			if strings.Contains(content, "package main") && strings.Contains(content, "func main") {
-				mains = append(mains, path)
-			}
-		}
-		return nil
-	})
-
-	return mains
 }
 
 // outputName возвращает имя выходного файла на основе пути к main.go

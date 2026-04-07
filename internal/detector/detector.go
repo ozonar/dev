@@ -1,6 +1,7 @@
 package detector
 
 import (
+	"dev/internal/common"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ func DetectProject(root string) (*ProjectInfo, error) {
 	info.Framework = framework
 
 	// Check .env
-	info.HasEnv = fileExists(filepath.Join(root, ".env"))
+	info.HasEnv = common.FileExists(filepath.Join(root, ".env"))
 
 	// Check vendor/composer/node_modules etc
 	info.HasVendor = checkVendor(root, framework)
@@ -52,52 +53,47 @@ func DetectProject(root string) (*ProjectInfo, error) {
 
 func detectLangFramework(root string) (string, string) {
 	// Check for composer.json -> PHP
-	if fileExists(filepath.Join(root, "composer.json")) {
+	if common.FileExists(filepath.Join(root, "composer.json")) {
 		// Try to detect framework
-		if fileExists(filepath.Join(root, "artisan")) {
+		if common.FileExists(filepath.Join(root, "artisan")) {
 			return "php", "laravel"
 		}
-		if fileExists(filepath.Join(root, "symfony.lock")) {
+		if common.FileExists(filepath.Join(root, "symfony.lock")) {
 			return "php", "symfony"
 		}
-		if fileExists(filepath.Join(root, "bin/console")) {
+		if common.FileExists(filepath.Join(root, "bin/console")) {
 			return "php", "symfony"
 		}
-		if fileExists(filepath.Join(root, "yii")) {
+		if common.FileExists(filepath.Join(root, "yii")) {
 			return "php", "yii"
 		}
 		return "php", "generic"
 	}
 	// Check for go.mod -> Go
-	if fileExists(filepath.Join(root, "go.mod")) {
+	if common.FileExists(filepath.Join(root, "go.mod")) {
 		return "go", "go"
 	}
 	// Check for package.json -> Node.js
-	if fileExists(filepath.Join(root, "package.json")) {
+	if common.FileExists(filepath.Join(root, "package.json")) {
 		// Check for React, Vue, Angular etc via dependencies
 		return "javascript", "node"
 	}
 	// Check for requirements.txt or pyproject.toml -> Python
-	if fileExists(filepath.Join(root, "requirements.txt")) || fileExists(filepath.Join(root, "pyproject.toml")) {
+	if common.FileExists(filepath.Join(root, "requirements.txt")) || common.FileExists(filepath.Join(root, "pyproject.toml")) {
 		return "python", "django" // generic
 	}
 	// Default
 	return "unknown", ""
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
 func checkVendor(root, framework string) bool {
 	switch framework {
 	case "laravel", "symfony", "generic":
-		return fileExists(filepath.Join(root, "vendor"))
+		return common.FileExists(filepath.Join(root, "vendor"))
 	case "go":
-		return fileExists(filepath.Join(root, "go.sum"))
+		return common.FileExists(filepath.Join(root, "go.sum"))
 	case "node":
-		return fileExists(filepath.Join(root, "node_modules"))
+		return common.FileExists(filepath.Join(root, "node_modules"))
 	default:
 		return false
 	}
@@ -105,7 +101,7 @@ func checkVendor(root, framework string) bool {
 
 func findDockerServices(root string) []string {
 	composePath := filepath.Join(root, "docker-compose.yml")
-	if !fileExists(composePath) {
+	if !common.FileExists(composePath) {
 		return nil
 	}
 	data, err := os.ReadFile(composePath)
@@ -169,7 +165,7 @@ func findDockerServices(root string) []string {
 
 func parseMakefile(root string) []string {
 	makePath := filepath.Join(root, "Makefile")
-	if !fileExists(makePath) {
+	if !common.FileExists(makePath) {
 		return nil
 	}
 	data, err := os.ReadFile(makePath)
@@ -196,7 +192,7 @@ func parseMakefile(root string) []string {
 			}
 		}
 	}
-	return unique(commands)
+	return common.Unique(commands)
 }
 
 func findDevCommands(root, framework string) []string {
@@ -233,16 +229,4 @@ func findLogFiles(root string) []string {
 		return nil
 	})
 	return logs
-}
-
-func unique(items []string) []string {
-	seen := make(map[string]bool)
-	var result []string
-	for _, item := range items {
-		if !seen[item] {
-			seen[item] = true
-			result = append(result, item)
-		}
-	}
-	return result
 }

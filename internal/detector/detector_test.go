@@ -1,12 +1,13 @@
 package detector
 
 import (
+	"dev/internal/common"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-// TestFileExists проверяет функцию fileExists
+// TestFileExists проверяет функцию common.FileExists
 func TestFileExists(t *testing.T) {
 	// Создаём временный файл
 	tmpDir := t.TempDir()
@@ -16,11 +17,11 @@ func TestFileExists(t *testing.T) {
 	}
 
 	// Проверяем существование
-	if !fileExists(tmpFile) {
-		t.Errorf("fileExists(%q) = false, ожидалось true", tmpFile)
+	if !common.FileExists(tmpFile) {
+		t.Errorf("common.FileExists(%q) = false, ожидалось true", tmpFile)
 	}
-	if fileExists(filepath.Join(tmpDir, "nonexistent.txt")) {
-		t.Errorf("fileExists для несуществующего файла вернула true")
+	if common.FileExists(filepath.Join(tmpDir, "nonexistent.txt")) {
+		t.Errorf("common.FileExists для несуществующего файла вернула true")
 	}
 }
 
@@ -219,13 +220,13 @@ clean:
 	}
 }
 
-// TestUnique проверяет функцию unique
+// TestUnique проверяет функцию common.Unique
 func TestUnique(t *testing.T) {
 	input := []string{"a", "b", "a", "c", "b"}
-	result := unique(input)
+	result := common.Unique(input)
 	expected := []string{"a", "b", "c"}
 	if len(result) != len(expected) {
-		t.Fatalf("unique вернула %v, ожидалось %v", result, expected)
+		t.Fatalf("common.Unique вернула %v, ожидалось %v", result, expected)
 	}
 	for i, v := range result {
 		if v != expected[i] {

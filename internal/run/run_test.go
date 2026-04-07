@@ -1,6 +1,7 @@
 package run
 
 import (
+	"dev/internal/common"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,9 +33,16 @@ func TestFindGoMainRun(t *testing.T) {
 	// Не-main файл
 	os.WriteFile(filepath.Join(tmpDir, "utils.go"), []byte("package utils"), 0644)
 
-	mains := findGoMain()
+	mains, err := common.FindGoMain(".", common.FindGoMainOptions{
+		SearchInCmdFirst: false,
+		ExcludeDirs:      []string{},
+		OnlyMainGo:       false,
+	})
+	if err != nil {
+		t.Fatalf("FindGoMain вернула ошибку: %v", err)
+	}
 	if len(mains) != 2 {
-		t.Fatalf("findGoMain вернула %d файлов, ожидалось 2: %v", len(mains), mains)
+		t.Fatalf("FindGoMain вернула %d файлов, ожидалось 2: %v", len(mains), mains)
 	}
 	// Проверяем, что оба файлы найдены
 	foundRoot := false

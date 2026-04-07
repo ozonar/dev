@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"dev/internal/colors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,11 +14,7 @@ func ComposeUp() error {
 		return fmt.Errorf("docker-compose.yml not found")
 	}
 
-	colorCyan := "\033[36m"
-	colorGreen := "\033[32m"
-	colorReset := "\033[0m"
-
-	fmt.Printf("%sRunning docker-compose up -d...%s\n", colorCyan, colorReset)
+	fmt.Println(colors.Cyan("Running docker-compose up -d..."))
 	cmd := exec.Command("docker-compose", "up", "-d")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -27,7 +24,7 @@ func ComposeUp() error {
 	}
 
 	// Check services status
-	fmt.Printf("%sChecking services...%s\n", colorCyan, colorReset)
+	fmt.Println(colors.Cyan("Checking services..."))
 	cmd = exec.Command("docker-compose", "ps", "--services")
 	out, err := cmd.Output()
 	if err != nil {
@@ -35,11 +32,11 @@ func ComposeUp() error {
 	}
 	services := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if len(services) == 0 {
-		fmt.Printf("%sNo services found.%s\n", colorCyan, colorReset)
+		fmt.Println(colors.Cyan("No services found."))
 		return nil
 	}
 
-	fmt.Printf("%sServices running:%s\n", colorGreen, colorReset)
+	fmt.Println(colors.Green("Services running:"))
 	for _, svc := range services {
 		if svc == "" {
 			continue
@@ -49,9 +46,9 @@ func ComposeUp() error {
 		statusOut, _ := cmd.Output()
 		status := strings.TrimSpace(string(statusOut))
 		if strings.Contains(status, "Up") {
-			fmt.Printf("  %s: %sUp%s\n", svc, colorGreen, colorReset)
+			fmt.Printf("  %s: %s\n", svc, colors.Green("Up"))
 		} else {
-			fmt.Printf("  %s: %s%s%s\n", svc, "\033[31m", status, colorReset)
+			fmt.Printf("  %s: %s\n", svc, colors.Red(status))
 		}
 	}
 	return nil
