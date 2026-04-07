@@ -37,15 +37,20 @@ jobs:
 
       - name: Determine version
         id: version
+        shell: bash
         run: |
-          if [ -n "${{ github.ref }}" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-            # Remove leading 'v' if present
-            VERSION="${TAG#v}"
-          else
-            # Use git describe for snapshot version
-            VERSION=$(git describe --tags --always --dirty)
-          fi
+          REF="${{ github.ref }}"
+          case "$REF" in
+            refs/tags/*)
+              TAG="${REF#refs/tags/}"
+              # Remove leading 'v' if present
+              VERSION="${TAG#v}"
+              ;;
+            *)
+              # Use git describe for snapshot version
+              VERSION=$(git describe --tags --always --dirty)
+              ;;
+          esac
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Using version: $VERSION"
 
