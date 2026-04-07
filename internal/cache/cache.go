@@ -10,17 +10,51 @@ import (
 
 func ClearCache(framework string) error {
 	switch framework {
-	case "symfony", "laravel", "generic":
-		// PHP frameworks
+	case "symfony":
 		if _, err := os.Stat("bin/console"); err == nil {
 			cmd := exec.Command("php", "bin/console", "cache:clear")
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			return cmd.Run()
 		}
-		// Fallback to removing directories
-		os.RemoveAll("var/cache")
-		os.RemoveAll("storage/framework/cache")
+		return nil
+	case "laravel":
+		if _, err := os.Stat("artisan"); err == nil {
+			cmd := exec.Command("php", "artisan", "cache:clear")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		}
+		return nil
+	case "yii":
+		// Очистка кэша Yii
+		if _, err := os.Stat("yii"); err == nil {
+			cmd := exec.Command("php", "yii", "cache/flush-all")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		}
+
+		return nil
+	case "generic":
+		// Ищем любую директорию с именем "cache" и очищаем её содержимое
+		filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			if info.IsDir() && info.Name() == "cache" {
+				// Удаляем все файлы и поддиректории внутри директории cache
+				entries, err := os.ReadDir(path)
+				if err != nil {
+					return nil
+				}
+				for _, entry := range entries {
+					fullPath := filepath.Join(path, entry.Name())
+					os.RemoveAll(fullPath)
+				}
+			}
+			return nil
+		})
 		return nil
 	case "go":
 		cmd := exec.Command("go", "clean", "-cache", "-modcache", "-testcache")
@@ -33,7 +67,7 @@ func ClearCache(framework string) error {
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	case "python":
-		// Remove __pycache__ and *.pyc
+		// Удаляем __pycache__ и *.pyc файлы
 		filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil

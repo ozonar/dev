@@ -10,10 +10,13 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Colorful output with status indicators
 
 - **`dev cache`** – Clear framework‑specific caches:
-  - Symfony/Laravel: `bin/console cache:clear`
+  - Symfony: `bin/console cache:clear`
+  - Laravel: `php artisan cache:clear`
+  - Yii: `php yii cache/flush-all`
   - Go: `go clean -cache -modcache -testcache`
   - Node.js: `npm cache clean --force`
   - Python: remove `__pycache__` and `*.pyc`
+  - Generic PHP: cleans `cache` folders
 
 - **`dev logs`** – Find log files and Docker container logs, then open them in `lnav` (interactive selection)
 
