@@ -60,6 +60,9 @@ func detectLangFramework(root string) (string, string) {
 		if fileExists(filepath.Join(root, "symfony.lock")) {
 			return "php", "symfony"
 		}
+		if fileExists(filepath.Join(root, "bin/console")) {
+			return "php", "symfony"
+		}
 		if fileExists(filepath.Join(root, "yii")) {
 			return "php", "yii"
 		}
