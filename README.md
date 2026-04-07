@@ -51,7 +51,7 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 git clone <repository>
 cd dev
 go build -o dev ./cmd/dev
-sudo mv dev /usr/local/bin/
+./dev install
 ```
 
 ### Using go install
