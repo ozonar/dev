@@ -34,6 +34,15 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Copy `.env.dist` / `.env.dev` to `.env`
   - Install/reinstall vendors (composer, npm, go mod, pip)
 
+- **`dev install [file]`** – Install the dev tool (or a specified executable) to a system directory (`/usr/local/bin`, `~/bin`, etc.) with interactive directory selection.
+
+- **`dev virus [user@ip_addr]`** – Copy the dev executable to a remote server via SCP (requires SSH key authentication). Automatically sets execute permissions.
+
+- **`dev build`** – Build the project according to its language:
+  - Go: detects main files, offers selection, builds executable
+  - Node.js: runs `npm run build`
+  - Other languages: no‑op (informs that building is not required)
+
 ## Installation
 
 ### From source
@@ -64,6 +73,9 @@ dev logs            # show logs
 dev run             # run project
 dev dcr             # start docker‑compose
 dev prepare         # prepare environment
+dev install         # install dev to system
+dev virus user@host # copy dev to remote server
+dev build           # build project
 ```
 
 ## Configuration
@@ -76,6 +88,7 @@ No configuration files are required. The tool automatically detects your project
 - Docker & docker‑compose (optional, for `dev dcr`)
 - lnav (optional, for `dev logs` interactive viewing)
 - Framework‑specific tools (php, npm, go, python, etc.)
+- SSH keys (for `dev virus`)
 
 ## Project Structure
 
@@ -88,7 +101,11 @@ dev/
 │   ├── logs/                # Log discovery
 │   ├── run/                 # Project runner
 │   ├── docker/              # Docker‑compose operations
-│   └── prepare/             # Environment preparation
+│   ├── prepare/             # Environment preparation
+│   ├── install/             # Installation logic
+│   ├── virus/               # Remote copy via SCP
+│   ├── build/               # Project building
+│   └── version/             # Version information
 ├── go.mod
 └── README.md
 ```
