@@ -35,13 +35,28 @@ jobs:
         with:
           go-version: '1.22.2'
 
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.ref }}" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            # Remove leading 'v' if present
+            VERSION="${TAG#v}"
+          else
+            # Use git describe for snapshot version
+            VERSION=$(git describe --tags --always --dirty)
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          go build -v -trimpath -ldflags="-s -w" -o ${{ matrix.output_name }} ./cmd/dev
+          go build -v -trimpath -ldflags="-X dev/internal/version.Version=$VERSION -s -w" -o ${{ matrix.output_name }} ./cmd/dev
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
