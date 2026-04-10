@@ -195,7 +195,11 @@ func runAnalyze() {
 			default:
 				loc = db.Location
 			}
-			dbStrs = append(dbStrs, fmt.Sprintf("%s (%s:%s/%s) [%s]", db.Type, db.Host, db.Port, db.Database, loc))
+			dbName := db.Database
+			if dbName == "" {
+				dbName = db.Type // если имя БД не указано, используем тип
+			}
+			dbStrs = append(dbStrs, fmt.Sprintf("%s [%s] (%s:%s, %s)", dbName, loc, db.Host, db.Port, db.Type))
 		}
 		fmt.Printf("%s\n", cyan(strings.Join(dbStrs, ", ")))
 	} else {
