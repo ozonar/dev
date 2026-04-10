@@ -13,6 +13,7 @@ import (
 	"dev/internal/docker"
 	"dev/internal/install"
 	"dev/internal/logs"
+	"dev/internal/migrate"
 	"dev/internal/prepare"
 	"dev/internal/run"
 	"dev/internal/version"
@@ -106,6 +107,27 @@ var buildCmd = &cobra.Command{
 	Short: "Build the project",
 	Run: func(cmd *cobra.Command, args []string) {
 		runBuild()
+	},
+}
+
+var migrateCmd = &cobra.Command{
+	Use:   "migrate",
+	Short: "Run database migrations",
+	Run: func(cmd *cobra.Command, args []string) {
+		runMigrate()
+	},
+}
+
+var migrateNewCmd = &cobra.Command{
+	Use:   "new [name]",
+	Short: "Create a new empty migration",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var name string
+		if len(args) > 0 {
+			name = args[0]
+		}
+		runMigrateNew(name)
 	},
 }
 
@@ -298,6 +320,40 @@ func runBuild() {
 	color.Green("Build successful.")
 }
 
+func runMigrate() {
+	cwd, _ := os.Getwd()
+	info, err := detector.DetectProject(cwd)
+	if err != nil {
+		color.Red("Error detecting project: %v", err)
+		return
+	}
+
+	color.Green("Running migrations for %s (%s)", info.Framework, info.Language)
+	err = migrate.RunMigrations(info.Framework, info.Language)
+	if err != nil {
+		color.Red("Migration failed: %v", err)
+		return
+	}
+	color.Green("Migrations completed successfully.")
+}
+
+func runMigrateNew(name string) {
+	cwd, _ := os.Getwd()
+	info, err := detector.DetectProject(cwd)
+	if err != nil {
+		color.Red("Error detecting project: %v", err)
+		return
+	}
+
+	color.Green("Creating new migration for %s (%s)", info.Framework, info.Language)
+	err = migrate.CreateNewMigration(info.Framework, info.Language, name)
+	if err != nil {
+		color.Red("Failed to create migration: %v", err)
+		return
+	}
+	color.Green("Migration created successfully.")
+}
+
 func main() {
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(cacheCmd)
@@ -308,6 +364,8 @@ func main() {
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(virusCmd)
 	rootCmd.AddCommand(buildCmd)
+	rootCmd.AddCommand(migrateCmd)
+	migrateCmd.AddCommand(migrateNewCmd)
 	// Default action is analyze
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
 		runAnalyze()

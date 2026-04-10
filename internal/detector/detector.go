@@ -78,9 +78,21 @@ func detectLangFramework(root string) (string, string) {
 		// Check for React, Vue, Angular etc via dependencies
 		return "javascript", "node"
 	}
+	// Check for Gemfile -> Ruby (Rails)
+	if common.FileExists(filepath.Join(root, "Gemfile")) {
+		// Check for Rails
+		if common.FileExists(filepath.Join(root, "config/application.rb")) || common.FileExists(filepath.Join(root, "config.ru")) {
+			return "ruby", "rails"
+		}
+		return "ruby", "generic"
+	}
 	// Check for requirements.txt or pyproject.toml -> Python
 	if common.FileExists(filepath.Join(root, "requirements.txt")) || common.FileExists(filepath.Join(root, "pyproject.toml")) {
-		return "python", "django" // generic
+		// Check for Django
+		if common.FileExists(filepath.Join(root, "manage.py")) {
+			return "python", "django"
+		}
+		return "python", "generic"
 	}
 	// Default
 	return "unknown", ""
