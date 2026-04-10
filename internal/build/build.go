@@ -48,11 +48,11 @@ func buildGo() error {
 		for i, f := range mainFiles {
 			fmt.Printf("  %d) %s\n", i+1, f)
 		}
-		fmt.Print("Выберите номер файла для сборки (или 0 для отмены): ")
+		fmt.Print("Выберите номер файла для сборки: ")
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
-		if input == "" || input == "0" {
+		if input == "" {
 			return fmt.Errorf("сборка отменена")
 		}
 		idx, err := strconv.Atoi(input)
