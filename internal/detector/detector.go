@@ -4,8 +4,24 @@ import (
 	"dev/internal/common"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+const (
+	LocationLocal  = "localhost"
+	LocationDocker = "docker"
+	LocationRemote = "remote"
+)
+
+type DatabaseInfo struct {
+	Type     string // postgresql, mysql, mongodb, redis
+	URL      string // полная строка подключения (если найдена)
+	Host     string // хост
+	Port     string // порт
+	Database string // имя базы данных
+	Location string // localhost, docker, remote
+}
 
 type ProjectInfo struct {
 	Language       string
@@ -17,6 +33,7 @@ type ProjectInfo struct {
 	DevCommands    []string
 	CacheDirs      []string
 	LogFiles       []string
+	Databases      []DatabaseInfo
 }
 
 func DetectProject(root string) (*ProjectInfo, error) {
@@ -47,6 +64,9 @@ func DetectProject(root string) (*ProjectInfo, error) {
 
 	// Log files
 	info.LogFiles = findLogFiles(root)
+
+	// Databases
+	info.Databases = detectDatabases(root)
 
 	return info, nil
 }
@@ -241,4 +261,106 @@ func findLogFiles(root string) []string {
 		return nil
 	})
 	return logs
+}
+
+// extractURL находит первую подстроку, соответствующую шаблону URL БД в строке
+func extractURL(line string) (string, string) {
+	// Регулярное выражение для поиска URL БД
+	re := regexp.MustCompile(`(postgresql|mysql|mongodb|redis)://[^\s'"` + "`" + `]+`)
+	matches := re.FindStringSubmatch(line)
+	if matches == nil {
+		return "", ""
+	}
+	return matches[0], matches[1] // полный URL и тип
+}
+
+// detectDatabases ищет строки подключения к БД в .env файлах и других конфигурациях
+func detectDatabases(root string) []DatabaseInfo {
+	var databases []DatabaseInfo
+
+	// Проверяем .env файл
+	envPath := filepath.Join(root, ".env")
+	if common.FileExists(envPath) {
+		data, err := os.ReadFile(envPath)
+		if err == nil {
+			lines := strings.Split(string(data), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "#") || line == "" {
+					continue
+				}
+				// Пытаемся извлечь URL БД из строки
+				url, dbType := extractURL(line)
+				if url != "" {
+					db := parseConnectionString(url, dbType)
+					if db != nil {
+						databases = append(databases, *db)
+					}
+				}
+			}
+		}
+	}
+
+	// TODO: также можно проверить docker-compose.yml на наличие сервисов БД
+
+	return databases
+}
+
+// parseConnectionString парсит строку подключения и определяет местоположение
+func parseConnectionString(url, dbType string) *DatabaseInfo {
+	// Упрощённый парсинг URL
+	// Пример: postgresql://user:pass@localhost:5432/dbname
+	re := regexp.MustCompile(`^([a-z]+)://(?:([^:@]+)(?::([^@]+))?@)?([^:/]+)(?::(\d+))?(?:/([^?]+))?`)
+	matches := re.FindStringSubmatch(url)
+	if matches == nil {
+		return nil
+	}
+	// matches[1] - тип (должен совпадать с dbType)
+	// matches[4] - хост
+	// matches[5] - порт
+	// matches[6] - база данных
+	host := matches[4]
+	if host == "" {
+		host = "localhost"
+	}
+	port := matches[5]
+	if port == "" {
+		// порты по умолчанию
+		switch dbType {
+		case "postgresql":
+			port = "5432"
+		case "mysql":
+			port = "3306"
+		case "mongodb":
+			port = "27017"
+		case "redis":
+			port = "6379"
+		}
+	}
+	database := matches[6]
+
+	// Определяем местоположение
+	location := LocationRemote
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		location = LocationLocal
+	} else if strings.Contains(host, "docker") || strings.Contains(host, "container") {
+		location = LocationDocker
+	} else {
+		// Эвристика: если хост не содержит точек и не является IP адресом, то вероятно docker контейнер
+		if !strings.Contains(host, ".") && !strings.Contains(host, ":") {
+			// Проверяем, не является ли числовым IP (например, "192168")
+			// Простая проверка: если host состоит только из цифр и точек, то это IP, но точек нет
+			// Считаем docker
+			location = LocationDocker
+		}
+	}
+
+	return &DatabaseInfo{
+		Type:     dbType,
+		URL:      url,
+		Host:     host,
+		Port:     port,
+		Database: database,
+		Location: location,
+	}
 }

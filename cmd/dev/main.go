@@ -179,6 +179,29 @@ func runAnalyze() {
 		fmt.Printf("Dev commands:    %s\n", cyan(strings.Join(info.DevCommands, ", ")))
 	}
 
+	// Databases
+	if len(info.Databases) > 0 {
+		fmt.Printf("Databases:       ")
+		var dbStrs []string
+		for _, db := range info.Databases {
+			loc := ""
+			switch db.Location {
+			case detector.LocationLocal:
+				loc = "local"
+			case detector.LocationDocker:
+				loc = "docker"
+			case detector.LocationRemote:
+				loc = "remote"
+			default:
+				loc = db.Location
+			}
+			dbStrs = append(dbStrs, fmt.Sprintf("%s (%s:%s/%s) [%s]", db.Type, db.Host, db.Port, db.Database, loc))
+		}
+		fmt.Printf("%s\n", cyan(strings.Join(dbStrs, ", ")))
+	} else {
+		fmt.Printf("Databases:       %s\n", yellow("none detected"))
+	}
+
 	fmt.Println()
 }
 
