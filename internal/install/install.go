@@ -95,7 +95,7 @@ func chooseInstallDir() (string, error) {
 	}
 
 	// Показываем список для выбора
-	fmt.Println("Доступные директории для установки:")
+	fmt.Println("Available directories for install:")
 	for i, dir := range candidates {
 		fmt.Printf("%d. %s\n", i+1, dir)
 	}
@@ -190,6 +190,6 @@ func Install(sourceFile string) error {
 		return fmt.Errorf("не удалось установить права на выполнение: %v", err)
 	}
 
-	fmt.Printf("Успешно установлено как %s\n", targetPath)
+	fmt.Printf("Installation successful as %s\n", targetPath)
 	return nil
 }

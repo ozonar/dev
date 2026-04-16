@@ -164,7 +164,58 @@ func runAnalyze() {
 	}
 
 	if len(info.DockerServices) > 0 {
-		fmt.Printf("Docker services: %s\n", cyan(strings.Join(info.DockerServices, ", ")))
+		statuses, err := docker.GetServiceStatuses()
+		if err != nil {
+			// Если ошибка, выводим просто список
+			fmt.Printf("Docker services: %s\n", cyan(strings.Join(info.DockerServices, ", ")))
+		} else {
+			var colored []string
+			// Вспомогательная функция для короткого статуса
+			shortStatus := func(status string) string {
+				lower := strings.ToLower(status)
+				switch {
+				case strings.Contains(lower, "up"):
+					return "up"
+				case strings.Contains(lower, "exited") || strings.Contains(lower, "exit"):
+					return "err"
+				case strings.Contains(lower, "created"):
+					return "up"
+				case strings.Contains(lower, "paused"):
+					return "warn"
+				case strings.Contains(lower, "starting") || strings.Contains(lower, "restarting"):
+					return "warn"
+				default:
+					return ""
+				}
+			}
+			for _, svc := range info.DockerServices {
+				status, ok := statuses[svc]
+				if ok && status != "" {
+					short := shortStatus(status)
+					var coloredShort string
+					switch short {
+					case "up":
+						coloredShort = green(short)
+					case "err":
+						coloredShort = red(short)
+					case "warn":
+						coloredShort = yellow(short)
+					default:
+						coloredShort = cyan(short)
+					}
+					colored = append(colored, svc+" ["+coloredShort+"]")
+				} else {
+					// Сервис без контейнера
+					colored = append(colored, svc)
+				}
+			}
+			if len(colored) == 0 {
+				// Если все сервисы без контейнеров, выводим "none"
+				fmt.Printf("Docker services: %s\n", yellow("none"))
+			} else {
+				fmt.Printf("Docker services: %s\n", strings.Join(colored, ", "))
+			}
+		}
 	} else {
 		fmt.Printf("Docker services: %s\n", yellow("none"))
 	}
