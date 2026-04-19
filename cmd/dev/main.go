@@ -9,6 +9,7 @@ import (
 
 	"dev/internal/build"
 	"dev/internal/cache"
+	"dev/internal/db"
 	"dev/internal/detector"
 	"dev/internal/docker"
 	"dev/internal/install"
@@ -128,6 +129,15 @@ var migrateNewCmd = &cobra.Command{
 			name = args[0]
 		}
 		runMigrateNew(name)
+	},
+}
+
+var dbCmd = &cobra.Command{
+	Use:   "db",
+	Short: "Interactive database explorer",
+	Long:  "Analyze databases in the project, connect, list tables, and view data.",
+	Run: func(cmd *cobra.Command, args []string) {
+		db.Run()
 	},
 }
 
@@ -443,6 +453,7 @@ func main() {
 	rootCmd.AddCommand(virusCmd)
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(migrateCmd)
+	rootCmd.AddCommand(dbCmd)
 	migrateCmd.AddCommand(migrateNewCmd)
 	// Default action is analyze
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
