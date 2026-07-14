@@ -76,6 +76,7 @@ func TestDetectLangFramework(t *testing.T) {
 				root := filepath.Join(tmpDir, "python")
 				os.MkdirAll(root, 0755)
 				os.WriteFile(filepath.Join(root, "requirements.txt"), []byte(""), 0644)
+				os.WriteFile(filepath.Join(root, "manage.py"), []byte(""), 0644)
 				return root
 			},
 			wantLang:      "python",
