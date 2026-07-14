@@ -354,17 +354,45 @@ func describeTable(db *sql.DB, dbType, tableName string) ([]ColumnInfo, error) {
 	return columns, nil
 }
 
+// getPrimaryKey returns the primary key column name for a PostgreSQL table
+func getPrimaryKey(db *sql.DB, tableName string) (string, error) {
+	query := `
+		SELECT kcu.column_name
+		FROM information_schema.table_constraints tc
+		JOIN information_schema.key_column_usage kcu
+			ON tc.constraint_name = kcu.constraint_name
+			AND tc.table_schema = kcu.table_schema
+			AND tc.table_name = kcu.table_name
+		WHERE tc.constraint_type = 'PRIMARY KEY'
+			AND tc.table_name = $1
+		ORDER BY kcu.ordinal_position
+		LIMIT 1`
+	var pk string
+	err := db.QueryRow(query, tableName).Scan(&pk)
+	if err != nil {
+		return "", err
+	}
+	return pk, nil
+}
+
 // getLastRows returns last N rows of a table
-func getLastRows(db *sql.DB, dbType, tableName string, limit int) ([]map[string]interface{}, error) {
+func getLastRows(db *sql.DB, dbType, tableName string, limit int) ([]map[string]any, error) {
 	var query string
-	var args []interface{}
+	var args []any
 	switch dbType {
 	case "postgresql":
-		query = `SELECT * FROM ` + tableName + ` ORDER BY ctid DESC LIMIT $1`
-		args = []interface{}{limit}
+		pk, err := getPrimaryKey(db, tableName)
+		if err != nil || pk == "" {
+			// No primary key — just select without ordering
+			query = `SELECT * FROM ` + tableName + ` LIMIT $1`
+			args = []any{limit}
+		} else {
+			query = `SELECT * FROM ` + tableName + ` ORDER BY ` + pk + ` DESC LIMIT $1`
+			args = []any{limit}
+		}
 	case "mysql", "sqlite":
 		query = `SELECT * FROM ` + tableName + ` LIMIT ` + strconv.Itoa(limit)
-		args = []interface{}{}
+		args = []any{}
 	default:
 		return nil, fmt.Errorf("unsupported DB type for data selection: %s", dbType)
 	}
