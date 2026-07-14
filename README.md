@@ -1,6 +1,6 @@
 # Dev CLI Tool
 
-A command-line tool to assist with development tasks: analyze projects, clear caches, view logs, run projects, manage Docker, and prepare environments.
+A command-line tool to assist with development tasks: analyze projects, clear caches, view logs, run projects, manage Docker, prepare environments, work with databases, and run migrations.
 
 ## Features
 
@@ -43,6 +43,12 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Node.js: runs `npm run build`
   - Other languages: no‑op (informs that building is not required)
 
+- **`dev migrate`** – Run database migrations for the detected framework/language.
+
+- **`dev migrate new [name]`** – Create a new empty migration file.
+
+- **`dev db`** – Interactive database explorer: analyze databases in the project, connect, list tables, and view data.
+
 ## Installation
 
 ### From github
@@ -60,15 +66,17 @@ wget -O dev https://github.com/ozonar/dev/releases/latest/download/dev-linux-amd
 Navigate to your project directory and run:
 
 ```bash
-dev                 # analyze project
-dev cache           # clear cache
-dev logs            # show logs
-dev run             # run project
-dev dcr             # start docker‑compose
-dev prepare         # prepare environment
-dev install         # install dev to system
-dev virus user@host # copy dev to remote server
-dev build           # build project
+dev                     # analyze project
+dev cache               # clear cache
+dev logs                # show logs
+dev run                 # run project
+dev dcr                 # start docker‑compose
+dev prepare             # prepare environment
+dev install             # install dev to system
+dev virus user@host     # copy dev to remote server
+dev build               # build project
+dev migrate [new]       # run database migrations or create a new migration
+dev db                  # interactive database explorer
 ```
 
 ## Configuration
@@ -97,6 +105,8 @@ dev/
 │   ├── install/             # Installation logic
 │   ├── virus/               # Remote copy via SCP
 │   ├── build/               # Project building
+│   ├── migrate/             # Database migrations
+│   ├── db/                  # Database explorer
 │   └── version/             # Version information
 ├── go.mod
 └── README.md
