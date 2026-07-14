@@ -49,6 +49,9 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 
 ```bash
 wget -O dev https://github.com/ozonar/dev/releases/latest/download/dev-linux-amd64 && chmod +x dev
+```
+
+```bash
 ./dev install
 ```
 
