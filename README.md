@@ -36,7 +36,7 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 
 - **`dev install [file]`** – Install the dev tool (or a specified executable) to a system directory (`/usr/local/bin`, `~/bin`, etc.) with interactive directory selection.
 
-- **`dev virus [user@ip_addr]`** – Copy the dev executable to a remote server via SCP (requires SSH key authentication). Automatically sets execute permissions.
+- **`dev virus [user:pass@ip_addr]`** – Copy the dev executable to a remote server via SCP (supports `user@host` or `user:pass@ip` formats). Automatically sets execute permissions.
 
 - **`dev build`** – Build the project according to its language:
   - Go: detects main files, offers selection, builds executable
@@ -75,7 +75,8 @@ dev prepare             # prepare environment
 dev install             # install dev to system
 dev virus user@host     # copy dev to remote server
 dev build               # build project
-dev migrate [new]       # run database migrations or create a new migration
+dev migrate             # run database migrations
+dev migrate new         # create a new migration
 dev db                  # interactive database explorer
 ```
 
