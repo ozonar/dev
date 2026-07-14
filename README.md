@@ -45,22 +45,12 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 
 ## Installation
 
-### From source
+### From github
 
 ```bash
-git clone <repository>
-cd dev
-go build -o dev ./cmd/dev
+wget -O dev https://github.com/ozonar/dev/releases/latest/download/dev-linux-amd64 && chmod +x dev
 ./dev install
 ```
-
-### Using go install
-
-```bash
-go install dev
-```
-
-Ensure `$GOPATH/bin` is in your `PATH`.
 
 ## Usage
 
@@ -82,13 +72,12 @@ dev build           # build project
 
 No configuration files are required. The tool automatically detects your project based on common file patterns.
 
-## Dependencies
+## Optional requirements
 
-- Go 1.20+
 - Docker & docker‑compose (optional, for `dev dcr`)
 - lnav (optional, for `dev logs` interactive viewing)
-- Framework‑specific tools (php, npm, go, python, etc.)
-- SSH keys (for `dev virus`)
+- Framework‑specific tools (optional, php, npm, go, python, etc.)
+- SSH keys (optional, for `dev virus`)
 
 ## Project Structure
 
