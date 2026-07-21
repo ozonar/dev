@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"dev/internal/colors"
 	"dev/internal/common"
@@ -230,7 +231,81 @@ func buildActions(framework, language string) []Action {
 		})
 	}
 
-	// 6. php artisan storage:link (Laravel)
+	// 6. chmod для Yii2 (runtime/ и web/assets/)
+	if framework == "yii" {
+		// Yii2 Basic: runtime/
+		if common.FileExists("runtime") {
+			actions = append(actions, Action{
+				Name:        "chmod -R 777 runtime/",
+				Description: "Set writable permissions on Yii2 runtime directory",
+				Status:      StatusPending,
+				Run: func() error {
+					return chmodRecursive("runtime", 0777)
+				},
+			})
+		}
+		// Yii2 Advanced: backend/runtime/, frontend/runtime/
+		for _, dir := range []string{"backend/runtime", "frontend/runtime"} {
+			if common.FileExists(dir) {
+				actions = append(actions, Action{
+					Name:        fmt.Sprintf("chmod -R 777 %s/", dir),
+					Description: fmt.Sprintf("Set writable permissions on %s", dir),
+					Status:      StatusPending,
+					Run: func(d string) func() error {
+						return func() error {
+							return chmodRecursive(d, 0777)
+						}
+					}(dir),
+				})
+			}
+		}
+		// Yii2 Advanced: backend/web/assets/, frontend/web/assets/
+		for _, dir := range []string{"backend/web/assets", "frontend/web/assets"} {
+			if common.FileExists(dir) {
+				actions = append(actions, Action{
+					Name:        fmt.Sprintf("chmod -R 777 %s/", dir),
+					Description: fmt.Sprintf("Set writable permissions on %s", dir),
+					Status:      StatusPending,
+					Run: func(d string) func() error {
+						return func() error {
+							return chmodRecursive(d, 0777)
+						}
+					}(dir),
+				})
+			}
+		}
+	}
+
+	// 7. sudo chown -R www-data:www-data (для storage/, var/, runtime/)
+	chownDirs := findChownDirs(framework)
+	if len(chownDirs) > 0 {
+		alreadyOwned := true
+		for _, dir := range chownDirs {
+			if !isOwnedByWwwData(dir) {
+				alreadyOwned = false
+				break
+			}
+		}
+		actions = append(actions, Action{
+			Name:        fmt.Sprintf("sudo chown -R www-data:www-data %s/", strings.Join(chownDirs, "/")),
+			Description: fmt.Sprintf("Set www-data ownership on %s", strings.Join(chownDirs, ", ")),
+			Status:      boolToStatus(alreadyOwned),
+			Run: func() error {
+				for _, dir := range chownDirs {
+					cmd := exec.Command("sudo", "chown", "-R", "www-data:www-data", dir)
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					if err := cmd.Run(); err != nil {
+						return fmt.Errorf("chown %s failed: %v", dir, err)
+					}
+					fmt.Printf("  Changed owner of %s/ to www-data:www-data\n", dir)
+				}
+				return nil
+			},
+		})
+	}
+
+	// 8. php artisan storage:link (Laravel)
 	if framework == "laravel" && common.FileExists("artisan") {
 		hasStorageLink := common.FileExists("public/storage")
 		actions = append(actions, Action{
@@ -246,27 +321,29 @@ func buildActions(framework, language string) []Action {
 		})
 	}
 
-	// 7. Set cache folder 777
-	cacheDirs := findCacheDirs(framework)
-	if len(cacheDirs) > 0 {
-		allSet := true
-		for _, dir := range cacheDirs {
-			if !isWritable(dir) {
-				allSet = false
-				break
+	// 9. Set cache folder 777 (только для generic PHP — ищем все /cache директории)
+	if framework == "generic" {
+		cacheDirs := findGenericCacheDirs()
+		if len(cacheDirs) > 0 {
+			allSet := true
+			for _, dir := range cacheDirs {
+				if !isWritable(dir) {
+					allSet = false
+					break
+				}
 			}
+			actions = append(actions, Action{
+				Name:        "set cache folder 777",
+				Description: fmt.Sprintf("Set 777 permissions on cache directories (%s)", strings.Join(cacheDirs, ", ")),
+				Status:      boolToStatus(allSet),
+				Run: func() error {
+					return setCachePermissions(cacheDirs)
+				},
+			})
 		}
-		actions = append(actions, Action{
-			Name:        "set cache folder 777",
-			Description: fmt.Sprintf("Set 777 permissions on cache directories (%s)", strings.Join(cacheDirs, ", ")),
-			Status:      boolToStatus(allSet),
-			Run: func() error {
-				return setCachePermissions(cacheDirs)
-			},
-		})
 	}
 
-	// 8. Init .env
+	// 10. Init .env
 	envSources := []string{".env.dist", ".env.dev", ".env.example"}
 	hasEnv := common.FileExists(".env")
 	hasEnvSource := false
@@ -287,7 +364,7 @@ func buildActions(framework, language string) []Action {
 		})
 	}
 
-	// 9. git submodule update --init --recursive
+	// 11. git submodule update --init --recursive
 	if common.FileExists(".gitmodules") {
 		actions = append(actions, Action{
 			Name:        "git submodule update --init --recursive",
@@ -302,7 +379,7 @@ func buildActions(framework, language string) []Action {
 		})
 	}
 
-	// 10. docker compose up -d
+	// 12. docker compose up -d
 	if common.FileExists("docker-compose.yml") {
 		actions = append(actions, Action{
 			Name:        "docker compose up -d",
@@ -315,7 +392,7 @@ func buildActions(framework, language string) []Action {
 				return cmd.Run()
 			},
 		})
-		// 11. rebuild docker compose
+		// 13. rebuild docker compose
 		actions = append(actions, Action{
 			Name:        "rebuild docker compose",
 			Description: "Rebuild and restart Docker Compose services",
@@ -406,27 +483,42 @@ func copyEnvFiles(sources []string) error {
 	return fmt.Errorf("no .env source file found")
 }
 
-// findCacheDirs возвращает список директорий кэша для фреймворка
-func findCacheDirs(framework string) []string {
-	switch framework {
-	case "laravel":
-		return []string{"var/cache", "storage/framework/cache"}
-	case "symfony":
-		return []string{"var/cache"}
-	case "django":
-		return []string{"__pycache__"}
-	case "node":
-		return []string{"node_modules/.cache"}
-	default:
-		var dirs []string
-		candidates := []string{"var/cache", "storage/framework/cache", "tmp", "cache", "__pycache__"}
-		for _, d := range candidates {
-			if common.FileExists(d) {
-				dirs = append(dirs, d)
-			}
-		}
-		return dirs
+// findGenericCacheDirs ищет все директории с именем cache рекурсивно,
+// исключая vendor, node_modules, .git и другие системные директории
+func findGenericCacheDirs() []string {
+	var dirs []string
+	excludeDirs := map[string]bool{
+		"vendor":       true,
+		"node_modules": true,
+		".git":         true,
+		".venv":        true,
+		"venv":         true,
+		"env":          true,
+		"__pycache__":  true,
 	}
+
+	filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			return nil
+		}
+
+		// Пропускаем исключённые директории
+		base := filepath.Base(path)
+		if excludeDirs[base] && path != "." {
+			return filepath.SkipDir
+		}
+
+		// Если директория называется cache — добавляем
+		if info.Name() == "cache" {
+			dirs = append(dirs, path)
+		}
+		return nil
+	})
+
+	return dirs
 }
 
 // isWritable проверяет, доступна ли директория для записи
@@ -498,6 +590,50 @@ func hasNpmBuildScript() bool {
 	}
 	_, ok := pkg.Scripts["build"]
 	return ok
+}
+
+// findChownDirs возвращает список директорий, которые нужно отдать www-data
+func findChownDirs(framework string) []string {
+	switch framework {
+	case "laravel":
+		return []string{"storage"}
+	case "symfony":
+		return []string{"var"}
+	case "yii":
+		var dirs []string
+		for _, d := range []string{"runtime", "backend/runtime", "frontend/runtime", "backend/web/assets", "frontend/web/assets"} {
+			if common.FileExists(d) {
+				dirs = append(dirs, d)
+			}
+		}
+		return dirs
+	default:
+		// Проверяем наличие типичных директорий
+		var dirs []string
+		candidates := []string{"storage", "var", "runtime"}
+		for _, d := range candidates {
+			if common.FileExists(d) {
+				dirs = append(dirs, d)
+			}
+		}
+		return dirs
+	}
+}
+
+// isOwnedByWwwData проверяет, принадлежит ли директория www-data:www-data
+func isOwnedByWwwData(dir string) bool {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false
+	}
+	// www-data обычно имеет UID/GID 33, но не везде
+	// Проверяем через stat, сравнивая с ожидаемыми значениями
+	// 33 — стандартный UID/GID для www-data в Debian/Ubuntu
+	return stat.Uid == 33 && stat.Gid == 33
 }
 
 // boolToStatus преобразует bool в ActionStatus
