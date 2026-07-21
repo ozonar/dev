@@ -15,6 +15,7 @@ import (
 	"dev/internal/install"
 	"dev/internal/logs"
 	"dev/internal/migrate"
+	"dev/internal/port"
 	"dev/internal/prepare"
 	"dev/internal/run"
 	"dev/internal/version"
@@ -484,6 +485,29 @@ func runMigrateNew(name string) {
 	color.Green("Migration created successfully.")
 }
 
+var portCmd = &cobra.Command{
+	Use:   "port [address]",
+	Short: "Check if port is occupied and show process info",
+	Long: `Check if a port is occupied and show detailed information about the process using it.
+Uses lsof, ss, and nmap for detection.
+
+Examples:
+  dev port 127.0.0.1:1000
+  dev port :8080
+  dev port localhost:3306`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runPortCheck(args[0])
+	},
+}
+
+func runPortCheck(addr string) {
+	err := port.CheckPort(addr)
+	if err != nil {
+		color.Red("Ошибка: %v", err)
+	}
+}
+
 func main() {
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(cacheCmd)
@@ -496,6 +520,7 @@ func main() {
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(dbCmd)
+	rootCmd.AddCommand(portCmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateNewCmd)
 	// Default action is analyze
