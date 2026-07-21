@@ -109,7 +109,12 @@ func Run() error {
 
 		color.Cyan("\n=== Tables in database ===")
 		for i, tbl := range tables {
-			fmt.Printf("%d. %s\n", i+1, tbl)
+			count, err := getTableRowCount(db, selectedDB.Type, tbl)
+			if err != nil || count < 0 {
+				fmt.Printf("%d. %s\n", i+1, tbl)
+			} else {
+				fmt.Printf("%d. %s (%d rows)\n", i+1, tbl, count)
+			}
 		}
 
 		fmt.Print("\nSelect table (0 to exit): ")
@@ -133,7 +138,14 @@ func Run() error {
 			continue
 		}
 
-		color.Cyan("\n=== Table structure: %s ===", tableName)
+		// Get exact row count
+		exactCount, err := getExactRowCount(db, selectedDB.Type, tableName)
+		if err != nil {
+			color.Cyan("\n=== Table structure: %s ===", tableName)
+		} else {
+			color.Green("Total rows: %d\n", exactCount)
+			color.Cyan("\n=== Table structure: %s ===", tableName)
+		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "Field\tType\tNULL\tKey")
 		for _, col := range columns {
@@ -283,6 +295,50 @@ func listTables(db *sql.DB, dbType string) ([]string, error) {
 		tables = append(tables, table)
 	}
 	return tables, nil
+}
+
+// getTableRowCount returns estimated number of rows in a table (fast, may be -1)
+func getTableRowCount(db *sql.DB, dbType, tableName string) (int, error) {
+	var query string
+	switch dbType {
+	case "postgresql":
+		query = `SELECT reltuples::bigint AS estimate FROM pg_class WHERE relname = $1`
+	case "mysql":
+		query = `SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_NAME = ?`
+	case "sqlite":
+		query = `SELECT COUNT(*) FROM "` + tableName + `"`
+	default:
+		return 0, fmt.Errorf("unsupported DB type for row count: %s", dbType)
+	}
+
+	var count int
+	err := db.QueryRow(query, tableName).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// getExactRowCount returns exact number of rows in a table via COUNT(*)
+func getExactRowCount(db *sql.DB, dbType, tableName string) (int, error) {
+	var query string
+	switch dbType {
+	case "postgresql":
+		query = `SELECT COUNT(*) FROM "` + tableName + `"`
+	case "mysql":
+		query = "SELECT COUNT(*) FROM `" + tableName + "`"
+	case "sqlite":
+		query = `SELECT COUNT(*) FROM "` + tableName + `"`
+	default:
+		return 0, fmt.Errorf("unsupported DB type for exact row count: %s", dbType)
+	}
+
+	var count int
+	err := db.QueryRow(query).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 // describeTable returns information about table columns
