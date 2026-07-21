@@ -56,11 +56,26 @@ var logsCmd = &cobra.Command{
 }
 
 var runCmd = &cobra.Command{
-	Use:   "run",
+	Use:   "run [port]",
 	Short: "Run the project",
+	Long:  "Run the project's dev server. Optionally specify a port number as an argument or use --port flag.",
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// Если передан позиционный аргумент — используем его как порт
+		if len(args) > 0 {
+			p, err := strconv.Atoi(args[0])
+			if err == nil {
+				runPort = p
+			}
+		}
 		runRun()
 	},
+}
+
+var runPort int
+
+func init() {
+	runCmd.Flags().IntVarP(&runPort, "port", "p", 0, "Port for the dev server (default: 8000)")
 }
 
 var dcrCmd = &cobra.Command{
@@ -359,7 +374,8 @@ func runRun() {
 	}
 
 	color.Green("Running project: %s (%s)", info.Framework, info.Language)
-	err = run.RunProject(info.Framework, info.Language)
+	opts := run.RunOptions{Port: runPort}
+	err = run.RunProjectWithOptions(info.Framework, info.Language, opts)
 	if err != nil {
 		color.Red("Failed to run project: %v", err)
 	}
