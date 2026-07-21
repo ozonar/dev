@@ -47,8 +47,9 @@ var cacheCmd = &cobra.Command{
 }
 
 var logsCmd = &cobra.Command{
-	Use:   "logs",
-	Short: "Show logs and open in lnav",
+	Use:     "logs",
+	Aliases: []string{"log"},
+	Short:   "Show logs and open in lnav",
 	Run: func(cmd *cobra.Command, args []string) {
 		runLogs()
 	},
