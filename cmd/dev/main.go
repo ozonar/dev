@@ -119,6 +119,24 @@ var migrateCmd = &cobra.Command{
 	},
 }
 
+var migrateStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show migration status with lock analysis",
+	Long: `Analyze the current migration process status.
+
+Shows detailed information about:
+- Migration process (PHP PID, CPU, memory, state)
+- Database connection (active queries, transactions, wait events)
+- Lock chains (who blocks whom)
+- Doctrine migration versions (executed, pending)
+- Diagnosis and recommended action
+
+Supports PostgreSQL and MySQL databases.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		runMigrateStatus()
+	},
+}
+
 var migrateNewCmd = &cobra.Command{
 	Use:   "new [name]",
 	Short: "Create a new empty migration",
@@ -425,6 +443,13 @@ func runMigrate() {
 	color.Green("Migrations completed successfully.")
 }
 
+func runMigrateStatus() {
+	err := migrate.RunMigrationStatus()
+	if err != nil {
+		color.Red("Migration status error: %v", err)
+	}
+}
+
 func runMigrateNew(name string) {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
@@ -454,6 +479,7 @@ func main() {
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(dbCmd)
+	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateNewCmd)
 	// Default action is analyze
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
