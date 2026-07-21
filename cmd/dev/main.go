@@ -9,6 +9,7 @@ import (
 
 	"dev/internal/build"
 	"dev/internal/cache"
+	"dev/internal/curl"
 	"dev/internal/db"
 	"dev/internal/detector"
 	"dev/internal/docker"
@@ -501,8 +502,42 @@ Examples:
 	},
 }
 
+var curlCmd = &cobra.Command{
+	Use:   "curl <url> [method]",
+	Short: "Make HTTP request and show/save response",
+	Long: `Make an HTTP request to the specified URL and interactively choose
+to display the response or save it to a file.
+
+Automatically prepends https:// if no protocol is specified.
+Uses --insecure mode (skips TLS certificate verification).
+
+Methods: GET (default), POST, PUT, DELETE
+
+Examples:
+  dev curl example.com
+  dev curl example.com POST
+  dev curl https://api.example.com PUT
+  dev curl http://localhost:8080/api DELETE`,
+	Args: cobra.RangeArgs(1, 2),
+	Run: func(cmd *cobra.Command, args []string) {
+		url := args[0]
+		method := "GET"
+		if len(args) > 1 {
+			method = args[1]
+		}
+		runCurl(url, method)
+	},
+}
+
 func runPortCheck(addr string) {
 	err := port.CheckPort(addr)
+	if err != nil {
+		color.Red("Ошибка: %v", err)
+	}
+}
+
+func runCurl(url, method string) {
+	err := curl.Run(url, method)
 	if err != nil {
 		color.Red("Ошибка: %v", err)
 	}
@@ -521,6 +556,7 @@ func main() {
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(dbCmd)
 	rootCmd.AddCommand(portCmd)
+	rootCmd.AddCommand(curlCmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateNewCmd)
 	// Default action is analyze
