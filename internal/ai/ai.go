@@ -13,10 +13,23 @@ import (
 	"github.com/fatih/color"
 )
 
+// CommandType определяет тип команды
+type CommandType string
+
+const (
+	// CommandTypeAnalysis — команда для анализа (сбор информации)
+	CommandTypeAnalysis CommandType = "analysis"
+	// CommandTypeSequence — команда из череды последовательных шагов
+	CommandTypeSequence CommandType = "sequence"
+	// CommandTypeFix — команда, которая сама по себе решает проблему
+	CommandTypeFix CommandType = "fix"
+)
+
 // CommandAction представляет одну команду от LLM
 type CommandAction struct {
-	Command     string `json:"command"`
-	Description string `json:"description,omitempty"`
+	Command     string      `json:"command"`
+	Description string      `json:"description,omitempty"`
+	Type        CommandType `json:"type,omitempty"`
 }
 
 // HistoryEntry представляет запись истории диалога
@@ -77,16 +90,29 @@ func RunAI(text string) error {
 // buildSystemPrompt создаёт системный промпт с контекстом
 func buildSystemPrompt(contextInfo string) string {
 	return fmt.Sprintf(`Ты — ассистент для разработчика. Отвечай ТОЛЬКО в формате JSON.
-Дай список последовательных команд для выполнения в терминале Linux.
+Дай список команд для выполнения в терминале Linux.
 
 Формат ответа:
-[{"command": "команда", "description": "что делает"}, {"command": "следующая команда", "description": "что делает"}]
+[
+  {"command": "команда", "description": "что делает", "type": "analysis"},
+  {"command": "команда", "description": "что делает", "type": "sequence"},
+  {"command": "команда", "description": "что делает", "type": "fix"}
+]
+
+Поле "type" определяет тип команды:
+- "analysis" — команда для сбора диагностической информации. Используй ТОЛЬКО когда пользователь сообщил о проблеме/ошибке, и ты не знаешь её причину. После таких команд будет сделан повторный запрос к LLM для поиска решения.
+- "sequence" — команда из череды последовательных шагов. Если за этой командой следуют другие.
+- "fix" — команда, которая напрямую отвечает на запрос пользователя, дает пользователю ответ, или решает проблему пользователя. Это финальное действие.
+
+Правила выбора типа:
+1. Если пользователь явно просит что-то сделать (проверить место, показать логи, установить пакет, запустить сервер, выполнить код, ответить на вопрос) — используй "fix" или "sequence"
+2. "analysis" используй ТОЛЬКО в сценарии "почему не работает / что-то сломалось / ошибка"
+3. Если это один из шагов последовательности — используй "sequence"
 
 Контекст текущего проекта:
 %s
 
 Доступные команды dev (CLI-утилита):
-- dev analyze — анализ проекта (язык, фреймворк, БД, docker)
 - dev build — сборка проекта
 - dev migrate — запуск миграций БД
 - dev migrate status — статус миграций
@@ -98,8 +124,11 @@ func buildSystemPrompt(contextInfo string) string {
 
 ВАЖНОЕ ОГРАНИЧЕНИЕ: Каждая команда выполняется в ОТДЕЛЬНОМ shell-процессе.
 Команда cd НЕ сохраняется между командами. Если нужно выполнить несколько команд в одной директории,
-используй полные пути или объединяй команды через && в одной строке для каждой команды из списка
+используй полные пути или объединяй команды через && в одной строке для каждой команды из списка 
+но ТОЛЬКО если необходимо выполнить команды ВНЕ рабочей директории
+
 Например: "cd /some/dir && make && ./binary"
+"./binary" тоже подойдет, если нужно выполнить команду из рабочей директории
 
 Правила:
 1. Отвечай ТОЛЬКО JSON-массивом, без пояснений
@@ -183,9 +212,27 @@ func interactiveLoop(cfg *Config, history []HistoryEntry) error {
 
 // commandLoop цикл: показывает команды, ждёт ввод (цифра = выполнить, текст = уточнение)
 func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction, reader *bufio.Reader) error {
+	// Флаг: была ли выполнена хотя бы одна analysis-команда
+	analysisExecuted := false
+
 	for len(commands) > 0 {
+		// Добавляем виртуальную команду SEND_ANALYSIS в конец списка, если analysis выполнялись
+		hasSendAnalysis := false
+		for _, c := range commands {
+			if c.Command == "SEND_ANALYSIS" {
+				hasSendAnalysis = true
+				break
+			}
+		}
+		if analysisExecuted && !hasSendAnalysis {
+			commands = append(commands, CommandAction{
+				Command:     "SEND_ANALYSIS",
+				Description: "Send analysis results to LLM for solution",
+			})
+		}
+
 		fmt.Println()
-		printCommands(commands)
+		printCommands(commands, analysisExecuted)
 
 		host, _ := os.Hostname()
 		cwd, _ := os.Getwd()
@@ -205,6 +252,29 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 			}
 
 			cmd := commands[idx-1]
+
+			// Special "SEND_ANALYSIS" command — send analysis results to LLM
+			if cmd.Command == "SEND_ANALYSIS" {
+				color.Cyan("\n=== Sending analysis results to LLM ===")
+				*history = append(*history, HistoryEntry{
+					Role:    "user",
+					Content: "Анамнез собран. На основе полученных данных проанализируй проблему и предложи команды для её решения. Используй type: \"fix\" для финальных команд и type: \"sequence\" для промежуточных шагов.",
+				})
+
+				newCommands, err := queryLLM(cfg, *history)
+				if err != nil {
+					return fmt.Errorf("LLM query failed: %w", err)
+				}
+
+				if len(newCommands) == 1 && newCommands[0].Command == "REFINE" {
+					color.Yellow("LLM: %s", newCommands[0].Description)
+					continue
+				}
+
+				commands = newCommands
+				analysisExecuted = true
+				continue
+			}
 
 			// Special "Fix error" command — send to LLM
 			if cmd.Command == "FIX_ERROR" {
@@ -255,6 +325,11 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 				fmt.Println(output)
 			}
 
+			// Если выполнили analysis-команду — ставим флаг
+			if cmd.Type == CommandTypeAnalysis {
+				analysisExecuted = true
+			}
+
 			// Убираем выполненную команду из списка
 			commands = append(commands[:idx-1], commands[idx:]...)
 
@@ -298,6 +373,30 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 		}
 
 		commands = newCommands
+	}
+
+	// После выполнения всех команд проверяем, были ли среди них analysis
+	// и не отправляли ли мы уже результат
+	if analysisExecuted {
+		color.Cyan("\n=== Sending analysis results to LLM ===")
+		*history = append(*history, HistoryEntry{
+			Role:    "user",
+			Content: "Анамнез собран. На основе полученных данных проанализируй проблему и предложи команды для её решения. Используй type: \"fix\" для финальных команд и type: \"sequence\" для промежуточных шагов.",
+		})
+
+		newCommands, err := queryLLM(cfg, *history)
+		if err != nil {
+			return fmt.Errorf("LLM query failed: %w", err)
+		}
+
+		if len(newCommands) == 1 && newCommands[0].Command == "REFINE" {
+			color.Yellow("LLM: %s", newCommands[0].Description)
+			return nil
+		}
+
+		commands = newCommands
+		// Рекурсивно запускаем commandLoop для новых команд (уже без флага analysis)
+		return commandLoop(cfg, history, commands, reader)
 	}
 
 	color.Green("\n✓ All commands executed!")
@@ -396,16 +495,91 @@ func formatCommandsJSON(commands []CommandAction) string {
 	return string(data)
 }
 
-// printCommands выводит список команд
-func printCommands(commands []CommandAction) {
-	// Белый фон для команды
+// printCommands выводит список команд, разбитый на три блока:
+// 1. Analysis — диагностические команды
+// 2. Action — команды для выполнения (sequence/fix)
+// 3. LLM — команды для обращения к LLM (FIX_ERROR, SEND_ANALYSIS)
+func printCommands(commands []CommandAction, analysisExecuted bool) {
+	// Белый фон для обычных команд
 	bg := color.New(color.FgBlack, color.BgWhite)
-	for i, cmd := range commands {
-		commandStr := bg.Sprintf(" %s ", cmd.Command)
-		if cmd.Description != "" {
-			fmt.Printf("%d. %s [%s]\n", i+1, commandStr, cmd.Description)
-		} else {
-			fmt.Printf("%d. %s\n", i+1, commandStr)
+	// Голубой фон для analysis-команд
+	analysisBg := color.New(color.FgBlack, color.BgCyan)
+	// Жёлтый фон для LLM-команд
+	llmBg := color.New(color.FgBlack, color.BgYellow)
+
+	// Разделяем команды на три группы
+	var analysisCmds, actionCmds, llmCmds []CommandAction
+	for _, cmd := range commands {
+		switch {
+		case cmd.Type == CommandTypeAnalysis:
+			analysisCmds = append(analysisCmds, cmd)
+		case cmd.Command == "FIX_ERROR" || cmd.Command == "SEND_ANALYSIS":
+			llmCmds = append(llmCmds, cmd)
+		default:
+			actionCmds = append(actionCmds, cmd)
+		}
+	}
+
+	// Если есть analysis-команды — пишем пояснение перед всеми блоками
+	if len(analysisCmds) > 0 {
+		color.White("LLM doesn't understand what happened, so it suggests an analysis")
+	}
+
+	// Блок 1: Analysis commands
+	if len(analysisCmds) > 0 {
+		color.Cyan("\n── Analysis commands ──")
+		for i, cmd := range analysisCmds {
+			commandStr := analysisBg.Sprintf(" %s ", cmd.Command)
+			if cmd.Description != "" {
+				fmt.Printf("%d. %s [%s]\n", i+1, commandStr, cmd.Description)
+			} else {
+				fmt.Printf("%d. %s\n", i+1, commandStr)
+			}
+		}
+	}
+
+	// Блок 2: Action commands
+	if len(actionCmds) > 0 {
+		if len(analysisCmds) > 0 {
+			color.Cyan("\n── Action commands ──")
+		}
+		for i, cmd := range actionCmds {
+			idx := len(analysisCmds) + i + 1
+			commandStr := bg.Sprintf(" %s ", cmd.Command)
+
+			if cmd.Description != "" {
+				fmt.Printf("%d. %s [%s]", idx, commandStr, cmd.Description)
+			} else {
+				fmt.Printf("%d. %s", idx, commandStr)
+			}
+
+			// Рисуем стрелку вниз, если команда типа sequence и это не последняя action-команда
+			// и следующая команда не FIX_ERROR
+			isLast := (i == len(actionCmds)-1)
+			nextIsFixError := false
+			if !isLast && actionCmds[i+1].Command == "FIX_ERROR" {
+				nextIsFixError = true
+			}
+			if cmd.Type == CommandTypeSequence && !isLast && !nextIsFixError {
+				fmt.Print("  ↓")
+			}
+			fmt.Println()
+		}
+	}
+
+	// Блок 3: LLM commands (FIX_ERROR, SEND_ANALYSIS)
+	if len(llmCmds) > 0 {
+		if len(analysisCmds) > 0 || len(actionCmds) > 0 {
+			color.Cyan("\n── LLM commands ──")
+		}
+		for i, cmd := range llmCmds {
+			idx := len(analysisCmds) + len(actionCmds) + i + 1
+			commandStr := llmBg.Sprintf(" %s ", cmd.Command)
+			if cmd.Description != "" {
+				fmt.Printf("%d. %s [%s]\n", idx, commandStr, cmd.Description)
+			} else {
+				fmt.Printf("%d. %s\n", idx, commandStr)
+			}
 		}
 	}
 }
