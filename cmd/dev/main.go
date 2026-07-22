@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dev/internal/ai"
 	"dev/internal/build"
 	"dev/internal/cache"
 	"dev/internal/curl"
@@ -543,6 +544,39 @@ func runCurl(url, method string) {
 	}
 }
 
+var selfConfigCmd = &cobra.Command{
+	Use:   "self-config",
+	Short: "Open AI configuration file for editing",
+	Long: `Open the AI configuration file (/etc/dev-command/main.conf) for editing.
+Creates the file with default empty parameters if it doesn't exist.
+Uses $EDITOR or nano by default.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := ai.EditConfig(); err != nil {
+			color.Red("Ошибка: %v", err)
+		}
+	},
+}
+
+var aiCmd = &cobra.Command{
+	Use:   "ai <text>",
+	Short: "Ask AI to generate and execute commands",
+	Long: `Send a request to an AI model (OpenAI-compatible API) to generate
+a list of terminal commands based on your description.
+
+The AI analyzes the current project context and suggests commands.
+You can then choose to execute them one by one or refine the request.
+
+Configuration is stored in /etc/dev-command/main.conf.
+Use 'dev self-config' to set up your API endpoint, token, and model.`,
+	Args: cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		text := strings.Join(args, " ")
+		if err := ai.RunAI(text); err != nil {
+			color.Red("Ошибка: %v", err)
+		}
+	},
+}
+
 func main() {
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(cacheCmd)
@@ -557,6 +591,8 @@ func main() {
 	rootCmd.AddCommand(dbCmd)
 	rootCmd.AddCommand(portCmd)
 	rootCmd.AddCommand(curlCmd)
+	rootCmd.AddCommand(selfConfigCmd)
+	rootCmd.AddCommand(aiCmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateNewCmd)
 	// Default action is analyze
