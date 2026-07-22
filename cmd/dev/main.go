@@ -20,6 +20,7 @@ import (
 	"dev/internal/port"
 	"dev/internal/prepare"
 	"dev/internal/run"
+	"dev/internal/update"
 	"dev/internal/version"
 	"dev/internal/virus"
 
@@ -544,6 +545,19 @@ func runCurl(url, method string) {
 	}
 }
 
+var selfUpdateCmd = &cobra.Command{
+	Use:   "self-update",
+	Short: "Update dev to the latest version",
+	Long: `Download the latest dev binary from GitHub releases and install it.
+The binary is downloaded to the home directory, installed via 'dev install',
+and then the temporary file is removed.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := update.SelfUpdate(); err != nil {
+			color.Red("Ошибка: %v", err)
+		}
+	},
+}
+
 var selfConfigCmd = &cobra.Command{
 	Use:   "self-config",
 	Short: "Open AI configuration file for editing",
@@ -592,6 +606,7 @@ func main() {
 	rootCmd.AddCommand(dbCmd)
 	rootCmd.AddCommand(portCmd)
 	rootCmd.AddCommand(curlCmd)
+	rootCmd.AddCommand(selfUpdateCmd)
 	rootCmd.AddCommand(selfConfigCmd)
 	rootCmd.AddCommand(aiCmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
