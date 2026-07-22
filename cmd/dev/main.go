@@ -547,7 +547,7 @@ func runCurl(url, method string) {
 var selfConfigCmd = &cobra.Command{
 	Use:   "self-config",
 	Short: "Open AI configuration file for editing",
-	Long: `Open the AI configuration file (/etc/dev-command/main.conf) for editing.
+	Long: `Open the AI configuration file (~/dev-config/main.conf) for editing.
 Creates the file with default empty parameters if it doesn't exist.
 Uses $EDITOR or nano by default.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -566,7 +566,8 @@ a list of terminal commands based on your description.
 The AI analyzes the current project context and suggests commands.
 You can then choose to execute them one by one or refine the request.
 
-Configuration is stored in /etc/dev-command/main.conf.
+Configuration is stored in ~/dev-config/main.conf (user config)
+or /etc/dev-command/main.conf (system fallback).
 Use 'dev self-config' to set up your API endpoint, token, and model.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
