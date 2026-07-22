@@ -190,7 +190,7 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 		host, _ := os.Hostname()
 		cwd, _ := os.Getwd()
 		prompt := color.New(color.FgBlack, color.BgYellow).Sprintf(" %s@%s in dev:%s# ", os.Getenv("USER"), host, cwd)
-		fmt.Printf("\nEnter command number to execute or text to refine request\n%s", prompt)
+		fmt.Printf("\nEnter command number to execute or text to refine request (default \"1\")\n%s", prompt)
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 		if input == "" {
@@ -235,17 +235,18 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 			}
 
 			output, execErr := runCommand(cmd.Command)
+			truncatedOutput := truncateOutput(output, 30)
 			if execErr != nil {
 				color.Red("Execution error: %v", execErr)
 				*history = append(*history, HistoryEntry{
 					Role:    "assistant",
-					Content: fmt.Sprintf("Executed command: %s\nError: %v\nOutput: %s", cmd.Command, execErr, output),
+					Content: fmt.Sprintf("Executed command: %s\nError: %v\nOutput: %s", cmd.Command, execErr, truncatedOutput),
 				})
 			} else {
 				color.Green("✓ Command executed successfully")
 				*history = append(*history, HistoryEntry{
 					Role:    "assistant",
-					Content: fmt.Sprintf("Executed command: %s\nOutput: %s", cmd.Command, output),
+					Content: fmt.Sprintf("Executed command: %s\nOutput: %s", cmd.Command, truncatedOutput),
 				})
 			}
 
@@ -407,6 +408,18 @@ func printCommands(commands []CommandAction) {
 			fmt.Printf("%d. %s\n", i+1, commandStr)
 		}
 	}
+}
+
+// truncateOutput обрезает вывод до последних n строк
+func truncateOutput(output string, n int) string {
+	lines := strings.Split(output, "\n")
+	if len(lines) <= n {
+		return output
+	}
+
+	truncated := lines[len(lines)-n:]
+	omitted := len(lines) - n
+	return fmt.Sprintf("... (%d lines omitted) ...\n%s", omitted, strings.Join(truncated, "\n"))
 }
 
 // runCommand выполняет команду в shell и возвращает вывод и ошибку
