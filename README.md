@@ -38,6 +38,8 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 
 - **`dev install [file]`** – Install the dev tool (or a specified executable) to a system directory (`/usr/local/bin`, `~/bin`, etc.) with interactive directory selection.
 
+- **`dev self-update`** – Download and install the latest version of dev from GitHub releases.
+
 - **`dev virus [user:pass@ip_addr]`** – Copy the dev executable to a remote server via SCP (supports `user@host` or `user:pass@ip` formats). Automatically sets execute permissions.
 
 - **`dev build`** – Build the project according to its language:
@@ -106,6 +108,7 @@ dev run 8080            # run project on port 8080
 dev dcr                 # start docker-compose
 dev prepare             # prepare environment
 dev install             # install dev to system
+dev self-update         # update dev to latest version
 dev virus user@host     # copy dev to remote server
 dev build               # build project
 dev migrate             # run database migrations

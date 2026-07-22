@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/fatih/color"
 )
 
 // checkPathDirs возвращает список директорий для выбора установки.
@@ -163,6 +166,14 @@ func Install(sourceFile string) error {
 	}
 	if srcAbs == targetAbs {
 		return fmt.Errorf("Попытка установить %[1]s в %[1]s.\n", targetPath)
+	}
+
+	// Убиваем процесс, использующий целевой файл (если такой есть)
+	color.Yellow("Проверка, не занят ли %s...", targetPath)
+	fuserCmd := exec.Command("fuser", "-k", targetPath)
+	fuserOutput, _ := fuserCmd.CombinedOutput()
+	if len(fuserOutput) > 0 {
+		fmt.Printf("  %s", string(fuserOutput))
 	}
 
 	// Копируем файл
