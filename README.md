@@ -1,12 +1,13 @@
 # Dev CLI Tool
 
-A command-line tool to assist with development tasks: analyze projects, clear caches, view logs, run projects, manage Docker, prepare environments, work with databases, and run migrations.
+A command-line tool to assist with development tasks: analyze projects, clear caches, view logs, run projects, manage Docker, prepare environments, work with databases, run migrations, check ports, make HTTP requests, and interact with AI.
 
 ## Features
 
 - **`dev`** or **`dev analyze`** – Analyze current directory:
   - Detect language/framework (PHP, Go, Node.js, Python, etc.)
   - Check for `.env`, vendor installation, Docker services, Make commands
+  - Detect databases (local, Docker, remote)
   - Colorful output with status indicators
 
 - **`dev cache`** – Clear framework‑specific caches:
@@ -20,14 +21,15 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 
 - **`dev logs`** – Find log files and Docker container logs, then open them in `lnav` (interactive selection)
 
-- **`dev run`** – Start the project with the appropriate runner:
+- **`dev run [port]`** – Start the project with the appropriate runner:
   - Symfony: `symfony serve`
   - Laravel: `php artisan serve`
   - Go: `go run` (auto‑detects main files)
   - Node.js: `npm run dev`
   - Python: `python manage.py runserver` or simple HTTP server
+  - Supports `--port` flag or positional port argument (default: 8000)
 
-- **`dev dcr`** – Run `docker‑compose up -d` and report running services
+- **`dev dcr`** – Run `docker-compose up -d` and report running services
 
 - **`dev prepare`** – Prepare the project for development:
   - Set `777` permissions on cache directories
@@ -45,13 +47,43 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 
 - **`dev migrate`** – Run database migrations for the detected framework/language.
 
+- **`dev migrate status`** – Show migration status with lock analysis:
+  - Migration process (PHP PID, CPU, memory, state)
+  - Database connection (active queries, transactions, wait events)
+  - Lock chains (who blocks whom)
+  - Doctrine migration versions (executed, pending)
+  - Diagnosis and recommended action
+  - Supports PostgreSQL and MySQL databases.
+
 - **`dev migrate new [name]`** – Create a new empty migration file.
 
 - **`dev db`** – Interactive database explorer: analyze databases in the project, connect, list tables, and view data.
 
+- **`dev port <address>`** – Check if a port is occupied and show detailed process information:
+  - Uses `fuser`, `ss`, `lsof` for local port detection
+  - Offers `nmap` scan for service detection
+  - Supports remote hosts (auto‑runs nmap)
+  - Formats: `127.0.0.1:1000`, `:8080`, `8080`
+
+- **`dev curl <url> [method]`** – Make an HTTP request and interactively choose to display the response or save it to a file:
+  - Automatically prepends `https://` if no protocol is specified
+  - Uses `--insecure` mode (skips TLS certificate verification)
+  - Methods: `GET` (default), `POST`, `PUT`, `DELETE`
+  - Shows status, duration, and content length
+
+- **`dev ai <text>`** – Send a request to an AI model (OpenAI-compatible API) to generate and execute terminal commands:
+  - AI analyzes the current project context and suggests commands
+  - Interactive loop: execute commands one by one or refine the request
+  - Configuration via `~/dev-config/main.conf` or `/etc/dev-command/main.conf`
+
+- **`dev self-config`** – Open AI configuration file for editing:
+  - Creates the file with default empty parameters if it doesn't exist
+  - Uses `$EDITOR` or `nano` by default
+  - Required parameters: `LLM_ENDPOINT`, `LLM_TOKEN`, `LLM_MODEL`
+
 ## Installation
 
-### From github
+### From GitHub
 
 ```bash
 wget -O dev https://github.com/ozonar/dev/releases/latest/download/dev-linux-amd64 && chmod +x dev
@@ -70,25 +102,46 @@ dev                     # analyze project
 dev cache               # clear cache
 dev logs                # show logs
 dev run                 # run project
-dev dcr                 # start docker‑compose
+dev run 8080            # run project on port 8080
+dev dcr                 # start docker-compose
 dev prepare             # prepare environment
 dev install             # install dev to system
 dev virus user@host     # copy dev to remote server
 dev build               # build project
 dev migrate             # run database migrations
+dev migrate status      # show migration status
 dev migrate new         # create a new migration
 dev db                  # interactive database explorer
+dev port :8080          # check if port is occupied
+dev curl example.com    # make HTTP request
+dev ai "install npm"    # ask AI to generate commands
+dev self-config         # configure AI settings
 ```
 
 ## Configuration
 
-No configuration files are required. The tool automatically detects your project based on common file patterns.
+### AI Configuration
 
-## Optional requirements
+The AI feature requires configuration in `~/dev-config/main.conf`:
 
-- Docker & docker‑compose (optional, for `dev dcr`)
+```ini
+LLM_ENDPOINT=https://api.openai.com/v1/chat/completions
+LLM_TOKEN=your-api-token
+LLM_MODEL=gpt-4o
+```
+
+Use `dev self-config` to open the config file for editing.
+
+### Project Detection
+
+No configuration files are required for project detection. The tool automatically detects your project based on common file patterns.
+
+## Optional Requirements
+
+- Docker & docker-compose (optional, for `dev dcr`)
 - lnav (optional, for `dev logs` interactive viewing)
-- Framework‑specific tools (optional, php, npm, go, python, etc.)
+- nmap (optional, for `dev port` service detection)
+- Framework-specific tools (optional, php, npm, go, python, etc.)
 - SSH keys (optional, for `dev virus`)
 
 ## Project Structure
@@ -97,18 +150,25 @@ No configuration files are required. The tool automatically detects your project
 dev/
 ├── cmd/dev/main.go          # CLI entry point
 ├── internal/
-│   ├── detector/            # Project detection
-│   ├── cache/               # Cache clearing
-│   ├── logs/                # Log discovery
-│   ├── run/                 # Project runner
-│   ├── docker/              # Docker‑compose operations
-│   ├── prepare/             # Environment preparation
-│   ├── install/             # Installation logic
-│   ├── virus/               # Remote copy via SCP
+│   ├── ai/                  # AI integration (OpenAI-compatible API)
+│   ├── ai/config.go         # AI configuration management
 │   ├── build/               # Project building
-│   ├── migrate/             # Database migrations
+│   ├── cache/               # Cache clearing
+│   ├── colors/              # ANSI color helpers
+│   ├── common/              # Shared utilities (file ops, commands)
+│   ├── curl/                # HTTP request client
 │   ├── db/                  # Database explorer
-│   └── version/             # Version information
+│   ├── detector/            # Project detection
+│   ├── docker/              # Docker-compose operations
+│   ├── install/             # Installation logic
+│   ├── logs/                # Log discovery
+│   ├── migrate/             # Database migrations
+│   ├── migrate/status.go    # Migration status & lock analysis
+│   ├── port/                # Port checking (fuser, ss, lsof, nmap)
+│   ├── prepare/             # Environment preparation
+│   ├── run/                 # Project runner
+│   ├── version/             # Version information
+│   └── virus/               # Remote copy via SCP
 ├── go.mod
 └── README.md
 ```
