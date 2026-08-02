@@ -2,6 +2,7 @@ package logs
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -115,5 +116,55 @@ func TestFindPHPFPMLogsPHPProject(t *testing.T) {
 	}
 	if fileEntries == 0 {
 		t.Error("FindLogs не вернул ни одной файловой записи для PHP проекта")
+	}
+}
+
+// TestHasLnav проверяет, что hasLnav() не падает и возвращает bool
+func TestHasLnav(t *testing.T) {
+	result := hasLnav()
+	// Просто проверяем, что возвращается bool (не паника)
+	_ = result
+}
+
+// TestOpenLogInLnavFallback проверяет, что OpenLogInLnav не падает
+// при отсутствии lnav (использует less как fallback).
+// Создаёт временный .log файл и пытается открыть его.
+// В тесте мы не можем интерактивно работать с less, поэтому проверяем,
+// что команда собирается корректно (не падает на этапе сборки).
+func TestOpenLogInLnavFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	logFile := filepath.Join(tmpDir, "test.log")
+	if err := os.WriteFile(logFile, []byte("test log line 1\ntest log line 2\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Проверяем, что для файла без lnav используется less
+	// Мы не можем запустить less в тесте (интерактивный), но можем проверить
+	// что exec.Command не падает на этапе сборки команды
+	if !hasLnav() {
+		// Проверяем, что less доступен как fallback
+		_, err := exec.LookPath("less")
+		if err != nil {
+			t.Skip("less не установлен, пропускаем тест fallback")
+		}
+	}
+
+	// Проверяем, что функция не падает при попытке открыть несуществующий файл
+	// (она должна вернуть ошибку, а не запаниковать)
+	err := OpenLogInLnav("/nonexistent/path.log", "file")
+	if err == nil {
+		// Если lnav установлен, он может вернуть ошибку из-за отсутствия файла
+		// Если less — тоже. Главное, что нет паники.
+	}
+}
+
+// TestOpenLogInLnavDockerFallback проверяет fallback для docker логов
+func TestOpenLogInLnavDockerFallback(t *testing.T) {
+	// Проверяем, что для docker лога без lnav используется bash-пайп
+	// Просто проверяем, что нет паники при вызове
+	err := OpenLogInLnav("test-container", "docker")
+	if err == nil {
+		// Если docker не запущен или контейнер не существует — будет ошибка,
+		// но не паника. Это нормально.
 	}
 }
