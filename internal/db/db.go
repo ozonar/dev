@@ -214,7 +214,16 @@ func Run() error {
 				val := row[col.Name]
 				strVal := "NULL"
 				if val != nil {
-					strVal = fmt.Sprintf("%v", val)
+					switch v := val.(type) {
+					case []byte:
+						// PostgreSQL возвращает UUID как []byte
+						strVal = string(v)
+					case [16]byte:
+						// Некоторые драйверы могут вернуть фиксированный массив
+						strVal = string(v[:])
+					default:
+						strVal = fmt.Sprintf("%v", v)
+					}
 				}
 				line += fmt.Sprintf("%-*s ", colWidths[col.Name], strVal)
 			}
@@ -431,19 +440,62 @@ func getPrimaryKey(db *sql.DB, tableName string) (string, error) {
 	return pk, nil
 }
 
+// getColumnNames возвращает список колонок таблицы для PostgreSQL,
+// исключая системные колонки (ctid, oid, xmin, cmin, xmax, cmax, tableoid).
+func getColumnNames(db *sql.DB, tableName string) ([]string, error) {
+	query := `
+		SELECT column_name
+		FROM information_schema.columns
+		WHERE table_name = $1
+		ORDER BY ordinal_position`
+	rows, err := db.Query(query, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cols []string
+	for rows.Next() {
+		var col string
+		if err := rows.Scan(&col); err != nil {
+			return nil, err
+		}
+		cols = append(cols, col)
+	}
+	return cols, nil
+}
+
 // getLastRows returns last N rows of a table
 func getLastRows(db *sql.DB, dbType, tableName string, limit int) ([]map[string]any, error) {
 	var query string
 	var args []any
+
 	switch dbType {
 	case "postgresql":
+		// Явно получаем список колонок через information_schema,
+		// чтобы избежать системных колонок (ctid, oid и т.д.),
+		// которые lib/pq может возвращать при SELECT *
+		cols, err := getColumnNames(db, tableName)
+		if err != nil {
+			return nil, fmt.Errorf("error getting column names: %w", err)
+		}
+		if len(cols) == 0 {
+			return nil, fmt.Errorf("no columns found for table %s", tableName)
+		}
+
+		// Экранируем имена колонок кавычками
+		quotedCols := make([]string, len(cols))
+		for i, c := range cols {
+			quotedCols[i] = `"` + c + `"`
+		}
+		colList := strings.Join(quotedCols, ", ")
+
 		pk, err := getPrimaryKey(db, tableName)
 		if err != nil || pk == "" {
-			// No primary key — just select without ordering
-			query = `SELECT * FROM ` + tableName + ` LIMIT $1`
+			query = fmt.Sprintf(`SELECT %s FROM "%s" LIMIT $1`, colList, tableName)
 			args = []any{limit}
 		} else {
-			query = `SELECT * FROM ` + tableName + ` ORDER BY ` + pk + ` DESC LIMIT $1`
+			query = fmt.Sprintf(`SELECT %s FROM "%s" ORDER BY "%s" DESC LIMIT $1`, colList, tableName, pk)
 			args = []any{limit}
 		}
 	case "mysql", "sqlite":
