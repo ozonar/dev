@@ -100,6 +100,18 @@ func PrepareProject(framework, language string) error {
 func buildActions(framework, language string) []Action {
 	var actions []Action
 
+	// 0. Create .gitignore если его нет
+	if !common.FileExists(".gitignore") {
+		actions = append(actions, Action{
+			Name:        "create .gitignore",
+			Description: "Create .gitignore file for the project",
+			Status:      StatusPending,
+			Run: func() error {
+				return createGitignore(framework, language)
+			},
+		})
+	}
+
 	// 1. Composer install / npm install / go mod tidy / pip install
 	switch framework {
 	case "laravel", "symfony", "generic":
@@ -645,4 +657,177 @@ func boolToStatus(b bool) ActionStatus {
 		return StatusDone
 	}
 	return StatusPending
+}
+
+// gitignoreTemplates возвращает содержимое .gitignore в зависимости от языка/фреймворка
+func gitignoreTemplates(framework, language string) string {
+	var templates []string
+
+	// Базовые игнорирования для всех проектов
+	base := `# Operating System Files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.orig
+
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Dependencies
+vendor/
+node_modules/
+`
+
+	templates = append(templates, base)
+
+	switch framework {
+	case "laravel":
+		templates = append(templates, `# Laravel
+/.phpunit.result.cache
+.php_cs.cache
+.php-cs-fixer.cache
+/build/
+/dist/
+/bootstrap/cache/*.php
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+!storage/framework/views/.gitkeep
+!storage/framework/cache/data/.gitkeep
+!storage/framework/sessions/.gitkeep
+`)
+	case "symfony":
+		templates = append(templates, `# Symfony
+/.phpunit.result.cache
+.php_cs.cache
+.php-cs-fixer.cache
+/build/
+/dist/
+/var/
+/bootstrap/cache/*.php
+`)
+	case "node":
+		templates = append(templates, `# Node.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build
+/dist/
+/build/
+*.tsbuildinfo
+`)
+	case "go":
+		templates = append(templates, `# Go
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/go.work
+/go.work.sum
+`)
+	case "python":
+		templates = append(templates, `# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+.installed.cfg
+*.egg
+dist/
+build/
+*.whl
+MANIFEST
+`)
+	}
+
+	// Если фреймворк не определён, но язык известен
+	if framework == "generic" || framework == "" {
+		switch language {
+		case "php":
+			templates = append(templates, `# PHP
+/composer.lock
+/.phpunit.result.cache
+/build/
+/dist/
+`)
+		case "javascript", "typescript":
+			templates = append(templates, `# Node.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build
+/dist/
+/build/
+*.tsbuildinfo
+`)
+		case "go":
+			templates = append(templates, `# Go
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/go.work
+/go.work.sum
+`)
+		case "python":
+			templates = append(templates, `# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+.installed.cfg
+*.egg
+dist/
+build/
+*.whl
+MANIFEST
+`)
+		}
+	}
+
+	return strings.Join(templates, "\n")
+}
+
+// createGitignore создаёт файл .gitignore на основе языка и фреймворка проекта
+func createGitignore(framework, language string) error {
+	content := gitignoreTemplates(framework, language)
+
+	if err := os.WriteFile(".gitignore", []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to create .gitignore: %v", err)
+	}
+
+	fmt.Printf("  Created .gitignore for %s/%s\n", language, framework)
+	return nil
 }
