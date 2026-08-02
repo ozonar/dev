@@ -43,23 +43,25 @@ func buildGo() error {
 	if len(mainFiles) == 1 {
 		target = mainFiles[0]
 	} else {
-		// Показываем список для выбора
-		fmt.Println("Найдено несколько main файлов:")
+		// Show list for user to choose
+		fmt.Println("Multiple main files found:")
 		for i, f := range mainFiles {
 			fmt.Printf("  %d) %s\n", i+1, f)
 		}
-		fmt.Print("Выберите номер файла для сборки: ")
+		fmt.Printf("Select number to build [1]: ")
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 		if input == "" {
-			return fmt.Errorf("сборка отменена")
+			target = mainFiles[0]
+			fmt.Printf("Building %s\n", target)
+		} else {
+			idx, err := strconv.Atoi(input)
+			if err != nil || idx < 1 || idx > len(mainFiles) {
+				return fmt.Errorf("invalid selection")
+			}
+			target = mainFiles[idx-1]
 		}
-		idx, err := strconv.Atoi(input)
-		if err != nil || idx < 1 || idx > len(mainFiles) {
-			return fmt.Errorf("неверный выбор")
-		}
-		target = mainFiles[idx-1]
 	}
 
 	// Имя исполняемого файла: если путь содержит cmd/, берём имя поддиректории внутри cmd

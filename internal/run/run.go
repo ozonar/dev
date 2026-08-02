@@ -77,9 +77,25 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 		if len(mainFiles) == 1 {
 			target = mainFiles[0]
 		} else {
-			// Let user choose (simplified: pick first)
-			target = mainFiles[0]
-			fmt.Printf("Multiple main files found, running %s\n", target)
+			// Show list for user to choose
+			fmt.Println("Multiple main files found:")
+			for i, f := range mainFiles {
+				fmt.Printf("  %d) %s\n", i+1, f)
+			}
+			fmt.Printf("Select number to run [1]: ")
+			reader := bufio.NewReader(os.Stdin)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+			if input == "" {
+				target = mainFiles[0]
+				fmt.Printf("Running %s\n", target)
+			} else {
+				idx, err := strconv.Atoi(input)
+				if err != nil || idx < 1 || idx > len(mainFiles) {
+					return fmt.Errorf("invalid selection")
+				}
+				target = mainFiles[idx-1]
+			}
 		}
 		cmd := exec.Command("go", "run", target)
 		cmd.Stdout = os.Stdout
