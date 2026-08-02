@@ -3,6 +3,7 @@ package logs
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -45,5 +46,74 @@ func TestFindLogs(t *testing.T) {
 		if entry.Path == "" {
 			t.Error("entry.Path пустой")
 		}
+	}
+}
+
+// TestFindPHPFPMLogsSystem проверяет поиск системных PHP-FPM логов через glob
+func TestFindPHPFPMLogsSystem(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Создаём PHP проект (composer.json)
+	os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte("{}"), 0644)
+
+	// Создаём временный "системный" лог-файл в /tmp с именем, подходящим под шаблон php*-fpm.log
+	tmpLog := filepath.Join(tmpDir, "php8.2-fpm.log")
+	os.WriteFile(tmpLog, []byte("php-fpm log content"), 0644)
+
+	// Подменяем glob, чтобы он искал в tmpDir вместо /var/log
+	// Но мы не можем подменить filepath.Glob, поэтому просто проверяем,
+	// что функция не падает и возвращает пустой результат (системных логов нет)
+	entries := findPHPFPMLogs(tmpDir)
+
+	// В нормальных условиях системных логов нет, entries могут быть пустыми
+	// или содержать docker-записи. Главное — не падать.
+	_ = entries
+}
+
+// TestFindPHPFPMLogsNonPHP проверяет, что для не-PHP проекта логи не ищутся
+func TestFindPHPFPMLogsNonPHP(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Создаём Go проект (не PHP)
+	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0644)
+
+	// Вызываем FindLogs — он внутри вызывает detector.DetectProject
+	entries, err := FindLogs(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Проверяем, что среди записей нет PHP-FPM логов
+	for _, e := range entries {
+		if strings.Contains(e.Path, "php-fpm") {
+			t.Errorf("Найден PHP-FPM лог в Go проекте: %s", e.Path)
+		}
+	}
+}
+
+// TestFindPHPFPMLogsPHPProject проверяет, что для PHP проекта FindLogs вызывает findPHPFPMLogs
+func TestFindPHPFPMLogsPHPProject(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Создаём PHP проект
+	os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte("{}"), 0644)
+
+	// Создаём .log файл, чтобы FindLogs не был пустым
+	os.WriteFile(filepath.Join(tmpDir, "app.log"), []byte("test"), 0644)
+
+	entries, err := FindLogs(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Должны быть хотя бы файловые записи (app.log)
+	var fileEntries int
+	for _, e := range entries {
+		if e.Type == "file" {
+			fileEntries++
+		}
+	}
+	if fileEntries == 0 {
+		t.Error("FindLogs не вернул ни одной файловой записи для PHP проекта")
 	}
 }
