@@ -456,13 +456,13 @@ func setCachePermissions(dirs []string) error {
 			if err := os.Chmod(dir, 0777); err != nil {
 				return fmt.Errorf("failed to chmod %s: %v", dir, err)
 			}
-			filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			common.WalkWithExclusions(dir, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
 					return nil
 				}
 				os.Chmod(path, 0777)
 				return nil
-			})
+			}, nil)
 			fmt.Printf("  Set 777 on %s\n", dir)
 		}
 	}
@@ -471,12 +471,12 @@ func setCachePermissions(dirs []string) error {
 
 // chmodRecursive рекурсивно меняет права на директорию
 func chmodRecursive(dir string, mode os.FileMode) error {
-	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	return common.WalkWithExclusions(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		return os.Chmod(path, mode)
-	})
+	}, nil)
 }
 
 // copyEnvFiles копирует .env.dist/.env.dev/.env.example в .env
@@ -501,17 +501,8 @@ func copyEnvFiles(sources []string) error {
 // исключая vendor, node_modules, .git и другие системные директории
 func findGenericCacheDirs() []string {
 	var dirs []string
-	excludeDirs := map[string]bool{
-		"vendor":       true,
-		"node_modules": true,
-		".git":         true,
-		".venv":        true,
-		"venv":         true,
-		"env":          true,
-		"__pycache__":  true,
-	}
 
-	filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+	common.WalkWithExclusions(".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -519,18 +510,12 @@ func findGenericCacheDirs() []string {
 			return nil
 		}
 
-		// Пропускаем исключённые директории
-		base := filepath.Base(path)
-		if excludeDirs[base] && path != "." {
-			return filepath.SkipDir
-		}
-
 		// Если директория называется cache — добавляем
 		if info.Name() == "cache" {
 			dirs = append(dirs, path)
 		}
 		return nil
-	})
+	}, nil)
 
 	return dirs
 }

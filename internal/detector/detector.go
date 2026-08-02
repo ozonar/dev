@@ -251,7 +251,7 @@ func findCacheDirs(root, framework string) []string {
 
 func findLogFiles(root string) []string {
 	var logs []string
-	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	common.WalkWithExclusions(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -259,7 +259,7 @@ func findLogFiles(root string) []string {
 			logs = append(logs, path)
 		}
 		return nil
-	})
+	}, nil)
 	return logs
 }
 

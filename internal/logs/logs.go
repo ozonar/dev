@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"dev/internal/common"
 	"dev/internal/detector"
 	"fmt"
 	"os"
@@ -17,8 +18,8 @@ type LogEntry struct {
 func FindLogs(projectRoot string) ([]LogEntry, error) {
 	var entries []LogEntry
 
-	// 1. Find *.log files
-	err := filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
+	// 1. Find *.log files (с пропуском node_modules, vendor, .git и т.д.)
+	err := common.WalkWithExclusions(projectRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -30,7 +31,7 @@ func FindLogs(projectRoot string) ([]LogEntry, error) {
 			})
 		}
 		return nil
-	})
+	}, nil)
 	if err != nil {
 		return nil, err
 	}

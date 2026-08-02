@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"dev/internal/common"
 	"fmt"
 	"os"
 	"os/exec"
@@ -38,7 +39,8 @@ func ClearCache(framework string) error {
 		return nil
 	case "generic":
 		// Ищем любую директорию с именем "cache" и очищаем её содержимое
-		filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		// (с пропуском node_modules, vendor, .git и т.д.)
+		common.WalkWithExclusions(".", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
 			}
@@ -54,7 +56,7 @@ func ClearCache(framework string) error {
 				}
 			}
 			return nil
-		})
+		}, nil)
 		return nil
 	case "go":
 		cmd := exec.Command("go", "clean", "-cache", "-modcache", "-testcache")
@@ -67,8 +69,8 @@ func ClearCache(framework string) error {
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	case "python":
-		// Удаляем __pycache__ и *.pyc файлы
-		filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		// Удаляем __pycache__ и *.pyc файлы (с пропуском node_modules, vendor, .git и т.д.)
+		common.WalkWithExclusions(".", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
 			}
@@ -79,7 +81,7 @@ func ClearCache(framework string) error {
 				os.Remove(path)
 			}
 			return nil
-		})
+		}, nil)
 		return nil
 	default:
 		return fmt.Errorf("unsupported framework: %s", framework)
