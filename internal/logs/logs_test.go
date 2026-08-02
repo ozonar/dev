@@ -28,14 +28,20 @@ func TestFindLogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("FindLogs вернула %d записей, ожидалось 2: %v", len(entries), entries)
+
+	// Собираем только файловые записи (docker может быть недоступен или давать лишние записи)
+	var fileEntries []LogEntry
+	for _, e := range entries {
+		if e.Type == "file" {
+			fileEntries = append(fileEntries, e)
+		}
+	}
+
+	if len(fileEntries) != 2 {
+		t.Fatalf("FindLogs вернула %d файловых записей, ожидалось 2: %v", len(fileEntries), fileEntries)
 	}
 	// Проверяем, что пути относительные
-	for _, entry := range entries {
-		if entry.Type != "file" {
-			t.Errorf("entry.Type = %v, want 'file'", entry.Type)
-		}
+	for _, entry := range fileEntries {
 		if entry.Path == "" {
 			t.Error("entry.Path пустой")
 		}

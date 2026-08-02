@@ -403,72 +403,85 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 	return nil
 }
 
-// queryLLM отправляет запрос к OpenAI-совместимому API
+// queryLLM отправляет запрос к OpenAI-совместимому API.
+// При ошибке парсинга JSON автоматически повторяет запрос, сообщая LLM о проблеме.
 func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
-	// Преобразуем историю в формат chatMessage
-	messages := make([]chatMessage, len(history))
-	for i, entry := range history {
-		messages[i] = chatMessage{
-			Role:    entry.Role,
-			Content: entry.Content,
+	for attempt := 0; attempt < 3; attempt++ {
+		// Преобразуем историю в формат chatMessage
+		messages := make([]chatMessage, len(history))
+		for i, entry := range history {
+			messages[i] = chatMessage{
+				Role:    entry.Role,
+				Content: entry.Content,
+			}
 		}
+
+		reqBody := chatRequest{
+			Model:       cfg.Model,
+			Messages:    messages,
+			Temperature: 0.1,
+		}
+
+		jsonData, err := json.Marshal(reqBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request: %w", err)
+		}
+
+		// Выполняем curl-запрос
+		curlCmd := exec.Command("curl", "-s",
+			"-k",
+			"-X", "POST",
+			cfg.Endpoint,
+			"-H", "Content-Type: application/json",
+			"-H", "Authorization: Bearer "+cfg.Token,
+			"-d", string(jsonData),
+		)
+
+		var stdout, stderr bytes.Buffer
+		curlCmd.Stdout = &stdout
+		curlCmd.Stderr = &stderr
+
+		if err := curlCmd.Run(); err != nil {
+			return nil, fmt.Errorf("curl failed: %w\nStderr: %s", err, stderr.String())
+		}
+
+		// Парсим ответ
+		var resp chatResponse
+		if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
+			return nil, fmt.Errorf("failed to parse response: %w\nBody: %s", err, stdout.String())
+		}
+
+		if resp.Error != nil {
+			return nil, fmt.Errorf("API error: %s", resp.Error.Message)
+		}
+
+		if len(resp.Choices) == 0 {
+			return nil, fmt.Errorf("empty response from API")
+		}
+
+		rawContent := resp.Choices[0].Message.Content
+		content := extractJSON(rawContent)
+
+		// Парсим команды
+		var commands []CommandAction
+		if err := json.Unmarshal([]byte(content), &commands); err != nil {
+			color.Red("LLM вернул невалидный JSON (попытка %d/3)", attempt+1)
+			// Добавляем в историю ответ LLM и просьбу исправиться
+			history = append(history, HistoryEntry{
+				Role:    "assistant",
+				Content: rawContent,
+			})
+			history = append(history, HistoryEntry{
+				Role:    "user",
+				Content: "Этот ответ содержит невалидный JSON. Верни ТОЛЬКО валидный JSON-массив в формате [{\"command\": \"...\", \"description\": \"...\", \"type\": \"...\"}] без каких-либо пояснений.",
+			})
+			continue
+		}
+
+		return commands, nil
 	}
 
-	reqBody := chatRequest{
-		Model:       cfg.Model,
-		Messages:    messages,
-		Temperature: 0.1,
-	}
-
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	// Выполняем curl-запрос
-	curlCmd := exec.Command("curl", "-s",
-		"-k",
-		"-X", "POST",
-		cfg.Endpoint,
-		"-H", "Content-Type: application/json",
-		"-H", "Authorization: Bearer "+cfg.Token,
-		"-d", string(jsonData),
-	)
-
-	var stdout, stderr bytes.Buffer
-	curlCmd.Stdout = &stdout
-	curlCmd.Stderr = &stderr
-
-	if err := curlCmd.Run(); err != nil {
-		return nil, fmt.Errorf("curl failed: %w\nStderr: %s", err, stderr.String())
-	}
-
-	// Парсим ответ
-	var resp chatResponse
-	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w\nBody: %s", err, stdout.String())
-	}
-
-	if resp.Error != nil {
-		return nil, fmt.Errorf("API error: %s", resp.Error.Message)
-	}
-
-	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("empty response from API")
-	}
-
-	content := resp.Choices[0].Message.Content
-
-	// Извлекаем JSON из ответа (может быть обёрнут в ```json ... ```)
-	content = extractJSON(content)
-
-	// Парсим команды
-	var commands []CommandAction
-	if err := json.Unmarshal([]byte(content), &commands); err != nil {
-		return nil, fmt.Errorf("failed to parse commands JSON: %w\nContent: %s", err, content)
-	}
-
-	return commands, nil
+	return nil, fmt.Errorf("LLM не смог вернуть валидный JSON после 3 попыток")
 }
 
 // extractJSON извлекает JSON из markdown-блока если есть
