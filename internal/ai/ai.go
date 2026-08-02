@@ -304,7 +304,7 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 				color.White("Description: %s", cmd.Description)
 			}
 
-			output, execErr := runCommand(cmd.Command)
+			output, execErr := runCommandStreaming(cmd.Command)
 			truncatedOutput := truncateOutput(output, 30)
 			if execErr != nil {
 				color.Red("Execution error: %v", execErr)
@@ -318,11 +318,6 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 					Role:    "assistant",
 					Content: fmt.Sprintf("Executed command: %s\nOutput: %s", cmd.Command, truncatedOutput),
 				})
-			}
-
-			if output != "" {
-				fmt.Println()
-				fmt.Println(output)
 			}
 
 			// Если выполнили analysis-команду — ставим флаг
@@ -609,23 +604,71 @@ func truncateOutput(output string, n int) string {
 	return fmt.Sprintf("... (%d lines omitted) ...\n%s", omitted, strings.Join(truncated, "\n"))
 }
 
-// runCommand выполняет команду в shell и возвращает вывод и ошибку
-func runCommand(command string) (string, error) {
+// runCommandStreaming выполняет команду в shell и выводит результат построчно по мере поступления.
+// Возвращает полный вывод (как runCommand) для сохранения в историю.
+func runCommandStreaming(command string) (string, error) {
 	cmd := exec.Command("bash", "-c", command)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
 
-	err := cmd.Run()
-	output := strings.TrimSpace(stdout.String())
-	if stderr.Len() > 0 {
-		if output != "" {
-			output += "\n"
-		}
-		output += strings.TrimSpace(stderr.String())
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 
-	// Если команда завершилась с ненулевым кодом возврата — это ошибка выполнения
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("failed to start command: %w", err)
+	}
+
+	var outputBuf strings.Builder
+	outputBuf.Grow(4096)
+
+	// Канал для сбора завершения чтения потоков
+	done := make(chan error, 2)
+
+	// Читаем stdout построчно
+	go func() {
+		scanner := bufio.NewScanner(stdoutPipe)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			fmt.Println(line)
+			outputBuf.WriteString(line)
+			outputBuf.WriteByte('\n')
+		}
+		done <- scanner.Err()
+	}()
+
+	// Читаем stderr построчно
+	go func() {
+		scanner := bufio.NewScanner(stderrPipe)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			// stderr выводим в красном цвете, чтобы было видно, что это ошибка
+			color.Red(line)
+			outputBuf.WriteString(line)
+			outputBuf.WriteByte('\n')
+		}
+		done <- scanner.Err()
+	}()
+
+	// Ждём завершения чтения обоих потоков
+	for i := 0; i < 2; i++ {
+		if err := <-done; err != nil {
+			// Ждём завершения процесса перед возвратом ошибки сканера
+			cmd.Wait()
+			return strings.TrimSpace(outputBuf.String()), fmt.Errorf("error reading command output: %w", err)
+		}
+	}
+
+	// Ждём завершения команды
+	err = cmd.Wait()
+	output := strings.TrimSpace(outputBuf.String())
+
 	if err != nil {
 		return output, fmt.Errorf("command failed (exit code %d)", cmd.ProcessState.ExitCode())
 	}
