@@ -62,9 +62,6 @@ func DetectProject(root string) (*ProjectInfo, error) {
 	// Cache directories
 	info.CacheDirs = findCacheDirs(root, framework)
 
-	// Log files
-	info.LogFiles = findLogFiles(root)
-
 	// Databases
 	info.Databases = detectDatabases(root)
 
