@@ -60,10 +60,11 @@ var logsCmd = &cobra.Command{
 }
 
 var runCmd = &cobra.Command{
-	Use:   "run [port]",
-	Short: "Run the project",
-	Long:  "Run the project's dev server. Optionally specify a port number as an argument or use --port flag.",
-	Args:  cobra.MaximumNArgs(1),
+	Use:     "run [port]",
+	Aliases: []string{"start"},
+	Short:   "Run the project",
+	Long:    "Run the project's dev server. Optionally specify a port number as an argument or use --port flag.",
+	Args:    cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Если передан позиционный аргумент — используем его как порт
 		if len(args) > 0 {
