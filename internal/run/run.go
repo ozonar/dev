@@ -34,11 +34,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 
 	switch framework {
 	case "symfony":
-		args := []string{"serve"}
-		if opts.Port != 0 {
-			args = append(args, "--port", strconv.Itoa(opts.Port))
-		}
-		return runAndHandlePortError("symfony", args, port)
+		return runSymfony(opts, port)
 	case "laravel":
 		// Check if artisan exists
 		if _, err := os.Stat("artisan"); err == nil {
@@ -155,6 +151,68 @@ func findYiiPublicDir() string {
 		return abs
 	}
 	return ""
+}
+
+// runSymfony запускает Symfony-проект.
+// Сначала пробует использовать Symfony CLI (symfony serve),
+// если она недоступна — использует php -S с публичной директорией проекта.
+func runSymfony(opts RunOptions, port int) error {
+	// Приоритетный способ — Symfony CLI, если она установлена
+	if isBinaryAvailable("symfony") {
+		args := []string{"serve", "--allow-all-ip"}
+		if opts.Port != 0 {
+			args = append(args, "--port", strconv.Itoa(opts.Port))
+		}
+		return runAndHandlePortError("symfony", args, port)
+	}
+
+	// Fallback — запуск через встроенный PHP-сервер.
+	// Для этого требуется наличие php в PATH.
+	if !isBinaryAvailable("php") {
+		return fmt.Errorf("symfony CLI not found in PATH and php is not available")
+	}
+
+	// Определяем публичную директорию Symfony (обычно public/ или web/)
+	publicDir := findSymfonyPublicDir()
+	addr := fmt.Sprintf("0.0.0.0:%d", port)
+	var args []string
+	if publicDir != "" {
+		args = []string{"-S", addr, "-t", publicDir}
+	} else {
+		args = []string{"-S", addr}
+	}
+
+	color.Yellow("Symfony CLI not found. Falling back to built-in PHP server (php -S).")
+
+	return runAndHandlePortError("php", args, port)
+}
+
+// findSymfonyPublicDir определяет публичную директорию Symfony-проекта.
+// Современные версии используют public/ (с файлом public/index.php),
+// старые версии (Symfony 3 и ранее) — web/.
+func findSymfonyPublicDir() string {
+	// Современная структура: public/index.php
+	if common.FileExists("public/index.php") {
+		abs, _ := filepath.Abs("public")
+		return abs
+	}
+	// Старая структура: web/index.php
+	if common.FileExists("web/index.php") {
+		abs, _ := filepath.Abs("web")
+		return abs
+	}
+	// Если публичной директории нет — возвращаем пустую строку,
+	// тогда php -S будет обслуживать корень проекта
+	return ""
+}
+
+// isBinaryAvailable проверяет, доступен ли исполняемый файл в PATH.
+func isBinaryAvailable(name string) bool {
+	if name == "" {
+		return false
+	}
+	_, err := exec.LookPath(name)
+	return err == nil
 }
 
 // runAndHandlePortError запускает команду и при ошибке "address already in use"

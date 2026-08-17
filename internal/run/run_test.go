@@ -246,3 +246,70 @@ func TestRunProjectGoNoMain(t *testing.T) {
 		t.Errorf("сообщение об ошибке должно содержать 'no Go main', получили: %v", err)
 	}
 }
+
+// TestFindSymfonyPublicDir проверяет определение публичной директории Symfony
+func TestFindSymfonyPublicDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(oldWd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Без каких-либо файлов — пустая строка
+	if dir := findSymfonyPublicDir(); dir != "" {
+		t.Errorf("ожидалась пустая строка, получили %q", dir)
+	}
+
+	// Современная структура: public/index.php
+	os.MkdirAll("public", 0755)
+	os.WriteFile("public/index.php", []byte("<?php"), 0644)
+	dir := findSymfonyPublicDir()
+	if dir == "" {
+		t.Error("findSymfonyPublicDir() вернула пустую строку для public/index.php")
+	}
+	if !strings.HasSuffix(dir, "/public") && !strings.HasSuffix(dir, "\\public") {
+		t.Errorf("ожидался путь, оканчивающийся на 'public', получили %q", dir)
+	}
+
+	// Старая структура: web/index.php (при отсутствии public/)
+	os.RemoveAll("public")
+	os.MkdirAll("web", 0755)
+	os.WriteFile("web/index.php", []byte("<?php"), 0644)
+	dir = findSymfonyPublicDir()
+	if dir == "" {
+		t.Error("findSymfonyPublicDir() вернула пустую строку для web/index.php")
+	}
+	if !strings.HasSuffix(dir, "/web") && !strings.HasSuffix(dir, "\\web") {
+		t.Errorf("ожидался путь, оканчивающийся на 'web', получили %q", dir)
+	}
+
+	// Приоритет: public/index.php важнее web/index.php
+	os.MkdirAll("public", 0755)
+	os.WriteFile("public/index.php", []byte("<?php"), 0644)
+	dir = findSymfonyPublicDir()
+	if !strings.HasSuffix(dir, "/public") && !strings.HasSuffix(dir, "\\public") {
+		t.Errorf("приоритет должен быть у public/, получили %q", dir)
+	}
+}
+
+// TestIsBinaryAvailable проверяет определение доступности бинарника в PATH
+func TestIsBinaryAvailable(t *testing.T) {
+	// Пустое имя — всегда false
+	if isBinaryAvailable("") {
+		t.Error("isBinaryAvailable(\"\") должно возвращать false")
+	}
+
+	// Несуществующий бинарник — false
+	if isBinaryAvailable("__definitely_not_a_real_binary_12345__") {
+		t.Error("isBinaryAvailable для несуществующего бинарника должно возвращать false")
+	}
+
+	// Известные системные бинарники должны быть доступны (например, sh)
+	if !isBinaryAvailable("sh") {
+		t.Error("isBinaryAvailable(\"sh\") должно возвращать true")
+	}
+}
