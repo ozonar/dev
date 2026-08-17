@@ -6,18 +6,19 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"dev/internal/common"
+	"dev/internal/port"
 
 	"github.com/fatih/color"
 )
 
 // RunOptions содержит опции для запуска проекта
 type RunOptions struct {
-	Port int // Порт для dev-сервера (0 = использовать порт по умолчанию)
+	Port      int    // Порт для dev-сервера (0 = использовать порт по умолчанию)
+	PublicDir string // Публичная директория проекта (передаётся из детектора)
 }
 
 // RunProject запускает проект с опциями по умолчанию
@@ -46,12 +47,10 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 		}
 		return fmt.Errorf("artisan not found")
 	case "yii":
-		// Yii2 — определяем публичную директорию
-		publicDir := findYiiPublicDir()
 		addr := fmt.Sprintf("localhost:%d", port)
 		var args []string
-		if publicDir != "" {
-			args = []string{"-S", addr, "-t", publicDir}
+		if opts.PublicDir != "" {
+			args = []string{"-S", addr, "-t", opts.PublicDir}
 		} else {
 			args = []string{"-S", addr}
 		}
@@ -128,31 +127,6 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 	}
 }
 
-// findYiiPublicDir определяет публичную директорию Yii2 проекта
-func findYiiPublicDir() string {
-	// Yii2 Basic: web/
-	if common.FileExists("web/index.php") {
-		abs, _ := filepath.Abs("web")
-		return abs
-	}
-	// Yii2 Advanced: frontend/web/
-	if common.FileExists("frontend/web/index.php") {
-		abs, _ := filepath.Abs("frontend/web")
-		return abs
-	}
-	// Yii2 Advanced: backend/web/
-	if common.FileExists("backend/web/index.php") {
-		abs, _ := filepath.Abs("backend/web")
-		return abs
-	}
-	// public/ (альтернативный вариант)
-	if common.FileExists("public/index.php") {
-		abs, _ := filepath.Abs("public")
-		return abs
-	}
-	return ""
-}
-
 // runSymfony запускает Symfony-проект.
 // Сначала пробует использовать Symfony CLI (symfony serve),
 // если она недоступна — использует php -S с публичной директорией проекта.
@@ -172,12 +146,10 @@ func runSymfony(opts RunOptions, port int) error {
 		return fmt.Errorf("symfony CLI not found in PATH and php is not available")
 	}
 
-	// Определяем публичную директорию Symfony (обычно public/ или web/)
-	publicDir := findSymfonyPublicDir()
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	var args []string
-	if publicDir != "" {
-		args = []string{"-S", addr, "-t", publicDir}
+	if opts.PublicDir != "" {
+		args = []string{"-S", addr, "-t", opts.PublicDir}
 	} else {
 		args = []string{"-S", addr}
 	}
@@ -185,25 +157,6 @@ func runSymfony(opts RunOptions, port int) error {
 	color.Yellow("Symfony CLI not found. Falling back to built-in PHP server (php -S).")
 
 	return runAndHandlePortError("php", args, port)
-}
-
-// findSymfonyPublicDir определяет публичную директорию Symfony-проекта.
-// Современные версии используют public/ (с файлом public/index.php),
-// старые версии (Symfony 3 и ранее) — web/.
-func findSymfonyPublicDir() string {
-	// Современная структура: public/index.php
-	if common.FileExists("public/index.php") {
-		abs, _ := filepath.Abs("public")
-		return abs
-	}
-	// Старая структура: web/index.php
-	if common.FileExists("web/index.php") {
-		abs, _ := filepath.Abs("web")
-		return abs
-	}
-	// Если публичной директории нет — возвращаем пустую строку,
-	// тогда php -S будет обслуживать корень проекта
-	return ""
 }
 
 // isBinaryAvailable проверяет, доступен ли исполняемый файл в PATH.
@@ -215,10 +168,17 @@ func isBinaryAvailable(name string) bool {
 	return err == nil
 }
 
-// runAndHandlePortError запускает команду и при ошибке "address already in use"
-// предлагает убить процесс, занимающий порт.
+// runAndHandlePortError запускает команду.
+// Перед запуском проактивно проверяет, не занят ли порт висящим сервером,
+// и если занят — предлагает убить процесс, чтобы избежать ситуации
+// "The local web server is already running".
 // Создаёт новый exec.Cmd при каждом запуске, чтобы избежать "exec: already started".
-func runAndHandlePortError(name string, args []string, port int) error {
+func runAndHandlePortError(name string, args []string, portNum int) error {
+	// Проактивно освобождаем порт от висящего сервера перед запуском
+	if err := ensurePortFree(portNum); err != nil {
+		return err
+	}
+
 	// Первый запуск
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
@@ -232,40 +192,57 @@ func runAndHandlePortError(name string, args []string, port int) error {
 
 	// Проверяем и err.Error(), и захваченный stderr
 	errStr := err.Error() + "\n" + stderrBuf.String()
-	if !isPortInUseError(errStr) {
-		return err
+	if isPortInUseError(errStr) {
+		// Порт занят процессом, появившимся между проактивной проверкой и запуском.
+		// Убиваем его без лишних вопросов и запускаем заново.
+		if err := port.KillProcessOnPort(portNum); err != nil {
+			color.Yellow("  %v", err)
+		}
+		fuserCmd := exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", portNum))
+		fuserCmd.Run()
+
+		color.Green("Process on port %d killed. Restarting...", portNum)
+
+		// Создаём НОВЫЙ cmd для повторного запуска
+		cmd2 := exec.Command(name, args...)
+		cmd2.Stdout = os.Stdout
+		cmd2.Stderr = os.Stderr
+		return cmd2.Run()
+	}
+	return err
+}
+
+// ensurePortFree проверяет, занят ли порт, и при необходимости предлагает
+// убить висящий процесс перед запуском сервера.
+func ensurePortFree(portNum int) error {
+	occupied, info := port.IsPortOccupied(portNum)
+	if !occupied {
+		return nil
 	}
 
-	// Порт занят — предлагаем убить процесс
-	color.Yellow("⚠ Port %d is already in use.", port)
-	fmt.Print("Do you want to kill the process using port " + strconv.Itoa(port) + "? [Y/n]: ")
+	color.Yellow("⚠ Port %d is already in use.", portNum)
+	if info != "" {
+		fmt.Println(info)
+	}
+	fmt.Print("Do you want to kill the process using port " + strconv.Itoa(portNum) + "? [Y/n]: ")
 
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 
 	if input == "n" || input == "N" || input == "no" || input == "NO" {
-		return fmt.Errorf("port %d is already in use", port)
+		return fmt.Errorf("port %d is already in use", portNum)
 	}
 
-	// Убиваем процесс, занимающий порт
-	killCmd := exec.Command("sh", "-c", fmt.Sprintf("lsof -ti:%d -sTCP:LISTEN -t | xargs kill -9 2>/dev/null", port))
-	killOutput, _ := killCmd.CombinedOutput()
-	if len(killOutput) > 0 {
-		fmt.Printf("  %s", string(killOutput))
+	if err := port.KillProcessOnPort(portNum); err != nil {
+		color.Yellow("  %v", err)
 	}
-
-	// Пробуем ещё раз через fuser (более надёжный)
-	fuserCmd := exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", port))
+	// Дополнительно пробуем через fuser для надёжности
+	fuserCmd := exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", portNum))
 	fuserCmd.Run()
 
-	color.Green("Process on port %d killed. Restarting...", port)
-
-	// Создаём НОВЫЙ cmd для повторного запуска
-	cmd2 := exec.Command(name, args...)
-	cmd2.Stdout = os.Stdout
-	cmd2.Stderr = os.Stderr
-	return cmd2.Run()
+	color.Green("Process on port %d killed.", portNum)
+	return nil
 }
 
 // isPortInUseError проверяет, содержит ли ошибка сообщение о занятом порте

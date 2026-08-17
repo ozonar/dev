@@ -400,3 +400,82 @@ func TestParseConnectionString(t *testing.T) {
 		})
 	}
 }
+
+// TestDetectPublicDir проверяет определение публичной директории проекта
+func TestDetectPublicDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name       string
+		framework  string
+		setup      func(root string)
+		wantSuffix string // ожидаемый суффикс пути (для проверки HasSuffix)
+	}{
+		{
+			name:      "Symfony modern public/index.php",
+			framework: "symfony",
+			setup: func(root string) {
+				os.MkdirAll(filepath.Join(root, "public"), 0755)
+				os.WriteFile(filepath.Join(root, "public", "index.php"), []byte("<?php"), 0644)
+			},
+			wantSuffix: "/public",
+		},
+		{
+			name:      "Symfony legacy web/index.php",
+			framework: "symfony",
+			setup: func(root string) {
+				os.MkdirAll(filepath.Join(root, "web"), 0755)
+				os.WriteFile(filepath.Join(root, "web", "index.php"), []byte("<?php"), 0644)
+			},
+			wantSuffix: "/web",
+		},
+		{
+			name:      "Yii2 Advanced frontend/web",
+			framework: "yii",
+			setup: func(root string) {
+				os.MkdirAll(filepath.Join(root, "frontend", "web"), 0755)
+				os.WriteFile(filepath.Join(root, "frontend", "web", "index.php"), []byte("<?php"), 0644)
+			},
+			wantSuffix: "/frontend/web",
+		},
+		{
+			name:      "Go project with main.go in cmd/app",
+			framework: "go",
+			setup: func(root string) {
+				os.MkdirAll(filepath.Join(root, "cmd", "app"), 0755)
+				os.WriteFile(filepath.Join(root, "cmd", "app", "main.go"), []byte("package main\nfunc main(){}"), 0644)
+				os.WriteFile(filepath.Join(root, "go.mod"), []byte("module test"), 0644)
+			},
+			wantSuffix: "/cmd/app",
+		},
+		{
+			name:       "No public dir falls back to root",
+			framework:  "node",
+			setup:      func(root string) {},
+			wantSuffix: "/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := filepath.Join(tmpDir, tt.name)
+			os.MkdirAll(root, 0755)
+			tt.setup(root)
+
+			dir := detectPublicDir(root, tt.framework)
+			if dir == "" {
+				t.Fatalf("detectPublicDir(%q, %q) вернула пустую строку", root, tt.framework)
+			}
+			// Для root-фолбэка достаточно, что вернулся непустой абсолютный путь
+			if tt.wantSuffix == "/" {
+				if !filepath.IsAbs(dir) {
+					t.Errorf("ожидался абсолютный путь, получили %q", dir)
+				}
+				return
+			}
+			if !strings.HasSuffix(dir, tt.wantSuffix) {
+				t.Errorf("detectPublicDir(%q, %q) = %q, ожидался суффикс %q", root, tt.framework, dir, tt.wantSuffix)
+			}
+		})
+	}
+}

@@ -14,6 +14,54 @@ func isLocalHost(host string) bool {
 	return host == "127.0.0.1" || host == "localhost" || host == "::1" || host == "0.0.0.0"
 }
 
+// IsPortOccupied проверяет, занят ли локальный порт, и возвращает
+// информацию о процессе, если он занят. Переиспользует существующие
+// методы детекции (fuser, ss, lsof).
+func IsPortOccupied(port int) (bool, string) {
+	portStr := strconv.Itoa(port)
+
+	// Последовательно пробуем несколько методов детекции
+	occupied, info := checkPortFuser(portStr)
+	if !occupied {
+		occupied, info = checkPortSS(portStr)
+	}
+	if !occupied {
+		occupied, info = checkPortLsof(portStr)
+	}
+	return occupied, info
+}
+
+// KillProcessOnPort убивает все процессы, занимающие указанный порт.
+// Использует lsof для получения PID и kill для завершения.
+// Возвращает ошибку, если не удалось найти или убить процесс.
+func KillProcessOnPort(port int) error {
+	// Получаем PID процессов, слушающих порт, через lsof
+	listCmd := exec.Command("sh", "-c", fmt.Sprintf("lsof -ti:%d -sTCP:LISTEN 2>/dev/null", port))
+	output, err := listCmd.Output()
+	if err != nil && len(output) == 0 {
+		// Нет процессов на порту — ничего убивать не нужно
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("не удалось найти процесс на порту %d: %v", port, err)
+	}
+
+	pids := strings.Fields(string(output))
+	if len(pids) == 0 {
+		return nil
+	}
+
+	// Убиваем каждый найденный PID
+	args := append([]string{"-9"}, pids...)
+	killCmd := exec.Command("kill", args...)
+	killCmd.Stdout = os.Stdout
+	killCmd.Stderr = os.Stderr
+	if err := killCmd.Run(); err != nil {
+		return fmt.Errorf("не удалось убить процесс на порту %d: %v", port, err)
+	}
+	return nil
+}
+
 // CheckPort проверяет, занят ли указанный адрес:порт, и если да — показывает
 // информацию о процессе и предлагает запустить nmap для детекции сервиса.
 // Формат addr: "127.0.0.1:1000", ":8080" или просто "8080"

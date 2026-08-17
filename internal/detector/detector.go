@@ -26,6 +26,7 @@ type DatabaseInfo struct {
 type ProjectInfo struct {
 	Language       string
 	Framework      string
+	PublicDir      string // публичная директория проекта (для PHP: public/ или web/; для Go: папка с main.go)
 	HasEnv         bool
 	HasVendor      bool
 	DockerServices []string
@@ -62,10 +63,59 @@ func DetectProject(root string) (*ProjectInfo, error) {
 	// Cache directories
 	info.CacheDirs = findCacheDirs(root, framework)
 
+	// Публичная директория
+	info.PublicDir = detectPublicDir(root, framework)
+
 	// Databases
 	info.Databases = detectDatabases(root)
 
 	return info, nil
+}
+
+// detectPublicDir определяет публичную директорию проекта.
+func detectPublicDir(root, framework string) string {
+	switch framework {
+	case "symfony", "laravel", "yii", "generic":
+		// Современная структура PHP: public/index.php
+		if common.FileExists(filepath.Join(root, "public", "index.php")) {
+			abs, _ := filepath.Abs(filepath.Join(root, "public"))
+			return abs
+		}
+		// Старая структура PHP (Symfony 3 и ранее, Yii2 Basic): web/index.php
+		if common.FileExists(filepath.Join(root, "web", "index.php")) {
+			abs, _ := filepath.Abs(filepath.Join(root, "web"))
+			return abs
+		}
+		// Yii2 Advanced: frontend/web или backend/web
+		if framework == "yii" {
+			if common.FileExists(filepath.Join(root, "frontend", "web", "index.php")) {
+				abs, _ := filepath.Abs(filepath.Join(root, "frontend", "web"))
+				return abs
+			}
+			if common.FileExists(filepath.Join(root, "backend", "web", "index.php")) {
+				abs, _ := filepath.Abs(filepath.Join(root, "backend", "web"))
+				return abs
+			}
+		}
+	case "go":
+		// Для Go — директория, содержащая main.go
+		mains, err := common.FindGoMain(root, common.FindGoMainOptions{
+			SearchInCmdFirst: false,
+			ExcludeDirs:      []string{},
+			OnlyMainGo:       false,
+		})
+		if err == nil && len(mains) > 0 {
+			// Первый main.go находится относительно корня проекта,
+			// поэтому строим абсолютный путь через filepath.Join(root, ...)
+			dir := filepath.Dir(mains[0])
+			abs, _ := filepath.Abs(filepath.Join(root, dir))
+			return abs
+		}
+	}
+	// Для остальных случаев и при отсутствии публичной директории
+	// возвращаем корневую папку проекта
+	abs, _ := filepath.Abs(root)
+	return abs
 }
 
 func detectLangFramework(root string) (string, string) {

@@ -114,71 +114,6 @@ func TestRunProjectNodeNoPackageJson(t *testing.T) {
 	}
 }
 
-// TestFindYiiPublicDir проверяет определение публичной директории Yii2
-func TestFindYiiPublicDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	oldWd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chdir(oldWd)
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-
-	// Без каких-либо файлов — пустая строка
-	if dir := findYiiPublicDir(); dir != "" {
-		t.Errorf("ожидалась пустая строка, получили %q", dir)
-	}
-
-	// Yii2 Basic: web/index.php
-	os.MkdirAll("web", 0755)
-	os.WriteFile("web/index.php", []byte("<?php"), 0644)
-	dir := findYiiPublicDir()
-	if dir == "" {
-		t.Error("findYiiPublicDir() вернула пустую строку для web/index.php")
-	}
-	if !strings.HasSuffix(dir, "/web") && !strings.HasSuffix(dir, "\\web") {
-		t.Errorf("ожидался путь, оканчивающийся на 'web', получили %q", dir)
-	}
-
-	// Очищаем и проверяем frontend/web/
-	os.RemoveAll("web")
-	os.MkdirAll("frontend/web", 0755)
-	os.WriteFile("frontend/web/index.php", []byte("<?php"), 0644)
-	dir = findYiiPublicDir()
-	if dir == "" {
-		t.Error("findYiiPublicDir() вернула пустую строку для frontend/web/index.php")
-	}
-	if !strings.HasSuffix(dir, "/frontend/web") && !strings.HasSuffix(dir, "\\frontend/web") {
-		t.Errorf("ожидался путь, оканчивающийся на 'frontend/web', получили %q", dir)
-	}
-
-	// Очищаем и проверяем backend/web/
-	os.RemoveAll("frontend")
-	os.MkdirAll("backend/web", 0755)
-	os.WriteFile("backend/web/index.php", []byte("<?php"), 0644)
-	dir = findYiiPublicDir()
-	if dir == "" {
-		t.Error("findYiiPublicDir() вернула пустую строку для backend/web/index.php")
-	}
-	if !strings.HasSuffix(dir, "/backend/web") && !strings.HasSuffix(dir, "\\backend/web") {
-		t.Errorf("ожидался путь, оканчивающийся на 'backend/web', получили %q", dir)
-	}
-
-	// Очищаем и проверяем public/index.php
-	os.RemoveAll("backend")
-	os.MkdirAll("public", 0755)
-	os.WriteFile("public/index.php", []byte("<?php"), 0644)
-	dir = findYiiPublicDir()
-	if dir == "" {
-		t.Error("findYiiPublicDir() вернула пустую строку для public/index.php")
-	}
-	if !strings.HasSuffix(dir, "/public") && !strings.HasSuffix(dir, "\\public") {
-		t.Errorf("ожидался путь, оканчивающийся на 'public', получили %q", dir)
-	}
-}
-
 // TestIsPortInUseError проверяет детекцию ошибок занятого порта
 func TestIsPortInUseError(t *testing.T) {
 	tests := []struct {
@@ -244,55 +179,6 @@ func TestRunProjectGoNoMain(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no Go main") {
 		t.Errorf("сообщение об ошибке должно содержать 'no Go main', получили: %v", err)
-	}
-}
-
-// TestFindSymfonyPublicDir проверяет определение публичной директории Symfony
-func TestFindSymfonyPublicDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	oldWd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chdir(oldWd)
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-
-	// Без каких-либо файлов — пустая строка
-	if dir := findSymfonyPublicDir(); dir != "" {
-		t.Errorf("ожидалась пустая строка, получили %q", dir)
-	}
-
-	// Современная структура: public/index.php
-	os.MkdirAll("public", 0755)
-	os.WriteFile("public/index.php", []byte("<?php"), 0644)
-	dir := findSymfonyPublicDir()
-	if dir == "" {
-		t.Error("findSymfonyPublicDir() вернула пустую строку для public/index.php")
-	}
-	if !strings.HasSuffix(dir, "/public") && !strings.HasSuffix(dir, "\\public") {
-		t.Errorf("ожидался путь, оканчивающийся на 'public', получили %q", dir)
-	}
-
-	// Старая структура: web/index.php (при отсутствии public/)
-	os.RemoveAll("public")
-	os.MkdirAll("web", 0755)
-	os.WriteFile("web/index.php", []byte("<?php"), 0644)
-	dir = findSymfonyPublicDir()
-	if dir == "" {
-		t.Error("findSymfonyPublicDir() вернула пустую строку для web/index.php")
-	}
-	if !strings.HasSuffix(dir, "/web") && !strings.HasSuffix(dir, "\\web") {
-		t.Errorf("ожидался путь, оканчивающийся на 'web', получили %q", dir)
-	}
-
-	// Приоритет: public/index.php важнее web/index.php
-	os.MkdirAll("public", 0755)
-	os.WriteFile("public/index.php", []byte("<?php"), 0644)
-	dir = findSymfonyPublicDir()
-	if !strings.HasSuffix(dir, "/public") && !strings.HasSuffix(dir, "\\public") {
-		t.Errorf("приоритет должен быть у public/, получили %q", dir)
 	}
 }
 

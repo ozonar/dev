@@ -379,7 +379,7 @@ func runRun() {
 	}
 
 	color.Green("Running project: %s (%s)", info.Framework, info.Language)
-	opts := run.RunOptions{Port: runPort}
+	opts := run.RunOptions{Port: runPort, PublicDir: info.PublicDir}
 	err = run.RunProjectWithOptions(info.Framework, info.Language, opts)
 	if err != nil {
 		color.Red("Failed to run project: %v", err)
