@@ -3,6 +3,7 @@ package ai
 import (
 	"bufio"
 	"bytes"
+	"dev/internal/detector"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -156,6 +157,17 @@ func buildContext() string {
 			sb.WriteString(fmt.Sprintf("  📁 %s/\n", name))
 		} else {
 			sb.WriteString(fmt.Sprintf("  📄 %s\n", name))
+		}
+	}
+
+	// Добавляем данные о подключениях к БД проекта
+	info, err := detector.DetectProject(cwd)
+	if err == nil && len(info.Databases) > 0 {
+		sb.WriteString("\nДанные о подключенях к БД:\n")
+		for _, db := range info.Databases {
+			if db.URL != "" {
+				sb.WriteString(fmt.Sprintf("  %s\n", db.URL))
+			}
 		}
 	}
 
