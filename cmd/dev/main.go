@@ -10,6 +10,7 @@ import (
 	"dev/internal/ai"
 	"dev/internal/build"
 	"dev/internal/cache"
+	"dev/internal/check"
 	"dev/internal/curl"
 	"dev/internal/db"
 	"dev/internal/detector"
@@ -593,6 +594,78 @@ Use 'dev self-config' to set up your API endpoint, token, and model.`,
 	},
 }
 
+var checkAll bool
+var checkCommit int
+var checkBranch string
+
+var checkCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Run static code analysis with linters",
+	Long: `Run static code analysis on the current project using linters
+appropriate for the detected language and framework.
+
+By default the analysis runs in dry-run mode (issues are only reported).
+Use 'dev check fix' to automatically fix fixable issues.
+
+Available non-interactive flags to choose the scope:
+	 dev check --all
+	 dev check --commit=3
+	 dev check --branch=master`,
+	Run: func(cmd *cobra.Command, args []string) {
+		runCheck(check.Options{})
+	},
+}
+
+var checkFixCmd = &cobra.Command{
+	Use:   "fix",
+	Short: "Run static analysis and fix issues",
+	Long: `Run static code analysis and automatically fix issues
+where the tooling supports it.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		runCheck(check.Options{Mode: check.ModeFix})
+	},
+}
+
+var checkAICmd = &cobra.Command{
+	Use:   "ai",
+	Short: "AI-powered code review",
+	Long: `Send the code to a neural network for an AI code review.
+This feature is planned for the future.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		color.Yellow("AI code review is not implemented yet.")
+	},
+}
+
+func init() {
+	// PersistentFlags — подкоманды fix/ai наследуют эти флаги.
+	checkCmd.PersistentFlags().BoolVar(&checkAll, "all", false, "Check all code")
+	checkCmd.PersistentFlags().IntVar(&checkCommit, "commit", 0, "Check changed code plus last N commits")
+	checkCmd.PersistentFlags().StringVar(&checkBranch, "branch", "", "Check diff with the given branch (master|develop)")
+}
+
+// runCheck запускает статическую проверку кода.
+// Неинтерактивные флаги имеют приоритет; при их отсутствии — интерактивный выбор.
+func runCheck(opts check.Options) {
+	cwd, _ := os.Getwd()
+	switch {
+	case checkAll:
+		s := check.ScopeAll()
+		opts.Scope = &s
+	case checkCommit > 0:
+		s := check.ScopeCommits(checkCommit)
+		opts.Scope = &s
+	case checkBranch != "":
+		s := check.ScopeDiff(checkBranch)
+		opts.Scope = &s
+	default:
+		opts.Interactive = true
+	}
+
+	if err := check.Run(cwd, opts); err != nil {
+		color.Red("Check failed: %v", err)
+	}
+}
+
 func main() {
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(cacheCmd)
@@ -610,6 +683,9 @@ func main() {
 	rootCmd.AddCommand(selfUpdateCmd)
 	rootCmd.AddCommand(selfConfigCmd)
 	rootCmd.AddCommand(aiCmd)
+	rootCmd.AddCommand(checkCmd)
+	checkCmd.AddCommand(checkFixCmd)
+	checkCmd.AddCommand(checkAICmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateNewCmd)
 	// Default action is analyze

@@ -2,9 +2,11 @@ package detector
 
 import (
 	"dev/internal/common"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -24,17 +26,18 @@ type DatabaseInfo struct {
 }
 
 type ProjectInfo struct {
-	Language       string
-	Framework      string
-	PublicDir      string // публичная директория проекта (для PHP: public/ или web/; для Go: папка с main.go)
-	HasEnv         bool
-	HasVendor      bool
-	DockerServices []string
-	MakeCommands   []string
-	DevCommands    []string
-	CacheDirs      []string
-	LogFiles       []string
-	Databases      []DatabaseInfo
+	Language        string
+	LanguageVersion string
+	Framework       string
+	PublicDir       string // публичная директория проекта (для PHP: public/ или web/; для Go: папка с main.go)
+	HasEnv          bool
+	HasVendor       bool
+	DockerServices  []string
+	MakeCommands    []string
+	DevCommands     []string
+	CacheDirs       []string
+	LogFiles        []string
+	Databases       []DatabaseInfo
 }
 
 func DetectProject(root string) (*ProjectInfo, error) {
@@ -44,6 +47,7 @@ func DetectProject(root string) (*ProjectInfo, error) {
 	lang, framework := detectLangFramework(root)
 	info.Language = lang
 	info.Framework = framework
+	info.LanguageVersion = detectLanguageVersion(root, lang)
 
 	// Check .env
 	info.HasEnv = common.FileExists(filepath.Join(root, ".env"))
@@ -163,6 +167,143 @@ func detectLangFramework(root string) (string, string) {
 	}
 	// Default
 	return "unknown", ""
+}
+
+// detectLanguageVersion определяет требуемую версию языка из конфигурации проекта.
+//   - php: composer.json (require.php), например "^8.1"
+//   - go: go.mod (директива go), например "1.22"
+//   - javascript: package.json (engines.node), например ">=18"
+//   - python: pyproject.toml (requires-python) или .python-version
+//   - ruby: .ruby-version
+//
+// Если определить версию не удалось, возвращается пустая строка.
+func detectLanguageVersion(root, language string) string {
+	switch language {
+	case "php":
+		return phpVersionFromComposer(root)
+	case "go":
+		return goVersionFromMod(root)
+	case "javascript":
+		return nodeVersionFromPackage(root)
+	case "python":
+		return pythonVersion(root)
+	case "ruby":
+		return rubyVersion(root)
+	default:
+		return ""
+	}
+}
+
+// phpVersionFromComposer извлекает версию PHP из composer.json (require.php).
+func phpVersionFromComposer(root string) string {
+	data, err := os.ReadFile(filepath.Join(root, "composer.json"))
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		Require map[string]string `json:"require"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return ""
+	}
+	return normalizeMajorMinor(cfg.Require["php"])
+}
+
+// goVersionFromMod извлекает версию Go из go.mod (директива go).
+func goVersionFromMod(root string) string {
+	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "go" {
+			return normalizeMajorMinor(fields[1])
+		}
+	}
+	return ""
+}
+
+// nodeVersionFromPackage извлекает версию Node из package.json (engines.node).
+func nodeVersionFromPackage(root string) string {
+	data, err := os.ReadFile(filepath.Join(root, "package.json"))
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		Engines map[string]string `json:"engines"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return ""
+	}
+	return normalizeMajorMinor(cfg.Engines["node"])
+}
+
+// pythonVersion определяет версию Python из pyproject.toml (requires-python)
+// или из .python-version.
+func pythonVersion(root string) string {
+	data, err := os.ReadFile(filepath.Join(root, "pyproject.toml"))
+	if err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "requires-python") && strings.Contains(trimmed, "=") {
+				val := strings.TrimSpace(strings.SplitN(trimmed, "=", 2)[1])
+				val = strings.Trim(val, `"'`)
+				if v := normalizeMajorMinor(val); v != "" {
+					return v
+				}
+			}
+		}
+	}
+	// Fallback на .python-version (например "3.11").
+	versionFile, err := os.ReadFile(filepath.Join(root, ".python-version"))
+	if err == nil {
+		return normalizeMajorMinor(strings.TrimSpace(string(versionFile)))
+	}
+	return ""
+}
+
+// rubyVersion определяет версию Ruby из .ruby-version (например "3.2.2").
+func rubyVersion(root string) string {
+	data, err := os.ReadFile(filepath.Join(root, ".ruby-version"))
+	if err != nil {
+		return ""
+	}
+	return normalizeMajorMinor(strings.TrimSpace(string(data)))
+}
+
+// normalizeMajorMinor приводит строку версии к формату major.minor.
+// Например: "^8.1" -> "8.1", ">=8.2" -> "8.2", "8.4.*" -> "8.4", "~8.3.0" -> "8.3",
+// ">=18" -> "18.0" и т.д. Если извлечь не удалось, возвращается пустая строка.
+func normalizeMajorMinor(constraint string) string {
+	trimmed := strings.TrimSpace(constraint)
+	// Отбрасываем операторы сравнения и логические связки в начале.
+	for _, prefix := range []string{"^", "~", ">=", ">", "<=", "<", "=", "!=", "||", "dev-"} {
+		trimmed = strings.TrimPrefix(trimmed, prefix)
+	}
+	trimmed = strings.TrimSpace(trimmed)
+
+	// Отбрасываем все, что идёт после пробела (например "|| ^8.3").
+	if idx := strings.IndexAny(trimmed, " |,"); idx >= 0 {
+		trimmed = trimmed[:idx]
+	}
+
+	// Берём первые две числовые части major.minor.
+	parts := strings.SplitN(trimmed, ".", 3)
+	if len(parts) == 0 || parts[0] == "" {
+		return ""
+	}
+	if _, err := strconv.Atoi(parts[0]); err != nil {
+		return ""
+	}
+	if len(parts) == 1 {
+		// Только major-версия (например "18") — дополняем минорную нулём.
+		return parts[0] + ".0"
+	}
+	if _, err := strconv.Atoi(parts[1]); err != nil {
+		return ""
+	}
+	return parts[0] + "." + parts[1]
 }
 
 func checkVendor(root, framework string) bool {

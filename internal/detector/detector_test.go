@@ -479,3 +479,66 @@ func TestDetectPublicDir(t *testing.T) {
 		})
 	}
 }
+
+// TestDetectLanguageVersion проверяет определение версии языка из конфигов.
+func TestDetectLanguageVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// PHP: composer.json с require.php.
+	phpRoot := filepath.Join(tmpDir, "php")
+	os.MkdirAll(phpRoot, 0755)
+	os.WriteFile(filepath.Join(phpRoot, "composer.json"),
+		[]byte(`{"require":{"php":"^8.1"}}`), 0644)
+	if v := detectLanguageVersion(phpRoot, "php"); v != "8.1" {
+		t.Errorf("php version = %q, want 8.1", v)
+	}
+
+	// PHP без ограничения версии.
+	os.WriteFile(filepath.Join(phpRoot, "composer.json"), []byte(`{}`), 0644)
+	if v := detectLanguageVersion(phpRoot, "php"); v != "" {
+		t.Errorf("php version without constraint = %q, want empty", v)
+	}
+
+	// Go: go.mod.
+	goRoot := filepath.Join(tmpDir, "go")
+	os.MkdirAll(goRoot, 0755)
+	os.WriteFile(filepath.Join(goRoot, "go.mod"), []byte("module test\ngo 1.22\n"), 0644)
+	if v := detectLanguageVersion(goRoot, "go"); v != "1.22" {
+		t.Errorf("go version = %q, want 1.22", v)
+	}
+
+	// Node: package.json с engines.node.
+	nodeRoot := filepath.Join(tmpDir, "node")
+	os.MkdirAll(nodeRoot, 0755)
+	os.WriteFile(filepath.Join(nodeRoot, "package.json"),
+		[]byte(`{"engines":{"node":">=18"}}`), 0644)
+	if v := detectLanguageVersion(nodeRoot, "javascript"); v != "18.0" {
+		t.Errorf("node version = %q, want 18.0", v)
+	}
+
+	// Неизвестный язык — пустая версия.
+	if v := detectLanguageVersion(tmpDir, "unknown"); v != "" {
+		t.Errorf("unknown language version = %q, want empty", v)
+	}
+}
+
+// TestNormalizeMajorMinor проверяет нормализацию версий к major.minor.
+func TestNormalizeMajorMinor(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"^8.1", "8.1"},
+		{">=8.2", "8.2"},
+		{"8.4.*", "8.4"},
+		{"~8.3.0", "8.3"},
+		{">=18", "18.0"},
+		{"", ""},
+		{"abc", ""},
+	}
+	for _, c := range cases {
+		if got := normalizeMajorMinor(c.in); got != c.want {
+			t.Errorf("normalizeMajorMinor(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
