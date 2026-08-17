@@ -222,6 +222,37 @@ func interactiveLoop(cfg *Config, history []HistoryEntry) error {
 	}
 }
 
+// runShellCommand обрабатывает ввод пользователя, начинающийся с "!".
+// Команда после "!" выполняется как обычная shell-команда, а результат
+// добавляется в историю диалога (которая в будущем отправится к LLM).
+// Возвращает nil, если команда выполнена (или вход пустой), и ошибку,
+// если выполнение невозможно.
+func runShellCommand(history *[]HistoryEntry, input string) error {
+	shellCmd := strings.TrimSpace(input[1:])
+	if shellCmd == "" {
+		color.Yellow("Empty command after '!'. Usage: !command")
+		return nil
+	}
+
+	color.Cyan("\n=== Executing shell command: %s ===", shellCmd)
+	output, execErr := runCommandStreaming(shellCmd)
+	truncatedOutput := truncateOutput(output, 30)
+	if execErr != nil {
+		color.Red("Execution error: %v", execErr)
+		*history = append(*history, HistoryEntry{
+			Role:    "assistant",
+			Content: fmt.Sprintf("Executed shell command: %s\nError: %v\nOutput: %s", shellCmd, execErr, truncatedOutput),
+		})
+	} else {
+		color.Green("✓ Shell command executed successfully")
+		*history = append(*history, HistoryEntry{
+			Role:    "assistant",
+			Content: fmt.Sprintf("Executed shell command: %s\nOutput: %s", shellCmd, truncatedOutput),
+		})
+	}
+	return nil
+}
+
 // commandLoop цикл: показывает команды, ждёт ввод (цифра = выполнить, текст = уточнение)
 func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction, reader *bufio.Reader) error {
 	// Флаг: была ли выполнена хотя бы одна analysis-команда
@@ -351,6 +382,15 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 
 			if len(commands) > 0 {
 				color.Cyan("\nRemaining commands: %d", len(commands))
+			}
+			continue
+		}
+
+		// Если ввод начинается с "!" — выполняем команду как shell-команду,
+		// а результат добавляем в историю (она в будущем отправится к LLM)
+		if strings.HasPrefix(input, "!") {
+			if err := runShellCommand(history, input); err != nil {
+				return err
 			}
 			continue
 		}
