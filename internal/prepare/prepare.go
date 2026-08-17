@@ -245,6 +245,25 @@ func buildActions(framework, language string) []Action {
 		})
 	}
 
+	// 5.1. symfony server:ca:install (Symfony)
+	// Устанавливает локальный центр сертификации для HTTPS в dev-режиме,
+	// если он ещё не установлен. Действие добавляется только если Symfony CLI доступен.
+	if framework == "symfony" {
+		if _, err := exec.LookPath("symfony"); err == nil {
+			actions = append(actions, Action{
+				Name:        "symfony server:ca:install",
+				Description: "Install Symfony local web server TLS certificate authority",
+				Status:      boolToStatus(isSymfonyCAInstalled()),
+				Run: func() error {
+					cmd := exec.Command("symfony", "server:ca:install")
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					return cmd.Run()
+				},
+			})
+		}
+	}
+
 	// 6. chmod для Yii2 (runtime/ и web/assets/)
 	if framework == "yii" {
 		// Yii2 Basic: runtime/
@@ -642,6 +661,30 @@ func boolToStatus(b bool) ActionStatus {
 		return StatusDone
 	}
 	return StatusPending
+}
+
+// isSymfonyCAInstalled проверяет, установлен ли локальный центр сертификации Symfony.
+// Symfony CLI хранит сертификаты в следующих директориях:
+//   - ~/.config/symfony-cli/certs  (современные версии Symfony CLI)
+//   - ~/.symfony5/certs            (legacy версии Symfony CLI 5.x)
+//
+// Наличие файла default.p12 в одной из этих директорий указывает на то,
+// что CA-сертификат уже сгенерирован и установлен.
+func isSymfonyCAInstalled() bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	candidates := []string{
+		filepath.Join(home, ".config", "symfony-cli", "certs", "default.p12"),
+		filepath.Join(home, ".symfony5", "certs", "default.p12"),
+	}
+	for _, p := range candidates {
+		if common.FileExists(p) {
+			return true
+		}
+	}
+	return false
 }
 
 // gitignoreTemplates возвращает содержимое .gitignore в зависимости от языка/фреймворка
