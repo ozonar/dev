@@ -226,7 +226,7 @@ func buildActions(framework, language string) []Action {
 		actions = append(actions, Action{
 			Name:        "chmod -R 777 storage/",
 			Description: "Set writable permissions on storage directory",
-			Status:      StatusPending,
+			Status:      boolToStatus(isChmodSet("storage", 0777)),
 			Run: func() error {
 				return chmodRecursive("storage", 0777)
 			},
@@ -238,7 +238,7 @@ func buildActions(framework, language string) []Action {
 		actions = append(actions, Action{
 			Name:        "chmod -R 777 var/",
 			Description: "Set writable permissions on var directory",
-			Status:      StatusPending,
+			Status:      boolToStatus(isChmodSet("var", 0777)),
 			Run: func() error {
 				return chmodRecursive("var", 0777)
 			},
@@ -271,7 +271,7 @@ func buildActions(framework, language string) []Action {
 			actions = append(actions, Action{
 				Name:        "chmod -R 777 runtime/",
 				Description: "Set writable permissions on Yii2 runtime directory",
-				Status:      StatusPending,
+				Status:      boolToStatus(isChmodSet("runtime", 0777)),
 				Run: func() error {
 					return chmodRecursive("runtime", 0777)
 				},
@@ -283,7 +283,7 @@ func buildActions(framework, language string) []Action {
 				actions = append(actions, Action{
 					Name:        fmt.Sprintf("chmod -R 777 %s/", dir),
 					Description: fmt.Sprintf("Set writable permissions on %s", dir),
-					Status:      StatusPending,
+					Status:      boolToStatus(isChmodSet(dir, 0777)),
 					Run: func(d string) func() error {
 						return func() error {
 							return chmodRecursive(d, 0777)
@@ -298,7 +298,7 @@ func buildActions(framework, language string) []Action {
 				actions = append(actions, Action{
 					Name:        fmt.Sprintf("chmod -R 777 %s/", dir),
 					Description: fmt.Sprintf("Set writable permissions on %s", dir),
-					Status:      StatusPending,
+					Status:      boolToStatus(isChmodSet(dir, 0777)),
 					Run: func(d string) func() error {
 						return func() error {
 							return chmodRecursive(d, 0777)
@@ -496,6 +496,36 @@ func chmodRecursive(dir string, mode os.FileMode) error {
 		}
 		return os.Chmod(path, mode)
 	}, nil)
+}
+
+// isChmodSet проверяет, установлены ли запрошенные права mode на всей директории
+// рекурсивно. Возвращает true, если каждый элемент (файл или подкаталог) внутри dir
+// уже имеет права, полностью покрывающие mode (сравнение по маске 0777).
+// Если директория не существует или содержит хотя бы один элемент с другими правами,
+// возвращается false.
+func isChmodSet(dir string, mode os.FileMode) bool {
+	// WalkWithExclusions игнорирует ошибки доступа к корню, поэтому
+	// существование директории проверяем явно
+	if _, err := os.Stat(dir); err != nil {
+		return false
+	}
+	allSet := true
+	err := common.WalkWithExclusions(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			allSet = false
+			return err
+		}
+		// Сравниваем только биты прав (0777), игнорируя тип (файл/каталог)
+		if info.Mode().Perm()&0777 != mode&0777 {
+			allSet = false
+			return fmt.Errorf("permissions not set on %s", path)
+		}
+		return nil
+	}, nil)
+	if err != nil || !allSet {
+		return false
+	}
+	return true
 }
 
 // copyEnvFiles копирует .env.dist/.env.dev/.env.example в .env
