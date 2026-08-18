@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -74,10 +73,14 @@ func resolvePhp(p Program) (Program, error) {
 	return p, nil
 }
 
-// resolvePhpVersion определяет major.minor версию PHP по требованию проекта,
-// запрашивая актуальный список релизов php.net. Пустая версия или "latest"
-// означают новейшую поддерживаемую версию.
+// resolvePhpVersion определяет major.minor версию PHP по требованию проекта.
 func resolvePhpVersion(required string) (string, error) {
+	required = strings.TrimSpace(required)
+	if required != "" && required != "latest" {
+		v := parseMajorMinor(required)
+		return fmt.Sprintf("%d.%d", v[0], v[1]), nil
+	}
+
 	supported, err := fetchSupportedPhpVersions()
 	if err != nil {
 		return "", err
@@ -86,25 +89,6 @@ func resolvePhpVersion(required string) (string, error) {
 		return "", fmt.Errorf("no supported PHP versions found")
 	}
 
-	required = strings.TrimSpace(required)
-	if required == "" || required == "latest" {
-		return supported[0], nil
-	}
-
-	// supported отсортирован от новейшей к старейшей.
-	// Выбираем наименьшую доступную версию, которая >= required.
-	best := ""
-	for _, v := range supported {
-		if compareMajorMinor(v, required) >= 0 {
-			best = v
-			continue
-		}
-		break
-	}
-	if best != "" {
-		return best, nil
-	}
-	// Все доступные версии меньше required — берём новейшую (ближайшую).
 	return supported[0], nil
 }
 
@@ -179,33 +163,4 @@ func detectDistro() (string, error) {
 		return prefix, nil
 	}
 	return "", fmt.Errorf("unsupported distribution %s %s", id, versionID)
-}
-
-// compareMajorMinor сравнивает две версии вида "major.minor".
-// Возвращает 1, если a > b; -1 если a < b; 0 если равны.
-func compareMajorMinor(a, b string) int {
-	ai := parseMajorMinor(a)
-	bi := parseMajorMinor(b)
-	for i := 0; i < 2; i++ {
-		if ai[i] > bi[i] {
-			return 1
-		}
-		if ai[i] < bi[i] {
-			return -1
-		}
-	}
-	return 0
-}
-
-// parseMajorMinor разбирает версию "major.minor" на два целых числа.
-func parseMajorMinor(v string) [2]int {
-	parts := strings.SplitN(v, ".", 2)
-	var res [2]int
-	if len(parts) > 0 {
-		res[0], _ = strconv.Atoi(strings.TrimSpace(parts[0]))
-	}
-	if len(parts) > 1 {
-		res[1], _ = strconv.Atoi(strings.TrimSpace(parts[1]))
-	}
-	return res
 }

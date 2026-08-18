@@ -3,33 +3,27 @@ package toolchain
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 // ResolveRuntime возвращает путь к инструменту для запуска или сборки проекта
-// на заданном языке. Если системный инструмент доступен — используется он.
-// Для php и go при отсутствии системного инструмент скачивается в dev-command.
-// Для node и python скачивание не выполняется — возвращается понятная ошибка.
+// на заданном языке. Сначала проверяется системный инструмент: если он доступен
+// и его версия удовлетворяет требованию проекта — используется он. Иначе для php
+// и go инструмент скачивается в dev-command. Для node и python скачивание не
+// выполняется — возвращается понятная ошибка.
 func ResolveRuntime(language, version string) (string, error) {
+	if path, ok := resolveSystem(language, version); ok {
+		return path, nil
+	}
+
 	switch language {
 	case "php":
-		if path := lookupSystem("php"); path != "" {
-			return path, nil
-		}
 		return ensureAndPath(PhpProgram(version))
 	case "go":
-		if path := lookupSystem("go"); path != "" {
-			return path, nil
-		}
 		return ensureAndPath(GoProgram(version))
 	case "node", "javascript":
-		if path := lookupSystem("npm"); path != "" {
-			return path, nil
-		}
 		return "", fmt.Errorf("npm not found in PATH (node runtimes are not downloaded automatically)")
 	case "python":
-		if path := lookupSystem("python"); path != "" {
-			return path, nil
-		}
 		return "", fmt.Errorf("python not found in PATH (python runtimes are not downloaded automatically)")
 	default:
 		return "", fmt.Errorf("unsupported runtime language %q", language)
@@ -43,6 +37,56 @@ func ResolveLnav() (string, error) {
 		return path, nil
 	}
 	return ensureAndPath(LnavProgram())
+}
+
+// resolveSystem находит системный инструмент для языка. Для php и go требуется,
+// чтобы версия удовлетворяла требованию проекта; для node и python достаточно
+// наличия инструмента в PATH.
+func resolveSystem(language, required string) (string, bool) {
+	switch language {
+	case "php":
+		return systemSatisfies("php", "php -r 'echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;'", required)
+	case "go":
+		return systemSatisfies("go", "go version | awk '{print $3}' | sed 's/^go//'", required)
+	case "node", "javascript":
+		return systemPresence("npm")
+	case "python":
+		return systemPresence("python")
+	default:
+		return "", false
+	}
+}
+
+// systemPresence возвращает системный инструмент, если он есть в PATH,
+// без проверки версии.
+func systemPresence(bin string) (string, bool) {
+	path := lookupSystem(bin)
+	return path, path != ""
+}
+
+// systemSatisfies проверяет наличие бинаря в PATH и, при заданной required
+// версии, соответствие версии системного инструмента требованию проекта.
+// Если required пустая — системный инструмент подходит безусловно.
+func systemSatisfies(bin, versionCmd, required string) (string, bool) {
+	path := lookupSystem(bin)
+	if path == "" {
+		return "", false
+	}
+	if required == "" {
+		return path, true
+	}
+
+	// Команды определения версии используют конвейеры и кавычки, поэтому
+	// выполняются через sh -c.
+	out, err := exec.Command("sh", "-c", versionCmd).Output()
+	if err != nil {
+		return "", false
+	}
+	system := strings.TrimSpace(string(out))
+	if system == "" || compareMajorMinor(system, required) < 0 {
+		return "", false
+	}
+	return path, true
 }
 
 // lookupSystem ищет исполняемый файл в PATH. Пустая строка означает,

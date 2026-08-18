@@ -137,18 +137,24 @@ func (m *Manager) Ensure(programs ...Program) ([]Program, error) {
 	flat := expandPrograms(programs)
 	current := make(map[string]Program)
 	for _, p := range flat {
-		if m.IsInstalled(p) {
-			current[p.Name] = p
-			continue
-		}
+		// Сначала резолвим программу (определяем полную версию и URL для php/go),
+		// так как хранение и проверка установки идут по полной версии.
 		resolved, err := m.resolve(p)
 		if err != nil {
 			return nil, err
 		}
+		// Проверяем установку именно резолвленной версии: короткая требуемая
+		// версия (например "1.25") и полная (например "1.25.13") — разные папки.
+		if m.IsInstalled(resolved) {
+			current[resolved.Name] = resolved
+			continue
+		}
+		// Сообщаем пользователю о начале скачивания требуемой версии.
+		fmt.Printf("Downloading %s %s\n", resolved.Name, resolved.Version)
 		if err := m.download(resolved); err != nil {
 			return nil, err
 		}
-		current[p.Name] = resolved
+		current[resolved.Name] = resolved
 	}
 	return rebuildWithDeps(flat, current), nil
 }
