@@ -34,13 +34,10 @@ func TestBuildReviewPrompt_EmptyText(t *testing.T) {
 	}
 }
 
-// TestRenderMarkdown_Bold проверяет, что **жирный** текст заменяется на ANSI.
+// TestRenderMarkdown_Bold проверяет, что маркеры **жирного** текста удаляются.
 func TestRenderMarkdown_Bold(t *testing.T) {
 	got := renderMarkdown("1. **Критические проблемы** — не обнаружено.")
 
-	if !strings.Contains(got, "\x1b[") {
-		t.Errorf("renderMarkdown should contain ANSI escape for bold, got: %q", got)
-	}
 	// Сырые маркеры ** должны исчезнуть.
 	if strings.Contains(got, "**") {
 		t.Errorf("renderMarkdown should strip ** markers, got: %q", got)
@@ -64,22 +61,19 @@ func TestRenderMarkdown_NoBold(t *testing.T) {
 func TestRenderMarkdown_Unpaired(t *testing.T) {
 	got := renderMarkdown("текст с **незакрытой парой")
 
-	// Незакрытая пара должна остаться как есть (без ANSI).
-	if strings.Contains(got, "\x1b[") {
-		t.Errorf("renderMarkdown should not render unpaired **, got: %q", got)
-	}
+	// Незакрытая пара должна остаться как есть.
 	if !strings.Contains(got, "**") {
 		t.Errorf("renderMarkdown should keep unpaired ** markers, got: %q", got)
 	}
+	if !strings.Contains(got, "незакрытой") {
+		t.Errorf("renderMarkdown should keep the text, got: %q", got)
+	}
 }
 
-// TestRenderMarkdown_InlineCode проверяет, что `инлайн-код` красится.
+// TestRenderMarkdown_InlineCode проверяет, что маркеры `инлайн-кода` удаляются.
 func TestRenderMarkdown_InlineCode(t *testing.T) {
 	got := renderMarkdown("Вызов `foo()` и `bar()` внутри.")
 
-	if !strings.Contains(got, "\x1b[") {
-		t.Errorf("renderMarkdown should add ANSI for inline code, got: %q", got)
-	}
 	// Маркеры бэктиков должны исчезнуть.
 	if strings.Contains(got, "`") {
 		t.Errorf("renderMarkdown should strip backticks, got: %q", got)
