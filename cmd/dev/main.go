@@ -629,10 +629,18 @@ where the tooling supports it.`,
 var checkAICmd = &cobra.Command{
 	Use:   "ai",
 	Short: "AI-powered code review",
-	Long: `Send the code to a neural network for an AI code review.
-This feature is planned for the future.`,
+	Long: `Send the changed code to a neural network for an AI code review.
+
+The command collects the changed files (git diff), asks what to send,
+and requests the AI to find real, critical problems without inventing
+issues that do not exist. The AI response is then printed.
+
+Use the same scope flags as 'dev check':
+	 dev check ai --all
+	 dev check ai --commit=3
+	 dev check ai --branch=master`,
 	Run: func(cmd *cobra.Command, args []string) {
-		color.Yellow("AI code review is not implemented yet.")
+		runCheckAI()
 	},
 }
 
@@ -647,6 +655,28 @@ func init() {
 // Неинтерактивные флаги имеют приоритет; при их отсутствии — интерактивный выбор.
 func runCheck(opts check.Options) {
 	cwd, _ := os.Getwd()
+	applyCheckScopeFlags(&opts)
+
+	if err := check.Run(cwd, opts); err != nil {
+		color.Red("Check failed: %v", err)
+	}
+}
+
+// runCheckAI запускает AI-код-ревью изменённого кода.
+// Использует те же флаги выбора объёма, что и обычный dev check.
+func runCheckAI() {
+	cwd, _ := os.Getwd()
+	opts := check.Options{}
+	applyCheckScopeFlags(&opts)
+
+	if err := check.RunAI(cwd, opts); err != nil {
+		color.Red("AI check failed: %v", err)
+	}
+}
+
+// applyCheckScopeFlags заполняет Options в зависимости от флагов:
+// --all, --commit=N, --branch=NAME. Если ни один не задан — интерактивный выбор.
+func applyCheckScopeFlags(opts *check.Options) {
 	switch {
 	case checkAll:
 		s := check.ScopeAll()
@@ -659,10 +689,6 @@ func runCheck(opts check.Options) {
 		opts.Scope = &s
 	default:
 		opts.Interactive = true
-	}
-
-	if err := check.Run(cwd, opts); err != nil {
-		color.Red("Check failed: %v", err)
 	}
 }
 

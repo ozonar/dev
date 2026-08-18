@@ -11,10 +11,21 @@ import (
 
 // Scope описывает объём кода, который будет проверяться.
 type Scope struct {
-	Name    string   // название объёма (для вывода)
-	Files   []string // список файлов для проверки; пусто = весь проект
-	Dirs    []string // уникальные директории изменённых файлов
-	Changes string   // изменения текстом (diff)
+	Name        string   // название объёма (для вывода)
+	Files       []string // список файлов для проверки; пусто = весь проект
+	Dirs        []string // уникальные директории изменённых файлов
+	Changes     string   // изменения текстом
+	FileChanges string   // полное содержимое измененных файлов
+	kind        scopeKind
+}
+
+// Возвращает текст, который следует отправить на ревью.
+// Для изменённых файлов — полный код файлов, иначе — текст изменений.
+func (s Scope) GetChanges() string {
+	if s.kind == scopeFiles {
+		return s.FileChanges
+	}
+	return s.Changes
 }
 
 // scopeKind — тип объёма проверки.
@@ -22,6 +33,7 @@ type scopeKind int
 
 const (
 	scopeChanged scopeKind = iota // изменённый код (незакоммиченные изменения)
+	scopeFiles                    // измененные файлы (те, в которых есть незакомиченные изменения)
 	scopeCommit1                  // изменённый код + 1 последний коммит
 	scopeCommit2                  // + 2 коммита
 	scopeCommit3                  // + 3 коммита
@@ -49,6 +61,19 @@ func scopeOptions() []scopeOption {
 	}
 }
 
+// scopeOptionsForAI возвращает варианты объёма для AI-ревью.
+func scopeOptionsForAI() []scopeOption {
+	return []scopeOption{
+		{scopeChanged, "Changed code"},
+		{scopeFiles, "Changed files"},
+		{scopeCommit1, "Changed code + 1 commit"},
+		{scopeCommit2, "Changed code + 2 commits"},
+		{scopeCommit3, "Changed code + 3 commits"},
+		{scopeMaster, "Diff with master"},
+		{scopeDevelop, "Diff with develop"},
+	}
+}
+
 // defaultScopeKind выбирает объём по умолчанию:
 // изменённый код, если есть незакоммиченные изменения, иначе весь код.
 func defaultScopeKind() scopeKind {
@@ -64,17 +89,19 @@ func defaultScopeKind() scopeKind {
 func buildScope(kind scopeKind) Scope {
 	switch kind {
 	case scopeChanged:
-		return makeScope("changed code", changedFiles(), changedDiffText())
+		return makeScope(kind, "changed code", changedFiles(), changedDiffText())
+	case scopeFiles:
+		return makeScope(kind, "changed files", changedFiles(), changedDiffText())
 	case scopeCommit1:
-		return makeScope("changed code + 1 commit", filesSinceCommit(1), diffSinceCommitText(1))
+		return makeScope(kind, "changed code + 1 commit", filesSinceCommit(1), diffSinceCommitText(1))
 	case scopeCommit2:
-		return makeScope("changed code + 2 commits", filesSinceCommit(2), diffSinceCommitText(2))
+		return makeScope(kind, "changed code + 2 commits", filesSinceCommit(2), diffSinceCommitText(2))
 	case scopeCommit3:
-		return makeScope("changed code + 3 commits", filesSinceCommit(3), diffSinceCommitText(3))
+		return makeScope(kind, "changed code + 3 commits", filesSinceCommit(3), diffSinceCommitText(3))
 	case scopeMaster:
-		return makeScope("diff with master", diffWithBranch("master"), diffBranchText("master"))
+		return makeScope(kind, "diff with master", diffWithBranch("master"), diffBranchText("master"))
 	case scopeDevelop:
-		return makeScope("diff with develop", diffWithBranch("develop"), diffBranchText("develop"))
+		return makeScope(kind, "diff with develop", diffWithBranch("develop"), diffBranchText("develop"))
 	default:
 		return Scope{Name: "all code"}
 	}
@@ -82,12 +109,14 @@ func buildScope(kind scopeKind) Scope {
 
 // makeScope собирает Scope из файлов и текста изменений, вычисляя
 // уникальные директории изменённых файлов.
-func makeScope(name string, files []string, changes string) Scope {
+func makeScope(kind scopeKind, name string, files []string, changes string) Scope {
 	return Scope{
-		Name:    name,
-		Files:   files,
-		Dirs:    uniqueDirs(files),
-		Changes: changes,
+		kind:        kind,
+		Name:        name,
+		Files:       files,
+		Dirs:        uniqueDirs(files),
+		Changes:     changes,
+		FileChanges: readScopeFiles(files),
 	}
 }
 
@@ -300,9 +329,18 @@ func uniqueSorted(items []string) []string {
 // promptScope показывают пользователю список вариантов и ждёт выбора.
 // Возвращает выбранный объём. При пустом вводе используется вариант по умолчанию.
 func promptScope() Scope {
-	options := scopeOptions()
-	defaultKind := defaultScopeKind()
+	return promptScopeWithOptions(scopeOptions(), defaultScopeKind())
+}
 
+// promptScopeForAI показывает пользователю варианты объёма для AI-ревью.
+// По умолчанию выбран вариант "Changed code".
+func promptScopeForAI() Scope {
+	return promptScopeWithOptions(scopeOptionsForAI(), scopeChanged)
+}
+
+// promptScopeWithOptions показывает список вариантов выбора и ждёт ответа.
+// При пустом вводе используется defaultKind.
+func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind) Scope {
 	fmt.Println("\nSelect scope:")
 	for i, opt := range options {
 		fmt.Printf("  %d) %s", i+1, opt.label)

@@ -180,3 +180,28 @@ func TestScopeConstructors(t *testing.T) {
 		t.Errorf("ScopeDiff(develop) name = %q", s.Name)
 	}
 }
+
+// TestGetChanges проверяет, что GetChanges возвращает нужный текст:
+// для изменённых файлов — полный код файлов, для остальных — diff.
+func TestGetChanges(t *testing.T) {
+	// Scope "changed files" (kind == scopeFiles) возвращает полный код файлов.
+	files := Scope{
+		Name:        "changed files",
+		Changes:     "diff-text",
+		FileChanges: "full-file-code",
+		kind:        scopeFiles,
+	}
+	if got := files.GetChanges(); got != "full-file-code" {
+		t.Errorf("GetChanges for scopeFiles = %q, want %q", got, "full-file-code")
+	}
+
+	// Обычный scope возвращает diff (текст изменений).
+	changed := Scope{
+		Name:    "changed code",
+		Changes: "diff-text",
+		kind:    scopeChanged,
+	}
+	if got := changed.GetChanges(); got != "diff-text" {
+		t.Errorf("GetChanges for scopeChanged = %q, want %q", got, "diff-text")
+	}
+}
