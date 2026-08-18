@@ -1,6 +1,8 @@
 package check
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -15,17 +17,33 @@ func TestBuildArgs_Golangci(t *testing.T) {
 		t.Errorf("golangci dry-run all args = %q, want %q", got, "run ./...")
 	}
 
-	// Изменённые директории в dry-run
-	scope := Scope{Name: "changed", Dirs: []string{"internal", "cmd"}}
+	// Директория с Go-файлом проходит фильтр, директория без — отбрасывается.
+	withGo := filepath.Join(t.TempDir(), "pkg")
+	if err := os.MkdirAll(withGo, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(withGo, "a.go"), []byte("package pkg\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	emptyDir := filepath.Join(t.TempDir(), "nogo")
+
+	scope := Scope{Name: "changed", Dirs: []string{emptyDir, withGo}}
 	args = buildArgs(prog, scope, ModeDryRun)
-	if got := strings.Join(args, " "); got != "run internal cmd" {
-		t.Errorf("golangci dry-run dirs args = %q, want %q", got, "run internal cmd")
+	if got, want := strings.Join(args, " "), "run "+withGo; got != want {
+		t.Errorf("golangci dry-run dirs args = %q, want %q", got, want)
 	}
 
 	// Fix-режим.
 	args = buildArgs(prog, scope, ModeFix)
-	if got := strings.Join(args, " "); got != "run --fix internal cmd" {
-		t.Errorf("golangci fix args = %q, want %q", got, "run --fix internal cmd")
+	if got, want := strings.Join(args, " "), "run --fix "+withGo; got != want {
+		t.Errorf("golangci fix args = %q, want %q", got, want)
+	}
+
+	// Если после фильтрации директорий не осталось — fallback на ./....
+	scopeEmpty := Scope{Name: "changed", Dirs: []string{emptyDir}}
+	args = buildArgs(prog, scopeEmpty, ModeDryRun)
+	if got := strings.Join(args, " "); got != "run ./..." {
+		t.Errorf("golangci empty dirs args = %q, want %q", got, "run ./...")
 	}
 }
 
@@ -134,5 +152,42 @@ func TestGetChanges(t *testing.T) {
 	}
 	if got := changed.GetChanges(); got != "diff-text" {
 		t.Errorf("GetChanges for scopeChanged = %q, want %q", got, "diff-text")
+	}
+}
+
+// TestGoDirArgs проверяет, что goDirArgs отбрасывает директории без Go-файлов
+// (включая корневую "." и несуществующие), оставляя только Go-пакеты.
+func TestGoDirArgs(t *testing.T) {
+	// Директория с .go-файлом проходит фильтр.
+	withGo := filepath.Join(t.TempDir(), "pkg")
+	if err := os.MkdirAll(withGo, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(withGo, "a.go"), []byte("package pkg\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// Директория только с не-Go файлом — отбрасывается.
+	noGo := filepath.Join(t.TempDir(), "docs")
+	if err := os.MkdirAll(noGo, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(noGo, "readme.md"), []byte("# docs\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	missing := filepath.Join(t.TempDir(), "missing")
+
+	got := goDirArgs([]string{noGo, withGo, missing})
+	if len(got) != 1 || got[0] != withGo {
+		t.Errorf("goDirArgs = %v, want [%s]", got, withGo)
+	}
+
+	// Пустой список возвращает пустой результат (buildArgs подставит ./...).
+	if got := goDirArgs(nil); len(got) != 0 {
+		t.Errorf("goDirArgs(nil) = %v, want empty", got)
+	}
+
+	// Только несуществующие/пустые директории — тоже пусто.
+	if got := goDirArgs([]string{missing, noGo}); len(got) != 0 {
+		t.Errorf("goDirArgs(no go dirs) = %v, want empty", got)
 	}
 }

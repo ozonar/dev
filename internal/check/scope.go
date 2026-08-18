@@ -358,6 +358,10 @@ func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind) Scope 
 				fmt.Printf("  (%s)", strings.Join(names, ", "))
 			}
 		}
+		// Показываем размер отправляемого текста в кратком формате (напр. 44k)
+		if hint := scopeSizeHint(opt.kind); hint != "" {
+			fmt.Printf("  (%s)", hint)
+		}
 		fmt.Println()
 	}
 	// Подсказка по умолчанию.
@@ -388,4 +392,32 @@ func parseInt(s string) (int, error) {
 	var n int
 	_, err := fmt.Sscanf(s, "%d", &n)
 	return n, err
+}
+
+// scopeSizeHint возвращает краткое представление размера текста, который
+// будет отправлен на ревью для заданного вида объёма. Возвращает пустую
+// строку, если размер неинформативен (нулевой или текста нет вовсе), —
+// тогда в меню размер не выводится.
+func scopeSizeHint(kind scopeKind) string {
+	if kind == scopeAll {
+		return ""
+	}
+	n := len(buildScope(kind).GetChanges())
+	if n <= 0 {
+		return ""
+	}
+	return formatSize(n)
+}
+
+// formatSize форматирует количество символов в краткий человекочитаемый вид:
+// 44k, 1.2m и т.п. Для значений меньше тысячи — просто число.
+func formatSize(n int) string {
+	switch {
+	case n >= 1000000:
+		return fmt.Sprintf("%.1fm", float64(n)/1000000)
+	case n >= 1000:
+		return fmt.Sprintf("%dk", n/1000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
 }

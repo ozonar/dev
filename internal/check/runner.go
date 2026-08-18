@@ -4,6 +4,7 @@ import (
 	"dev/internal/toolchain"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/fatih/color"
 )
@@ -27,12 +28,15 @@ func buildArgs(prog Program, scope Scope, mode Mode) []string {
 		// golangci-lint run [--fix] <dirs>
 		// golangci-lint не принимает файлы из разных директорий одновременно
 		// поэтому передаём уникальные директории изменённых файлов.
+		// Директории без Go-файлов (например корневой "." при изменении README/go.mod)
+		// отфильтровываем: golangci-lint падает с "no go files to analyze".
 		args = append(args, "run")
 		if mode == ModeFix {
 			args = append(args, "--fix")
 		}
-		if len(scope.Dirs) > 0 {
-			args = append(args, scope.Dirs...)
+		dirs := goDirArgs(scope.Dirs)
+		if len(dirs) > 0 {
+			args = append(args, dirs...)
 		} else {
 			args = append(args, "./...")
 		}
@@ -79,4 +83,33 @@ func runProgram(manager *toolchain.Manager, prog Program, args []string) error {
 // printProgramHeader выводит заголовок перед запуском программы.
 func printProgramHeader(prog Program) {
 	color.Cyan("\n=== %s ===\n", prog.Name)
+}
+
+// goDirArgs возвращает директории, пригодные для golangci-lint:
+// только те, что содержат Go-файлы (пакеты). Директории без .go (например
+// корневой "." при изменении README.md или go.mod) отбрасываются, иначе
+// golangci-lint завершается с ошибкой "no go files to analyze".
+func goDirArgs(dirs []string) []string {
+	var result []string
+	for _, d := range dirs {
+		if hasGoFiles(d) {
+			result = append(result, d)
+		}
+	}
+	return result
+}
+
+// hasGoFiles проверяет наличие .go-файлов на верхнем уровне директории.
+// Недоступные директории считаются не содержащими Go-файлов.
+func hasGoFiles(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".go") {
+			return true
+		}
+	}
+	return false
 }

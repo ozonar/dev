@@ -40,6 +40,12 @@ func RunAI(root string, opts Options, instruction string) error {
 		return nil
 	}
 
+	// Ограничиваем размер отправляемого кода лимитом контекста LLM
+	if len(text) > maxCodeSize {
+		color.Yellow("Code exceeds %d characters, truncating.", maxCodeSize)
+		text = text[:maxCodeSize]
+	}
+
 	if _, err := ai.RunCodeReview(text, instruction); err != nil {
 		return fmt.Errorf("AI review failed: %v", err)
 	}
@@ -61,10 +67,9 @@ func resolveScopeForAI(opts Options) (Scope, error) {
 }
 
 // readScopeFiles читает содержимое файлов из списка и объединяет его в текст.
-// Пропускает бинарные и слишком большие файлы. Обрезает по maxCodeSize.
+// Пропускает бинарные файлы. Сам код файлов собирается целиком;
 func readScopeFiles(files []string) string {
 	var sb strings.Builder
-	total := 0
 
 	for _, f := range files {
 		data, err := os.ReadFile(f)
@@ -83,12 +88,6 @@ func readScopeFiles(files []string) string {
 		}
 		sb.WriteString(fmt.Sprintf("===== %s =====\n", filepath.ToSlash(f)))
 		sb.Write(data)
-
-		total += len(data)
-		if total > maxCodeSize {
-			color.Yellow("Code exceeds %d characters, truncating.", maxCodeSize)
-			break
-		}
 	}
 
 	return sb.String()
