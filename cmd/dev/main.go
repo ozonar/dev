@@ -628,7 +628,7 @@ where the tooling supports it.`,
 }
 
 var checkAICmd = &cobra.Command{
-	Use:   "ai",
+	Use:   "ai [text]",
 	Short: "AI-powered code review",
 	Long: `Send the changed code to a neural network for an AI code review.
 
@@ -636,12 +636,16 @@ The command collects the changed files (git diff), asks what to send,
 and requests the AI to find real, critical problems without inventing
 issues that do not exist. The AI response is then printed.
 
+You can pass an optional instruction, for example:
+	 dev review ai Проверь на уязвимости нулевого дня
+
 Use the same scope flags as 'dev review':
 	 dev review ai --all
 	 dev review ai --commit=3
 	 dev review ai --branch=master`,
+	Args: cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		runCheckAI()
+		runCheckAI(strings.Join(args, " "))
 	},
 }
 
@@ -665,12 +669,13 @@ func runCheck(opts check.Options) {
 
 // runCheckAI запускает AI-код-ревью изменённого кода.
 // Использует те же флаги выбора объёма, что и обычный dev check.
-func runCheckAI() {
+// text — необязательная инструкция пользователя к ревью.
+func runCheckAI(text string) {
 	cwd, _ := os.Getwd()
 	opts := check.Options{}
 	applyCheckScopeFlags(&opts)
 
-	if err := check.RunAI(cwd, opts); err != nil {
+	if err := check.RunAI(cwd, opts, text); err != nil {
 		color.Red("AI check failed: %v", err)
 	}
 }

@@ -131,8 +131,7 @@ func replaceInline(s, marker string, wrap func(string) string) string {
 
 // RunCodeReview выполняет AI-код-ревью переданного кода.
 // text — строка с изменениями (diff) либо полным содержимым изменённых файлов.
-// Делает одноразовый запрос к LLM и выводит ответ.
-func RunCodeReview(text string) (string, error) {
+func RunCodeReview(text, instruction string) (string, error) {
 	cfg, err := LoadConfig()
 	if err != nil {
 		color.Red("Config error: %v", err)
@@ -148,6 +147,7 @@ func RunCodeReview(text string) (string, error) {
 	history := []HistoryEntry{
 		{Role: "system", Content: buildReviewPrompt(text)},
 		{Role: "user", Content: "Проведи код-ревью предоставленного кода."},
+		{Role: "user", Content: strings.TrimSpace(instruction)},
 	}
 
 	color.Cyan("Sending code to LLM for review...")

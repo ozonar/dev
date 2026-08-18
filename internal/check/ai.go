@@ -17,7 +17,7 @@ import (
 const maxCodeSize = 100000
 
 // RunAI выполняет AI-код-ревью изменённого кода.
-func RunAI(root string, opts Options) error {
+func RunAI(root string, opts Options, instruction string) error {
 	info, err := detector.DetectProject(root)
 	if err != nil {
 		return fmt.Errorf("failed to detect project: %v", err)
@@ -40,7 +40,7 @@ func RunAI(root string, opts Options) error {
 		return nil
 	}
 
-	if _, err := ai.RunCodeReview(text); err != nil {
+	if _, err := ai.RunCodeReview(text, instruction); err != nil {
 		return fmt.Errorf("AI review failed: %v", err)
 	}
 
