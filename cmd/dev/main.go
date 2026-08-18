@@ -599,18 +599,19 @@ var checkCommit int
 var checkBranch string
 
 var checkCmd = &cobra.Command{
-	Use:   "check",
-	Short: "Run static code analysis with linters",
+	Use:     "review",
+	Aliases: []string{"check"},
+	Short:   "Run static code analysis with linters",
 	Long: `Run static code analysis on the current project using linters
 appropriate for the detected language and framework.
 
 By default the analysis runs in dry-run mode (issues are only reported).
-Use 'dev check fix' to automatically fix fixable issues.
+Use 'dev review fix' to automatically fix fixable issues.
 
 Available non-interactive flags to choose the scope:
-	 dev check --all
-	 dev check --commit=3
-	 dev check --branch=master`,
+	 dev review --all
+	 dev review --commit=3
+	 dev review --branch=master`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runCheck(check.Options{})
 	},
@@ -635,10 +636,10 @@ The command collects the changed files (git diff), asks what to send,
 and requests the AI to find real, critical problems without inventing
 issues that do not exist. The AI response is then printed.
 
-Use the same scope flags as 'dev check':
-	 dev check ai --all
-	 dev check ai --commit=3
-	 dev check ai --branch=master`,
+Use the same scope flags as 'dev review':
+	 dev review ai --all
+	 dev review ai --commit=3
+	 dev review ai --branch=master`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runCheckAI()
 	},
