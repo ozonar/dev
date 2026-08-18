@@ -24,8 +24,11 @@ type goReleaseFile struct {
 	Kind     string `json:"kind"`
 }
 
-// goDevIndexURL — URL JSON-индекса доступных релизов Go.
-const goDevIndexURL = "https://go.dev/dl/?mode=json"
+// goDevIndexURL — URL JSON-индекса доступных релизов Go. Параметр include=all
+// нужен, чтобы получить полный список версий: без него go.dev отдаёт только
+// последние релизы, из-за чего старые требуемые версии (например 1.23) не
+// находятся при резолюции.
+const goDevIndexURL = "https://go.dev/dl/?mode=json&include=all"
 
 // GoProgram описывает Go-тулчейн требуемой версии без обращения к сети.
 // URL и полная версия определяются позже, в Manager.Ensure, если нужной
