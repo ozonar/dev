@@ -8,6 +8,22 @@ import (
 	"testing"
 )
 
+// withFakeBinary добавляет во временную директорию фейковый исполняемый
+// файл name и помещает эту директорию в начало PATH. Позволяет замокать
+// резолюцию рантайма (ResolveRuntime найдёт фейковый бинарь без обращения
+// к сети) и тестировать логику RunProject без сетевых запросов.
+func withFakeBinary(t *testing.T, name string) {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := os.Getenv("PATH")
+	os.Setenv("PATH", dir+string(os.PathListSeparator)+oldPath)
+	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+}
+
 // TestFindGoMainRun проверяет поиск main файлов (аналогично build, но своя реализация)
 func TestFindGoMainRun(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -84,6 +100,9 @@ func TestRunProjectLaravelNoArtisan(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Мокаем php, чтобы резолюция рантайма не уходила в сеть.
+	withFakeBinary(t, "php")
+
 	err = RunProject("laravel", "php")
 	if err == nil {
 		t.Error("ожидалась ошибка 'artisan not found'")
@@ -104,6 +123,9 @@ func TestRunProjectNodeNoPackageJson(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
+
+	// Мокаем npm, чтобы резолюция рантайма не уходила в сеть.
+	withFakeBinary(t, "npm")
 
 	err = RunProject("node", "javascript")
 	if err == nil {

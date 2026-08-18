@@ -380,7 +380,7 @@ func runRun() {
 	}
 
 	color.Green("Running project: %s (%s)", info.Framework, info.Language)
-	opts := run.RunOptions{Port: runPort, PublicDir: info.PublicDir}
+	opts := run.RunOptions{Port: runPort, PublicDir: info.PublicDir, Version: info.LanguageVersion}
 	err = run.RunProjectWithOptions(info.Framework, info.Language, opts)
 	if err != nil {
 		color.Red("Failed to run project: %v", err)
@@ -441,7 +441,7 @@ func runBuild() {
 	}
 
 	color.Green("Building project: %s (%s)", info.Framework, info.Language)
-	err = build.BuildProject(info.Framework, info.Language)
+	err = build.BuildProject(info.Framework, info.Language, info.LanguageVersion)
 	if err != nil {
 		color.Red("Build failed: %v", err)
 		return

@@ -5,78 +5,6 @@ import (
 	"testing"
 )
 
-// TestMatchAvailableVersion проверяет сопоставление требуемой версии
-// с ближайшей доступной.
-func TestMatchAvailableVersion(t *testing.T) {
-	available := []string{"8.5", "8.4", "8.3"}
-	cases := []struct {
-		required string
-		want     string
-	}{
-		{"", "8.5"},    // пусто — берём новейшую
-		{"8.1", "8.3"}, // ниже всех — минимальную доступную
-		{"8.3", "8.3"},
-		{"8.4", "8.4"},
-		{"8.6", "8.5"}, // выше всех — новейшую
-	}
-	for _, c := range cases {
-		got := matchAvailableVersion(c.required, available)
-		if got != c.want {
-			t.Errorf("matchAvailableVersion(%q) = %q, want %q", c.required, got, c.want)
-		}
-	}
-}
-
-// TestCompareMajorMinor проверяет сравнение версий вида major.minor.
-func TestCompareMajorMinor(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"8.3", "8.4", -1},
-		{"8.5", "8.3", 1},
-		{"8.3", "8.3", 0},
-	}
-	for _, c := range cases {
-		if got := compareMajorMinor(c.a, c.b); got != c.want {
-			t.Errorf("compareMajorMinor(%q, %q) = %d, want %d", c.a, c.b, got, c.want)
-		}
-	}
-}
-
-// TestRunCommand_Placeholders проверяет подстановку плейсхолдеров {имя}
-// в полную команду программы.
-func TestRunCommand_Placeholders(t *testing.T) {
-	dir := "/tmp/check"
-
-	phpstan := Program{
-		Name:        "phpstan",
-		Binary:      "phpstan.phar",
-		FullCommand: "{php} {phpstan}",
-		Require:     []Program{{Name: "php", Binary: "php"}},
-	}
-	name, args := phpstan.runCommand(dir, nil)
-	if name != "/tmp/check/php" {
-		t.Errorf("runCommand phpstan name = %q, want %q", name, "/tmp/check/php")
-	}
-	if len(args) != 1 || args[0] != "/tmp/check/phpstan.phar" {
-		t.Errorf("runCommand phpstan args = %v, want [%q]", args, "/tmp/check/phpstan.phar")
-	}
-
-	golangci := Program{
-		Name:        "golangci-lint",
-		Binary:      "golangci-lint",
-		FullCommand: "{golangci-lint}",
-	}
-	name, args = golangci.runCommand(dir, []string{"run", "./..."})
-	if name != "/tmp/check/golangci-lint" {
-		t.Errorf("runCommand golangci-lint name = %q", name)
-	}
-	if len(args) != 2 || args[0] != "run" || args[1] != "./..." {
-		t.Errorf("runCommand golangci-lint args = %v", args)
-	}
-}
-
 // TestBuildArgs_Golangci проверяет построение аргументов golangci-lint.
 func TestBuildArgs_Golangci(t *testing.T) {
 	prog := goLinter()
@@ -103,7 +31,7 @@ func TestBuildArgs_Golangci(t *testing.T) {
 
 // TestBuildArgs_Phpstan проверяет построение аргументов PHPStan.
 func TestBuildArgs_Phpstan(t *testing.T) {
-	prog := phpStanLinter("")
+	prog := phpStanLinter(Program{Name: "php"})
 
 	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
 	if got := strings.Join(args, " "); got != "analyse --memory-limit=1G --level=5 ." {
@@ -119,7 +47,7 @@ func TestBuildArgs_Phpstan(t *testing.T) {
 
 // TestBuildArgs_PhpCsFixer проверяет построение аргументов PHP CS Fixer.
 func TestBuildArgs_PhpCsFixer(t *testing.T) {
-	prog := phpCsFixerLinter("")
+	prog := phpCsFixerLinter(Program{Name: "php"})
 
 	// Dry-run добавляет флаг --dry-run.
 	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
@@ -136,32 +64,35 @@ func TestBuildArgs_PhpCsFixer(t *testing.T) {
 }
 
 // TestProgramsFor проверяет набор линтеров для языков.
+// Фабрика PhpProgram не обращается к сети, поэтому тест безопасен.
 func TestProgramsFor(t *testing.T) {
-	if progs := programsFor("go", ""); len(progs) != 1 || progs[0].Name != "golangci-lint" {
-		t.Errorf("programsFor(go) = %v", progs)
+	progs, err := programsFor("go", "")
+	if err != nil || len(progs) != 1 || progs[0].Name != "golangci-lint" {
+		t.Errorf("programsFor(go) = %v, err = %v", progs, err)
 	}
+
 	// Для PHP возвращаются только линтеры; php лежит в их Require (вендорах).
-	progs := programsFor("php", "8.3")
+	progs, err = programsFor("php", "8.3")
+	if err != nil {
+		t.Fatalf("programsFor(php) error = %v", err)
+	}
 	if len(progs) != 2 {
 		t.Errorf("programsFor(php) length = %d, want 2", len(progs))
 	} else if progs[0].Name != "phpstan" || progs[1].Name != "php-cs-fixer" {
 		t.Errorf("programsFor(php) names = %v", progs)
 	}
-	if progs := programsFor("ruby", ""); progs != nil {
-		t.Errorf("programsFor(ruby) = %v, want nil", progs)
+
+	progs, err = programsFor("ruby", "")
+	if err != nil || progs != nil {
+		t.Errorf("programsFor(ruby) = %v, err = %v", progs, err)
 	}
 }
 
-// TestCollectPrograms проверяет сбор всех программ с вендорами (Require).
-func TestCollectPrograms(t *testing.T) {
-	php := Program{Name: "php", Binary: "php"}
-	phpstan := Program{Name: "phpstan", Binary: "phpstan.phar", Require: []Program{php}}
-	all := collectPrograms([]Program{phpstan})
-	if len(all) != 2 {
-		t.Fatalf("collectPrograms length = %d, want 2", len(all))
-	}
-	if all[0].Name != "phpstan" || all[1].Name != "php" {
-		t.Errorf("collectPrograms names = %v", all)
+// TestPhpStanRequiresPhp проверяет, что PHPStan зависит от php-рантайма.
+func TestPhpStanRequiresPhp(t *testing.T) {
+	prog := phpStanLinter(Program{Name: "php", Version: "8.3"})
+	if len(prog.Require) != 1 || prog.Require[0].Name != "php" {
+		t.Errorf("phpstan require = %v, want php", prog.Require)
 	}
 }
 

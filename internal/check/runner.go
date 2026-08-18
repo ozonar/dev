@@ -1,6 +1,7 @@
 package check
 
 import (
+	"dev/internal/toolchain"
 	"os"
 	"os/exec"
 
@@ -63,8 +64,8 @@ func buildArgs(prog Program, scope Scope, mode Mode) []string {
 
 // runProgram запускает одну программу с потоковым выводом stdout/stderr
 // в консоль. Возвращает ошибку, если выполнение завершилось неуспешно.
-func runProgram(dir string, prog Program, args []string) error {
-	name, cmdArgs := prog.runCommand(dir, args)
+func runProgram(manager *toolchain.Manager, prog Program, args []string) error {
+	name, cmdArgs := manager.Command(prog, args)
 
 	cmd := exec.Command(name, cmdArgs...)
 	cmd.Dir = "."

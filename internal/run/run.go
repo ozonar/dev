@@ -11,6 +11,7 @@ import (
 
 	"dev/internal/common"
 	"dev/internal/port"
+	"dev/internal/toolchain"
 
 	"github.com/fatih/color"
 )
@@ -19,6 +20,7 @@ import (
 type RunOptions struct {
 	Port      int    // Порт для dev-сервера (0 = использовать порт по умолчанию)
 	PublicDir string // Публичная директория проекта (передаётся из детектора)
+	Version   string // Требуемая версия языка (из детектора), например "8.3"
 }
 
 // RunProject запускает проект с опциями по умолчанию
@@ -33,9 +35,16 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 		port = 8000
 	}
 
+	// Определяем путь к рантайму до запуска: системный инструмент, либо
+	// скачанный в dev-command.
+	runtimePath, err := toolchain.ResolveRuntime(language, opts.Version)
+	if err != nil {
+		return err
+	}
+
 	switch framework {
 	case "symfony":
-		return runSymfony(opts, port)
+		return runSymfony(opts, port, runtimePath)
 	case "laravel":
 		// Check if artisan exists
 		if _, err := os.Stat("artisan"); err == nil {
@@ -43,7 +52,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			if opts.Port != 0 {
 				args = append(args, "--port", strconv.Itoa(opts.Port))
 			}
-			return runAndHandlePortError("php", args, port)
+			return runAndHandlePortError(runtimePath, args, port)
 		}
 		return fmt.Errorf("artisan not found")
 	case "yii":
@@ -54,7 +63,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 		} else {
 			args = []string{"-S", addr}
 		}
-		return runAndHandlePortError("php", args, port)
+		return runAndHandlePortError(runtimePath, args, port)
 	case "go":
 		// Find main.go in cmd/ or root
 		mainFiles, err := common.FindGoMain(".", common.FindGoMainOptions{
@@ -92,14 +101,14 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 				target = mainFiles[idx-1]
 			}
 		}
-		cmd := exec.Command("go", "run", target)
+		cmd := exec.Command(runtimePath, "run", target)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	case "node":
 		// Check for package.json scripts
 		if _, err := os.Stat("package.json"); err == nil {
-			cmd := exec.Command("npm", "run", "dev")
+			cmd := exec.Command(runtimePath, "run", "dev")
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			return cmd.Run()
@@ -112,16 +121,16 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			if opts.Port != 0 {
 				args = append(args, strconv.Itoa(opts.Port))
 			}
-			return runAndHandlePortError("python", args, port)
+			return runAndHandlePortError(runtimePath, args, port)
 		}
 		// Fallback to simple HTTP server
 		addr := strconv.Itoa(port)
-		return runAndHandlePortError("python", []string{"-m", "http.server", addr}, port)
+		return runAndHandlePortError(runtimePath, []string{"-m", "http.server", addr}, port)
 	default:
 		// Generic PHP server
 		if language == "php" {
 			addr := fmt.Sprintf("localhost:%d", port)
-			return runAndHandlePortError("php", []string{"-S", addr}, port)
+			return runAndHandlePortError(runtimePath, []string{"-S", addr}, port)
 		}
 		return fmt.Errorf("unsupported framework: %s", framework)
 	}
@@ -130,7 +139,8 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 // runSymfony запускает Symfony-проект.
 // Сначала пробует использовать Symfony CLI (symfony serve),
 // если она недоступна — использует php -S с публичной директорией проекта.
-func runSymfony(opts RunOptions, port int) error {
+// phpPath — путь к рантайму PHP (системный или скачанный в dev-command).
+func runSymfony(opts RunOptions, port int, phpPath string) error {
 	// Приоритетный способ — Symfony CLI, если она установлена
 	if isBinaryAvailable("symfony") {
 		args := []string{"serve", "--allow-all-ip"}
@@ -141,11 +151,6 @@ func runSymfony(opts RunOptions, port int) error {
 	}
 
 	// Fallback — запуск через встроенный PHP-сервер.
-	// Для этого требуется наличие php в PATH.
-	if !isBinaryAvailable("php") {
-		return fmt.Errorf("symfony CLI not found in PATH and php is not available")
-	}
-
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	var args []string
 	if opts.PublicDir != "" {
@@ -156,7 +161,7 @@ func runSymfony(opts RunOptions, port int) error {
 
 	color.Yellow("Symfony CLI not found. Falling back to built-in PHP server (php -S).")
 
-	return runAndHandlePortError("php", args, port)
+	return runAndHandlePortError(phpPath, args, port)
 }
 
 // isBinaryAvailable проверяет, доступен ли исполняемый файл в PATH.

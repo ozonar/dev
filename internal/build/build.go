@@ -3,6 +3,7 @@ package build
 import (
 	"bufio"
 	"dev/internal/common"
+	"dev/internal/toolchain"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,11 +12,11 @@ import (
 	"strings"
 )
 
-// BuildProject выполняет сборку проекта в зависимости от фреймворка и языка
-func BuildProject(framework, language string) error {
+// BuildProject выполняет сборку проекта в зависимости от фреймворка и языка.
+func BuildProject(framework, language, version string) error {
 	switch language {
 	case "go":
-		return buildGo()
+		return buildGo(version)
 	case "javascript":
 		return buildNode()
 	default:
@@ -25,7 +26,11 @@ func BuildProject(framework, language string) error {
 }
 
 // buildGo собирает Go проект
-func buildGo() error {
+func buildGo(version string) error {
+	runtimePath, err := toolchain.ResolveRuntime("go", version)
+	if err != nil {
+		return err
+	}
 	// Ищем все main файлы
 	mainFiles, err := common.FindGoMain(".", common.FindGoMainOptions{
 		SearchInCmdFirst: true,
@@ -68,7 +73,7 @@ func buildGo() error {
 	output := outputName(target)
 
 	fmt.Printf("Build %s to %s...\n", target, output)
-	cmd := exec.Command("go", "build", "-o", output, target)
+	cmd := exec.Command(runtimePath, "build", "-o", output, target)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

@@ -3,6 +3,7 @@ package logs
 import (
 	"dev/internal/common"
 	"dev/internal/detector"
+	"dev/internal/toolchain"
 	"fmt"
 	"os"
 	"os/exec"
@@ -91,32 +92,20 @@ func getComposeProjectName() string {
 	return strings.ToLower(project)
 }
 
-// hasLnav проверяет, установлен ли lnav в системе
-func hasLnav() bool {
-	_, err := exec.LookPath("lnav")
-	return err == nil
-}
-
-// OpenLogInLnav открывает лог в lnav или альтернативном просмотрщике (less/tail).
-// Если lnav не установлен, использует less для файлов и tail -f для docker.
+// OpenLogInLnav открывает лог в lnav. Для docker-контейнеров используется
+// docker logs -f, для файлов — lnav. Путь к lnav определяется через toolchain:
+// используется системный lnav, либо lnav скачивается в dev-command.
 func OpenLogInLnav(path string, logType string) error {
 	var cmd *exec.Cmd
 
 	if logType == "docker" {
-		// Для docker логов всегда используем docker logs -f, но если lnav нет — через less
-		if hasLnav() {
-			cmd = exec.Command("docker", "logs", "-f", path)
-		} else {
-			// docker logs --tail=100 -f | less
-			cmd = exec.Command("bash", "-c", fmt.Sprintf("docker logs --tail=100 -f %s 2>&1 | less -R", path))
-		}
+		cmd = exec.Command("docker", "logs", "-f", path)
 	} else {
-		if hasLnav() {
-			cmd = exec.Command("lnav", path)
-		} else {
-			// Используем less с опциями, удобными для логов
-			cmd = exec.Command("less", "-R", "+F", "-S", path)
+		lnav, err := toolchain.ResolveLnav()
+		if err != nil {
+			return err
 		}
+		cmd = exec.Command(lnav, path)
 	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

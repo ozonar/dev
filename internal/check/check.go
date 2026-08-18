@@ -32,7 +32,7 @@ func Run(root string, opts Options) error {
 	color.Green("Project: %s (%s)", info.Language, info.Framework)
 
 	// Скачиваем линтеры и их вендоры (Require), если ещё не скачаны.
-	dir, programs, err := ensurePrograms(info.Language, info.LanguageVersion)
+	manager, programs, err := ensurePrograms(info.Language, info.LanguageVersion)
 	if err != nil {
 		return fmt.Errorf("failed to prepare tools: %v", err)
 	}
@@ -59,7 +59,7 @@ func Run(root string, opts Options) error {
 	for _, prog := range programs {
 		printProgramHeader(prog)
 		args := buildArgs(prog, scope, opts.Mode)
-		if err := runProgram(dir, prog, args); err != nil {
+		if err := runProgram(manager, prog, args); err != nil {
 			color.Red("%s finished with error: %v", prog.Name, err)
 		}
 	}
