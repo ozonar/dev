@@ -13,14 +13,26 @@ import (
 // выполняется — возвращается понятная ошибка.
 func ResolveRuntime(language, version string) (string, error) {
 	if path, ok := resolveSystem(language, version); ok {
+		// Используем системный (локально установленный) рантайм.
+		fmt.Printf("Using local %s\n", language)
 		return path, nil
 	}
 
 	switch language {
 	case "php":
-		return ensureAndPath(PhpProgram(version))
+		path, err := ensureAndPath(PhpProgram(version))
+		if err != nil {
+			return "", err
+		}
+		fmt.Printf("Using downloaded %s %s\n", language, version)
+		return path, nil
 	case "go":
-		return ensureAndPath(GoProgram(version))
+		path, err := ensureAndPath(GoProgram(version))
+		if err != nil {
+			return "", err
+		}
+		fmt.Printf("Using downloaded %s %s\n", language, version)
+		return path, nil
 	case "node", "javascript":
 		return "", fmt.Errorf("npm not found in PATH (node runtimes are not downloaded automatically)")
 	case "python":
