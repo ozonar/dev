@@ -83,6 +83,15 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Uses `$EDITOR` or `nano` by default
   - Required parameters: `LLM_ENDPOINT`, `LLM_TOKEN`, `LLM_MODEL`
 
+- **`dev check`** – Run static code analysis with linters for the detected language/framework:
+  - Go: `golangci-lint`
+  - PHP: `phpstan` (with `--level=5`, `--memory-limit=1G`) and `php-cs-fixer`
+  - Downloads required tools (and php runtime) to `~/dev-config/check` if not present
+  - Interactive selection of the check scope (changed code, changed code + N commits, all code, diff with master/develop)
+  - Runs by default in **dry-run** mode; output is streamed to the console
+  - Subcommands: `dev check fix` (auto-fix issues), `dev check ai` (AI review, planned)
+  - Non-interactive flags: `--all`, `--commit=N`, `--branch=master|develop`
+
 ## Installation
 
 ### From GitHub
@@ -119,6 +128,8 @@ dev port :8080          # check if port is occupied
 dev curl example.com    # make HTTP request
 dev ai "install npm"    # ask AI to generate commands
 dev self-config         # configure AI settings
+dev check               # run static code analysis (dry-run)
+dev check fix           # run analysis and auto-fix issues
 ```
 
 ## Configuration
@@ -157,6 +168,7 @@ dev/
 │   ├── ai/config.go         # AI configuration management
 │   ├── build/               # Project building
 │   ├── cache/               # Cache clearing
+│   ├── check/               # Static code analysis
 │   ├── colors/              # ANSI color helpers
 │   ├── common/              # Shared utilities (file ops, commands)
 │   ├── curl/                # HTTP request client
