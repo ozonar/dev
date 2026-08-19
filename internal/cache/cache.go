@@ -40,7 +40,7 @@ func ClearCache(framework string) error {
 	case "generic":
 		// Ищем любую директорию с именем "cache" и очищаем её содержимое
 		// (с пропуском node_modules, vendor, .git и т.д.)
-		common.WalkWithExclusions(".", func(path string, info os.FileInfo, err error) error {
+		if err := common.WalkWithExclusions(".", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
 			}
@@ -48,15 +48,19 @@ func ClearCache(framework string) error {
 				// Удаляем все файлы и поддиректории внутри директории cache
 				entries, err := os.ReadDir(path)
 				if err != nil {
-					return nil
+					return err
 				}
 				for _, entry := range entries {
 					fullPath := filepath.Join(path, entry.Name())
-					os.RemoveAll(fullPath)
+					if err := os.RemoveAll(fullPath); err != nil {
+						return err
+					}
 				}
 			}
 			return nil
-		}, nil)
+		}, nil); err != nil {
+			return err
+		}
 		return nil
 	case "go":
 		cmd := exec.Command("go", "clean", "-cache", "-modcache", "-testcache")
@@ -70,18 +74,24 @@ func ClearCache(framework string) error {
 		return cmd.Run()
 	case "python":
 		// Удаляем __pycache__ и *.pyc файлы (с пропуском node_modules, vendor, .git и т.д.)
-		common.WalkWithExclusions(".", func(path string, info os.FileInfo, err error) error {
+		if err := common.WalkWithExclusions(".", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
 			}
 			if info.IsDir() && info.Name() == "__pycache__" {
-				os.RemoveAll(path)
+				if err := os.RemoveAll(path); err != nil {
+					return err
+				}
 			}
 			if strings.HasSuffix(info.Name(), ".pyc") {
-				os.Remove(path)
+				if err := os.Remove(path); err != nil {
+					return err
+				}
 			}
 			return nil
-		}, nil)
+		}, nil); err != nil {
+			return err
+		}
 		return nil
 	default:
 		return fmt.Errorf("unsupported framework: %s", framework)

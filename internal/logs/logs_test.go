@@ -131,9 +131,7 @@ func TestOpenLogInLnavDocker(t *testing.T) {
 func TestOpenLogInLnavDockerFallback(t *testing.T) {
 	// Проверяем, что для docker лога без lnav используется bash-пайп
 	// Просто проверяем, что нет паники при вызове
-	err := OpenLogInLnav("test-container", "docker")
-	if err == nil {
-		// Если docker не запущен или контейнер не существует — будет ошибка,
-		// но не паника. Это нормально.
-	}
+	// Если docker не запущен или контейнер не существует — будет ошибка,
+	// но не паника. Это нормально: тест лишь проверяет отсутствие паники.
+	_ = OpenLogInLnav("test-container", "docker")
 }

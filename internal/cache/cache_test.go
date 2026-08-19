@@ -14,20 +14,30 @@ func TestClearCacheGeneric(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
 
 	// Создаём директорию cache с файлами
 	cacheDir := filepath.Join(tmpDir, "cache")
-	os.MkdirAll(cacheDir, 0755)
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	file1 := filepath.Join(cacheDir, "file1.txt")
-	os.WriteFile(file1, []byte("data"), 0644)
+	if err := os.WriteFile(file1, []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	subDir := filepath.Join(cacheDir, "sub")
-	os.MkdirAll(subDir, 0755)
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	file2 := filepath.Join(subDir, "file2.txt")
-	os.WriteFile(file2, []byte("data"), 0644)
+	if err := os.WriteFile(file2, []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Вызываем очистку для generic
 	err = ClearCache("generic")
@@ -52,15 +62,21 @@ func TestClearCachePython(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
 
 	// Создаём __pycache__ директорию
 	pycache := filepath.Join(tmpDir, "__pycache__")
-	os.MkdirAll(pycache, 0755)
-	os.WriteFile(filepath.Join(pycache, "module.cpython-39.pyc"), []byte("bytecode"), 0644)
+	if err := os.MkdirAll(pycache, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pycache, "module.cpython-39.pyc"), []byte("bytecode"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	// Создаём .pyc файл
 	pycFile := filepath.Join(tmpDir, "module.pyc")
 	os.WriteFile(pycFile, []byte("bytecode"), 0644)
@@ -95,8 +111,12 @@ func TestClearCacheSymfonyNoArtisan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
-	os.Chdir(tmpDir)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
 
 	// Нет bin/console
 	err = ClearCache("symfony")

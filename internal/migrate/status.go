@@ -871,7 +871,7 @@ func printMigrationStatus(status *MigrationStatus, dbInfo *detector.DatabaseInfo
 	// Статус
 	fmt.Println()
 	color.Cyan("Status")
-	statusColor := green
+	var statusColor func(a ...interface{}) string
 	switch status.Status {
 	case "RUNNING":
 		statusColor = green
@@ -1028,7 +1028,9 @@ func getDBVersion(dbInfo *detector.DatabaseInfo) string {
 
 	var version string
 	if dbInfo.Type == "postgresql" {
-		database.QueryRow("SELECT version()").Scan(&version)
+		if err := database.QueryRow("SELECT version()").Scan(&version); err != nil {
+			return ""
+		}
 		// Извлекаем номер версии
 		re := regexp.MustCompile(`PostgreSQL (\d+)`)
 		matches := re.FindStringSubmatch(version)
@@ -1036,7 +1038,9 @@ func getDBVersion(dbInfo *detector.DatabaseInfo) string {
 			return matches[1]
 		}
 	} else {
-		database.QueryRow("SELECT VERSION()").Scan(&version)
+		if err := database.QueryRow("SELECT VERSION()").Scan(&version); err != nil {
+			return ""
+		}
 		re := regexp.MustCompile(`(\d+\.\d+\.\d+)`)
 		matches := re.FindStringSubmatch(version)
 		if len(matches) >= 2 {

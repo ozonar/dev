@@ -457,10 +457,7 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 		// Преобразуем историю в формат chatMessage
 		messages := make([]chatMessage, len(history))
 		for i, entry := range history {
-			messages[i] = chatMessage{
-				Role:    entry.Role,
-				Content: entry.Content,
-			}
+			messages[i] = chatMessage(entry)
 		}
 
 		reqBody := chatRequest{

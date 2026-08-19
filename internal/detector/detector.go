@@ -437,20 +437,6 @@ func findCacheDirs(root, framework string) []string {
 	return dirs
 }
 
-func findLogFiles(root string) []string {
-	var logs []string
-	common.WalkWithExclusions(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !info.IsDir() && strings.HasSuffix(info.Name(), ".log") {
-			logs = append(logs, path)
-		}
-		return nil
-	}, nil)
-	return logs
-}
-
 // extractURL находит первую подстроку, соответствующую шаблону URL БД в строке
 func extractURL(line string) (string, string) {
 	// Регулярное выражение для поиска URL БД

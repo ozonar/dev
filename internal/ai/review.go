@@ -43,10 +43,7 @@ func buildReviewPrompt(text string) string {
 func queryReviewText(cfg *Config, history []HistoryEntry) (string, error) {
 	messages := make([]chatMessage, len(history))
 	for i, entry := range history {
-		messages[i] = chatMessage{
-			Role:    entry.Role,
-			Content: entry.Content,
-		}
+		messages[i] = chatMessage(entry)
 	}
 
 	reqBody := chatRequest{
