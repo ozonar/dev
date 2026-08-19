@@ -31,23 +31,33 @@ func TestFindGoMainRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
 
 	// Создаём main.go в корне
 	mainRoot := filepath.Join(tmpDir, "main.go")
-	os.WriteFile(mainRoot, []byte("package main\nfunc main(){}"), 0644)
+	if err := os.WriteFile(mainRoot, []byte("package main\nfunc main(){}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Создаём ещё один main в поддиректории
 	subDir := filepath.Join(tmpDir, "cmd", "app")
-	os.MkdirAll(subDir, 0755)
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	mainSub := filepath.Join(subDir, "main.go")
-	os.WriteFile(mainSub, []byte("package main\nfunc main(){}"), 0644)
+	if err := os.WriteFile(mainSub, []byte("package main\nfunc main(){}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Не-main файл
-	os.WriteFile(filepath.Join(tmpDir, "utils.go"), []byte("package utils"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "utils.go"), []byte("package utils"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	mains, err := common.FindGoMain(".", common.FindGoMainOptions{
 		SearchInCmdFirst: false,
@@ -95,7 +105,9 @@ func TestRunProjectLaravelNoArtisan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +131,9 @@ func TestRunProjectNodeNoPackageJson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +204,9 @@ func TestRunProjectGoNoMain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}

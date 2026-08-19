@@ -15,14 +15,18 @@ func TestFindGoMainCmd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
 
 	// Создаём структуру cmd/foo/main.go
 	cmdDir := filepath.Join(tmpDir, "cmd", "foo")
-	os.MkdirAll(cmdDir, 0755)
+	if err := os.MkdirAll(cmdDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	mainFile := filepath.Join(cmdDir, "main.go")
 	content := `package main
 
@@ -30,17 +34,25 @@ func main() {
 	println("hello")
 }
 `
-	os.WriteFile(mainFile, []byte(content), 0644)
+	if err := os.WriteFile(mainFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Также создаём не-main файл
 	otherFile := filepath.Join(cmdDir, "utils.go")
-	os.WriteFile(otherFile, []byte("package foo"), 0644)
+	if err := os.WriteFile(otherFile, []byte("package foo"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Создаём ещё один main в cmd/bar/main.go
 	cmdBarDir := filepath.Join(tmpDir, "cmd", "bar")
-	os.MkdirAll(cmdBarDir, 0755)
+	if err := os.MkdirAll(cmdBarDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	mainBar := filepath.Join(cmdBarDir, "main.go")
-	os.WriteFile(mainBar, []byte("package main\nfunc main(){}"), 0644)
+	if err := os.WriteFile(mainBar, []byte("package main\nfunc main(){}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	mains, err := common.FindGoMain(".", common.FindGoMainOptions{
 		SearchInCmdFirst: true,
@@ -72,19 +84,27 @@ func TestFindGoMainOutsideCmd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
 
 	// Создаём main.go в корне
 	mainRoot := filepath.Join(tmpDir, "main.go")
-	os.WriteFile(mainRoot, []byte("package main\nfunc main(){}"), 0644)
+	if err := os.WriteFile(mainRoot, []byte("package main\nfunc main(){}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Создаём vendor/main.go (должен быть проигнорирован)
 	vendorDir := filepath.Join(tmpDir, "vendor", "somepkg")
-	os.MkdirAll(vendorDir, 0755)
-	os.WriteFile(filepath.Join(vendorDir, "main.go"), []byte("package main\nfunc main(){}"), 0644)
+	if err := os.MkdirAll(vendorDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vendorDir, "main.go"), []byte("package main\nfunc main(){}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	mains, err := common.FindGoMain(".", common.FindGoMainOptions{
 		SearchInCmdFirst: true,

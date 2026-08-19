@@ -40,8 +40,12 @@ func TestDetectLangFramework(t *testing.T) {
 			name: "Go проект",
 			setup: func() string {
 				root := filepath.Join(tmpDir, "go-project")
-				os.MkdirAll(root, 0755)
-				os.WriteFile(filepath.Join(root, "go.mod"), []byte("module test"), 0644)
+				if err := os.MkdirAll(root, 0755); err != nil {
+					return ""
+				}
+				if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module test"), 0644); err != nil {
+					return ""
+				}
 				return root
 			},
 			wantLang:      "go",
@@ -51,9 +55,15 @@ func TestDetectLangFramework(t *testing.T) {
 			name: "PHP Laravel",
 			setup: func() string {
 				root := filepath.Join(tmpDir, "laravel")
-				os.MkdirAll(root, 0755)
-				os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0644)
-				os.WriteFile(filepath.Join(root, "artisan"), []byte(""), 0644)
+				if err := os.MkdirAll(root, 0755); err != nil {
+					return ""
+				}
+				if err := os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0644); err != nil {
+					return ""
+				}
+				if err := os.WriteFile(filepath.Join(root, "artisan"), []byte(""), 0644); err != nil {
+					return ""
+				}
 				return root
 			},
 			wantLang:      "php",
@@ -63,8 +73,12 @@ func TestDetectLangFramework(t *testing.T) {
 			name: "Node.js",
 			setup: func() string {
 				root := filepath.Join(tmpDir, "node")
-				os.MkdirAll(root, 0755)
-				os.WriteFile(filepath.Join(root, "package.json"), []byte("{}"), 0644)
+				if err := os.MkdirAll(root, 0755); err != nil {
+					return ""
+				}
+				if err := os.WriteFile(filepath.Join(root, "package.json"), []byte("{}"), 0644); err != nil {
+					return ""
+				}
 				return root
 			},
 			wantLang:      "javascript",
@@ -74,9 +88,15 @@ func TestDetectLangFramework(t *testing.T) {
 			name: "Python Django",
 			setup: func() string {
 				root := filepath.Join(tmpDir, "python")
-				os.MkdirAll(root, 0755)
-				os.WriteFile(filepath.Join(root, "requirements.txt"), []byte(""), 0644)
-				os.WriteFile(filepath.Join(root, "manage.py"), []byte(""), 0644)
+				if err := os.MkdirAll(root, 0755); err != nil {
+					return ""
+				}
+				if err := os.WriteFile(filepath.Join(root, "requirements.txt"), []byte(""), 0644); err != nil {
+					return ""
+				}
+				if err := os.WriteFile(filepath.Join(root, "manage.py"), []byte(""), 0644); err != nil {
+					return ""
+				}
 				return root
 			},
 			wantLang:      "python",
@@ -112,14 +132,18 @@ func TestCheckVendor(t *testing.T) {
 
 	// Создаём vendor для Laravel
 	laravelRoot := filepath.Join(tmpDir, "laravel")
-	os.MkdirAll(filepath.Join(laravelRoot, "vendor"), 0755)
+	if err := os.MkdirAll(filepath.Join(laravelRoot, "vendor"), 0755); err != nil {
+		t.Fatal(err)
+	}
 	if !checkVendor(laravelRoot, "laravel") {
 		t.Error("checkVendor для laravel с vendor должна вернуть true")
 	}
 
 	// Создаём node_modules для Node
 	nodeRoot := filepath.Join(tmpDir, "node")
-	os.MkdirAll(filepath.Join(nodeRoot, "node_modules"), 0755)
+	if err := os.MkdirAll(filepath.Join(nodeRoot, "node_modules"), 0755); err != nil {
+		t.Fatal(err)
+	}
 	if !checkVendor(nodeRoot, "node") {
 		t.Error("checkVendor для node с node_modules должна вернуть true")
 	}
@@ -242,9 +266,15 @@ func TestDetectProject(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Создаём простой Go проект
-	os.MkdirAll(filepath.Join(tmpDir, "cmd"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("KEY=value"), 0644)
+	if err := os.MkdirAll(filepath.Join(tmpDir, "cmd"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("KEY=value"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	info, err := DetectProject(tmpDir)
 	if err != nil {
@@ -331,7 +361,9 @@ func TestDetectDatabases(t *testing.T) {
 				}
 			}
 			// Удаляем файл для следующего теста
-			os.Remove(envPath)
+			if err := os.Remove(envPath); err != nil {
+				t.Fatal(err)
+			}
 		})
 	}
 }
@@ -415,8 +447,12 @@ func TestDetectPublicDir(t *testing.T) {
 			name:      "Symfony modern public/index.php",
 			framework: "symfony",
 			setup: func(root string) {
-				os.MkdirAll(filepath.Join(root, "public"), 0755)
-				os.WriteFile(filepath.Join(root, "public", "index.php"), []byte("<?php"), 0644)
+				if err := os.MkdirAll(filepath.Join(root, "public"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "public", "index.php"), []byte("<?php"), 0644); err != nil {
+					t.Fatal(err)
+				}
 			},
 			wantSuffix: "/public",
 		},
@@ -424,8 +460,12 @@ func TestDetectPublicDir(t *testing.T) {
 			name:      "Symfony legacy web/index.php",
 			framework: "symfony",
 			setup: func(root string) {
-				os.MkdirAll(filepath.Join(root, "web"), 0755)
-				os.WriteFile(filepath.Join(root, "web", "index.php"), []byte("<?php"), 0644)
+				if err := os.MkdirAll(filepath.Join(root, "web"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "web", "index.php"), []byte("<?php"), 0644); err != nil {
+					t.Fatal(err)
+				}
 			},
 			wantSuffix: "/web",
 		},
@@ -433,8 +473,12 @@ func TestDetectPublicDir(t *testing.T) {
 			name:      "Yii2 Advanced frontend/web",
 			framework: "yii",
 			setup: func(root string) {
-				os.MkdirAll(filepath.Join(root, "frontend", "web"), 0755)
-				os.WriteFile(filepath.Join(root, "frontend", "web", "index.php"), []byte("<?php"), 0644)
+				if err := os.MkdirAll(filepath.Join(root, "frontend", "web"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "frontend", "web", "index.php"), []byte("<?php"), 0644); err != nil {
+					t.Fatal(err)
+				}
 			},
 			wantSuffix: "/frontend/web",
 		},
@@ -442,9 +486,15 @@ func TestDetectPublicDir(t *testing.T) {
 			name:      "Go project with main.go in cmd/app",
 			framework: "go",
 			setup: func(root string) {
-				os.MkdirAll(filepath.Join(root, "cmd", "app"), 0755)
-				os.WriteFile(filepath.Join(root, "cmd", "app", "main.go"), []byte("package main\nfunc main(){}"), 0644)
-				os.WriteFile(filepath.Join(root, "go.mod"), []byte("module test"), 0644)
+				if err := os.MkdirAll(filepath.Join(root, "cmd", "app"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "cmd", "app", "main.go"), []byte("package main\nfunc main(){}"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module test"), 0644); err != nil {
+					t.Fatal(err)
+				}
 			},
 			wantSuffix: "/cmd/app",
 		},
@@ -459,7 +509,9 @@ func TestDetectPublicDir(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := filepath.Join(tmpDir, tt.name)
-			os.MkdirAll(root, 0755)
+			if err := os.MkdirAll(root, 0755); err != nil {
+				t.Fatal(err)
+			}
 			tt.setup(root)
 
 			dir := detectPublicDir(root, tt.framework)
@@ -486,32 +538,46 @@ func TestDetectLanguageVersion(t *testing.T) {
 
 	// PHP: composer.json с require.php.
 	phpRoot := filepath.Join(tmpDir, "php")
-	os.MkdirAll(phpRoot, 0755)
-	os.WriteFile(filepath.Join(phpRoot, "composer.json"),
-		[]byte(`{"require":{"php":"^8.1"}}`), 0644)
+	if err := os.MkdirAll(phpRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(phpRoot, "composer.json"),
+		[]byte(`{"require":{"php":"^8.1"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if v := detectLanguageVersion(phpRoot, "php"); v != "8.1" {
 		t.Errorf("php version = %q, want 8.1", v)
 	}
 
 	// PHP без ограничения версии.
-	os.WriteFile(filepath.Join(phpRoot, "composer.json"), []byte(`{}`), 0644)
+	if err := os.WriteFile(filepath.Join(phpRoot, "composer.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if v := detectLanguageVersion(phpRoot, "php"); v != "" {
 		t.Errorf("php version without constraint = %q, want empty", v)
 	}
 
 	// Go: go.mod.
 	goRoot := filepath.Join(tmpDir, "go")
-	os.MkdirAll(goRoot, 0755)
-	os.WriteFile(filepath.Join(goRoot, "go.mod"), []byte("module test\ngo 1.22\n"), 0644)
+	if err := os.MkdirAll(goRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(goRoot, "go.mod"), []byte("module test\ngo 1.22\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if v := detectLanguageVersion(goRoot, "go"); v != "1.22" {
 		t.Errorf("go version = %q, want 1.22", v)
 	}
 
 	// Node: package.json с engines.node.
 	nodeRoot := filepath.Join(tmpDir, "node")
-	os.MkdirAll(nodeRoot, 0755)
-	os.WriteFile(filepath.Join(nodeRoot, "package.json"),
-		[]byte(`{"engines":{"node":">=18"}}`), 0644)
+	if err := os.MkdirAll(nodeRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nodeRoot, "package.json"),
+		[]byte(`{"engines":{"node":">=18"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if v := detectLanguageVersion(nodeRoot, "javascript"); v != "18.0" {
 		t.Errorf("node version = %q, want 18.0", v)
 	}

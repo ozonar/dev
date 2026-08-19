@@ -79,7 +79,9 @@ func TestClearCachePython(t *testing.T) {
 	}
 	// Создаём .pyc файл
 	pycFile := filepath.Join(tmpDir, "module.pyc")
-	os.WriteFile(pycFile, []byte("bytecode"), 0644)
+	if err := os.WriteFile(pycFile, []byte("bytecode"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	err = ClearCache("python")
 	if err != nil {
@@ -132,8 +134,12 @@ func TestClearCacheLaravelNoArtisan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
-	os.Chdir(tmpDir)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
 
 	err = ClearCache("laravel")
 	if err != nil {

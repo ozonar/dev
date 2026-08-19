@@ -17,13 +17,17 @@ func TestFindLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	subDir := filepath.Join(tmpDir, "logs")
-	os.MkdirAll(subDir, 0755)
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	log2 := filepath.Join(subDir, "debug.log")
 	if err := os.WriteFile(log2, []byte("debug"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	// Не лог-файл
-	os.WriteFile(filepath.Join(tmpDir, "config.txt"), []byte("config"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "config.txt"), []byte("config"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	entries, err := FindLogs(tmpDir)
 	if err != nil {
@@ -54,11 +58,15 @@ func TestFindPHPFPMLogsSystem(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Создаём PHP проект (composer.json)
-	os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte("{}"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Создаём временный "системный" лог-файл в /tmp с именем, подходящим под шаблон php*-fpm.log
 	tmpLog := filepath.Join(tmpDir, "php8.2-fpm.log")
-	os.WriteFile(tmpLog, []byte("php-fpm log content"), 0644)
+	if err := os.WriteFile(tmpLog, []byte("php-fpm log content"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Подменяем glob, чтобы он искал в tmpDir вместо /var/log
 	// Но мы не можем подменить filepath.Glob, поэтому просто проверяем,
@@ -75,7 +83,9 @@ func TestFindPHPFPMLogsNonPHP(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Создаём Go проект (не PHP)
-	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Вызываем FindLogs — он внутри вызывает detector.DetectProject
 	entries, err := FindLogs(tmpDir)
@@ -96,10 +106,14 @@ func TestFindPHPFPMLogsPHPProject(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Создаём PHP проект
-	os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte("{}"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Создаём .log файл, чтобы FindLogs не был пустым
-	os.WriteFile(filepath.Join(tmpDir, "app.log"), []byte("test"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "app.log"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	entries, err := FindLogs(tmpDir)
 	if err != nil {
