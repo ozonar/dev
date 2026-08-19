@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -90,7 +91,9 @@ func systemSatisfies(bin, versionCmd, required string) (string, bool) {
 
 	// Команды определения версии используют конвейеры и кавычки, поэтому
 	// выполняются через sh -c.
-	out, err := exec.Command("sh", "-c", versionCmd).Output()
+	cmd := exec.Command("sh", "-c", versionCmd)
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+	out, err := cmd.Output()
 	if err != nil {
 		return "", false
 	}

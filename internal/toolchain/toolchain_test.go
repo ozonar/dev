@@ -185,3 +185,97 @@ func TestCompareMajorMinor(t *testing.T) {
 		}
 	}
 }
+
+// installProgram создаёт в менеджере m установленную программу p
+// (создаёт папку и исполняемый файл по пути BinaryPath).
+func installProgram(t *testing.T, m *Manager, p Program) {
+	t.Helper()
+	path := m.BinaryPath(p)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("x"), 0755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestResolveLocalMatchesMinor проверяет, что локальная резолюция находит
+// скачанную полную версию (1.22.12) по минорному требованию (1.22) без сети.
+func TestResolveLocalMatchesMinor(t *testing.T) {
+	m := newTestManager(t)
+	installProgram(t, m, GoProgram("1.22.12"))
+
+	resolved, ok := m.resolveLocal(GoProgram("1.22"))
+	if !ok {
+		t.Fatalf("resolveLocal(1.22) не нашла установленную 1.22.12")
+	}
+	if resolved.Version != "1.22.12" {
+		t.Errorf("resolved.Version = %q, want 1.22.12", resolved.Version)
+	}
+	if !m.IsInstalled(resolved) {
+		t.Errorf("resolved программа должна быть установлена")
+	}
+}
+
+// TestResolveLocalMismatch проверяет, что локальная резолюция не находит
+// версию, не удовлетворяющую требованию (1.21 не подходит под 1.22).
+func TestResolveLocalMismatch(t *testing.T) {
+	m := newTestManager(t)
+	installProgram(t, m, GoProgram("1.21.4"))
+
+	if _, ok := m.resolveLocal(GoProgram("1.22")); ok {
+		t.Fatalf("resolveLocal(1.22) не должна найти установленную 1.21.4")
+	}
+}
+
+// TestResolveLocalIgnoresMissingFile проверяет, что папка версии без
+// исполняемого файла игнорируется локальной резолюцией.
+func TestResolveLocalIgnoresMissingFile(t *testing.T) {
+	m := newTestManager(t)
+	// Создаём только папку версии, без бинаря.
+	p := GoProgram("1.22.12")
+	if err := os.MkdirAll(filepath.Join(m.dir, "go", p.Version), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := m.resolveLocal(GoProgram("1.22")); ok {
+		t.Fatalf("resolveLocal(1.22) не должна найти версию без исполняемого файла")
+	}
+}
+
+// TestResolveLocalAnyForLatest проверяет, что при пустом требовании или
+// "latest" подходит любая установленная версия.
+func TestResolveLocalAnyForLatest(t *testing.T) {
+	m := newTestManager(t)
+	installProgram(t, m, GoProgram("1.24.2"))
+
+	for _, req := range []string{"", "latest"} {
+		if _, ok := m.resolveLocal(GoProgram(req)); !ok {
+			t.Errorf("resolveLocal(%q) не нашла установленную версию", req)
+		}
+	}
+}
+
+// TestMatchesRequirement проверяет сопоставление установленной и требуемой
+// версии, включая случай полная (1.22.12) против минорной (1.22).
+func TestMatchesRequirement(t *testing.T) {
+	cases := []struct {
+		installed, required string
+		want                bool
+	}{
+		// Полная установленная версия удовлетворяет минорному требованию.
+		{"1.22.12", "1.22", true},
+		{"1.22", "1.22.5", true},
+		// Разные major/minor — не подходит.
+		{"1.21.4", "1.22", false},
+		{"1.23.1", "1.22", false},
+		// Пустое требование и "latest" — подходит любая установленная.
+		{"1.21.4", "", true},
+		{"1.21.4", "latest", true},
+	}
+	for _, c := range cases {
+		if got := matchesRequirement(c.installed, c.required); got != c.want {
+			t.Errorf("matchesRequirement(%q, %q) = %v, want %v", c.installed, c.required, got, c.want)
+		}
+	}
+}

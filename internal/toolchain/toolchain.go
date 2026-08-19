@@ -179,10 +179,18 @@ func rebuildWithDeps(flat []Program, current map[string]Program) []Program {
 	return result
 }
 
-// resolve определяет конкретный URL и тип архива для программы. Для php и go
-// это требует обращения к сети (актуальная версия и адрес скачивания).
-// Для остальных программ (lnav, линтеры) URL уже задан фабрикой — сеть не нужна.
+// resolve определяет версию и URL для программы, следуя порядку:
+//  1. Сначала ищем требуемую версию среди уже скачанных в dev-команду
+//     программ — сеть при этом не используется. Требуемая версия проекта
+//     может быть минорной ("1.22"), а скачанная — полной ("1.22.12"),
+//     поэтому сопоставление идёт по major.minor через compareMajorMinor.
+//  2. Если подходящей локальной версии нет, для php и go резолвим через
+//     сеть
 func (m *Manager) resolve(p Program) (Program, error) {
+	if local, ok := m.resolveLocal(p); ok {
+		return local, nil
+	}
+
 	switch p.Name {
 	case "php":
 		return resolvePhp(p)
@@ -191,4 +199,46 @@ func (m *Manager) resolve(p Program) (Program, error) {
 	default:
 		return p, nil
 	}
+}
+
+// resolveLocal ищет среди скачанных в dev-команду программ версию,
+// удовлетворяющую требованию, без обращения к сети. Перебирает подпапки
+// <папка>/<name>/<version> и для каждой проверяет наличие исполняемого файла.
+// Требуемая версия (p.Version) может быть минорной ("1.22"), а скачанная —
+// полной ("1.22.12"); они сопоставляются по major.minor. Возвращает найденную
+// программу и true, если подходящая версия установлена.
+func (m *Manager) resolveLocal(p Program) (Program, bool) {
+	dir := filepath.Join(m.dir, p.Name)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return Program{}, false
+	}
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		cand := p
+		cand.Version = e.Name()
+		if !m.IsInstalled(cand) {
+			continue
+		}
+		if !matchesRequirement(cand.Version, p.Version) {
+			continue
+		}
+		return cand, true
+	}
+	return Program{}, false
+}
+
+// matchesRequirement проверяет, что установленная версия installed
+// удовлетворяет требованию required. Пустое требование или "latest" означают,
+// что подходит любая установленная версия. Иначе сравниваются major.minor
+// компоненты: установленная "1.22.12" удовлетворяет требованию "1.22".
+func matchesRequirement(installed, required string) bool {
+	required = strings.TrimSpace(required)
+	if required == "" || required == "latest" {
+		return true
+	}
+	return compareMajorMinor(installed, required) == 0
 }

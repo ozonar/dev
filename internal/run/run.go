@@ -102,6 +102,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			}
 		}
 		cmd := exec.Command(runtimePath, "run", target)
+		cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
