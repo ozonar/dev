@@ -8,8 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/fatih/color"
 )
 
 // checkPathDirs возвращает список директорий для выбора установки.
@@ -169,7 +167,6 @@ func Install(sourceFile string) error {
 	}
 
 	// Убиваем процесс, использующий целевой файл (если такой есть)
-	color.Yellow("Проверка, не занят ли %s...", targetPath)
 	fuserCmd := exec.Command("fuser", "-k", targetPath)
 	fuserOutput, _ := fuserCmd.CombinedOutput()
 	if len(fuserOutput) > 0 {
