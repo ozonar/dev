@@ -100,9 +100,116 @@ func TestProgramsFor(t *testing.T) {
 		t.Errorf("programsFor(php) names = %v", progs)
 	}
 
+	// JavaScript/TypeScript (Node) — один анализатор Biome.
+	progs, err = programsFor("javascript", "")
+	if err != nil {
+		t.Fatalf("programsFor(javascript) error = %v", err)
+	}
+	if len(progs) != 1 || progs[0].Name != "biome" {
+		t.Errorf("programsFor(javascript) = %v, want [biome]", progs)
+	}
+
+	// Python — один анализатор Ruff.
+	progs, err = programsFor("python", "")
+	if err != nil {
+		t.Fatalf("programsFor(python) error = %v", err)
+	}
+	if len(progs) != 1 || progs[0].Name != "ruff" {
+		t.Errorf("programsFor(python) = %v, want [ruff]", progs)
+	}
+
 	progs, err = programsFor("ruby", "")
 	if err != nil || progs != nil {
 		t.Errorf("programsFor(ruby) = %v, err = %v", progs, err)
+	}
+}
+
+// TestBiomeLinter проверяет описание Biome: одиночный файл (без архива),
+// исполняемый файл и корректный URL.
+func TestBiomeLinter(t *testing.T) {
+	prog := biomeLinter()
+	if prog.Name != "biome" {
+		t.Errorf("biome name = %q", prog.Name)
+	}
+	if prog.Archive != "" {
+		t.Errorf("biome archive = %q, want empty (single file)", prog.Archive)
+	}
+	if prog.Binary == "" || prog.URL == "" {
+		t.Errorf("biome binary/url empty: %+v", prog)
+	}
+	if prog.FullCommand != "{biome}" {
+		t.Errorf("biome fullCommand = %q", prog.FullCommand)
+	}
+	if len(prog.Require) != 0 {
+		t.Errorf("biome require = %v, want none", prog.Require)
+	}
+}
+
+// TestRuffLinter проверяет описание Ruff: tar.gz архив и корректный URL.
+func TestRuffLinter(t *testing.T) {
+	prog := ruffLinter()
+	if prog.Name != "ruff" {
+		t.Errorf("ruff name = %q", prog.Name)
+	}
+	if prog.Archive != "tar.gz" {
+		t.Errorf("ruff archive = %q, want tar.gz", prog.Archive)
+	}
+	if prog.Binary == "" || prog.URL == "" {
+		t.Errorf("ruff binary/url empty: %+v", prog)
+	}
+	if prog.FullCommand != "{ruff}" {
+		t.Errorf("ruff fullCommand = %q", prog.FullCommand)
+	}
+	if len(prog.Require) != 0 {
+		t.Errorf("ruff require = %v, want none", prog.Require)
+	}
+}
+
+// TestBuildArgs_Biome проверяет построение аргументов Biome.
+func TestBuildArgs_Biome(t *testing.T) {
+	prog := biomeLinter()
+
+	// Dry-run всех файлов: biome check .
+	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
+	if got := strings.Join(args, " "); got != "check ." {
+		t.Errorf("biome dry-run all args = %q, want %q", got, "check .")
+	}
+
+	// Fix-режим добавляет --write.
+	args = buildArgs(prog, Scope{Name: "all"}, ModeFix)
+	if got := strings.Join(args, " "); got != "check --write ." {
+		t.Errorf("biome fix all args = %q, want %q", got, "check --write .")
+	}
+
+	// Dry-run с явными файлами.
+	scope := Scope{Name: "changed", Files: []string{"src/a.ts", "src/b.js"}}
+	args = buildArgs(prog, scope, ModeDryRun)
+	if got := strings.Join(args, " "); got != "check src/a.ts src/b.js" {
+		t.Errorf("biome dry-run files args = %q, want %q", got, "check src/a.ts src/b.js")
+	}
+}
+
+// TestBuildArgs_Ruff проверяет построение аргументов Ruff.
+func TestBuildArgs_Ruff(t *testing.T) {
+	prog := ruffLinter()
+
+	// Dry-run всех файлов: ruff check .
+	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
+	if got := strings.Join(args, " "); got != "check ." {
+		t.Errorf("ruff dry-run all args = %q, want %q", got, "check .")
+	}
+
+	// Fix-режим добавляет --fix.
+	args = buildArgs(prog, Scope{Name: "all"}, ModeFix)
+	if got := strings.Join(args, " "); got != "check --fix ." {
+		t.Errorf("ruff fix all args = %q, want %q", got, "check --fix .")
+	}
+
+	// Dry-run с явными файлами.
+	scope := Scope{Name: "changed", Files: []string{"src/a.py", "src/b.py"}}
+	args = buildArgs(prog, scope, ModeDryRun)
+	if got := strings.Join(args, " "); got != "check src/a.py src/b.py" {
+		t.Errorf("ruff dry-run files args = %q, want %q", got, "check src/a.py src/b.py")
 	}
 }
 

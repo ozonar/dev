@@ -59,6 +59,31 @@ func buildArgs(prog Program, scope Scope, mode Mode) []string {
 		} else {
 			args = append(args, ".")
 		}
+	case "biome":
+		// biome check [--write] <paths>. Одна команда объединяет lint, format
+		// и импорт-сортировку. В dry-run без --write (только проверка),
+		// в fix — с --write (применение исправлений).
+		args = append(args, "check")
+		if mode == ModeFix {
+			args = append(args, "--write")
+		}
+		if len(scope.Files) > 0 {
+			args = append(args, scope.Files...)
+		} else {
+			args = append(args, ".")
+		}
+	case "ruff":
+		// ruff check [--fix] <paths>. Линтинг и импорт-сортировка.
+		// В dry-run без --fix (только проверка), в fix — с --fix.
+		args = append(args, "check")
+		if mode == ModeFix {
+			args = append(args, "--fix")
+		}
+		if len(scope.Files) > 0 {
+			args = append(args, scope.Files...)
+		} else {
+			args = append(args, ".")
+		}
 	default:
 		// Неизвестная программа — передаём пути как есть.
 		args = append(args, scope.Files...)
