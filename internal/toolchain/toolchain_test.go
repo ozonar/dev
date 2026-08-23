@@ -13,52 +13,63 @@ func newTestManager(t *testing.T) *Manager {
 	return &Manager{dir: t.TempDir()}
 }
 
+// withEmptyPath подменяет PATH на пустую директорию, чтобы системные рантаймы
+// (go, php) не находились. Используется в тестах, проверяющих выбор исключительно
+// из скачанных в dev-command версий.
+func withEmptyPath(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	oldPath := os.Getenv("PATH")
+	os.Setenv("PATH", dir)
+	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+}
+
 // TestPhpProgramNoNetwork проверяет, что фабрика PhpProgram не обращается
 // к сети и заполняет известные поля.
 func TestPhpProgramNoNetwork(t *testing.T) {
 	p := PhpProgram("8.3")
-	if p.Name != "php" {
-		t.Errorf("Name = %q, want php", p.Name)
+	if p.Name() != "php" {
+		t.Errorf("Name() = %q, want php", p.Name())
 	}
-	if p.Version != "8.3" {
-		t.Errorf("Version = %q, want 8.3", p.Version)
+	if p.Version() != "8.3" {
+		t.Errorf("Version() = %q, want 8.3", p.Version())
 	}
-	if p.Binary != "usr/bin/php8.3" {
-		t.Errorf("Binary = %q, want usr/bin/php8.3", p.Binary)
+	if p.Binary() != "usr/bin/php8.3" {
+		t.Errorf("Binary() = %q, want usr/bin/php8.3", p.Binary())
 	}
-	if p.URL != "" || p.Archive != "" {
-		t.Errorf("URL/Archive должны быть пустыми до резолюции, got URL=%q Archive=%q", p.URL, p.Archive)
+	if p.URL() != "" || p.Archive() != "" {
+		t.Errorf("URL/Archive должны быть пустыми до резолюции, got URL=%q Archive=%q", p.URL(), p.Archive())
 	}
 }
 
 // TestGoProgramNoNetwork проверяет фабрику GoProgram без сети.
 func TestGoProgramNoNetwork(t *testing.T) {
 	p := GoProgram("1.22")
-	if p.Name != "go" {
-		t.Errorf("Name = %q, want go", p.Name)
+	if p.Name() != "go" {
+		t.Errorf("Name() = %q, want go", p.Name())
 	}
-	if p.Version != "1.22" {
-		t.Errorf("Version = %q, want 1.22", p.Version)
+	if p.Version() != "1.22" {
+		t.Errorf("Version() = %q, want 1.22", p.Version())
 	}
-	if p.Binary != "go/bin/go" {
-		t.Errorf("Binary = %q, want go/bin/go", p.Binary)
+	if p.Binary() != "go/bin/go" {
+		t.Errorf("Binary() = %q, want go/bin/go", p.Binary())
 	}
-	if p.URL != "" || p.Archive != "" {
-		t.Errorf("URL/Archive должны быть пустыми до резолюции, got URL=%q Archive=%q", p.URL, p.Archive)
+	if p.URL() != "" || p.Archive() != "" {
+		t.Errorf("URL/Archive должны быть пустыми до резолюции, got URL=%q Archive=%q", p.URL(), p.Archive())
 	}
 }
 
 // TestLnavProgram проверяет фабрику lnav: URL задан сразу (не требует сети).
 func TestLnavProgram(t *testing.T) {
 	p := LnavProgram()
-	if p.Name != "lnav" {
-		t.Errorf("Name = %q, want lnav", p.Name)
+	if p.Name() != "lnav" {
+		t.Errorf("Name() = %q, want lnav", p.Name())
 	}
-	if p.Binary != "lnav" {
-		t.Errorf("Binary = %q, want lnav", p.Binary)
+	if p.Binary() != "lnav" {
+		t.Errorf("Binary() = %q, want lnav", p.Binary())
 	}
-	if !strings.Contains(p.URL, lnavVersion) {
-		t.Errorf("URL = %q, want contains %q", p.URL, lnavVersion)
+	if !strings.Contains(p.URL(), lnavVersion) {
+		t.Errorf("URL() = %q, want contains %q", p.URL(), lnavVersion)
 	}
 }
 
@@ -82,19 +93,23 @@ func TestBinaryPath(t *testing.T) {
 	}
 }
 
+// TestBinaryPathAbsolute проверяет, что абсолютный путь к бинарю (системный
+// рантайм) возвращается как есть, без добавления папки хранения.
+func TestBinaryPathAbsolute(t *testing.T) {
+	m := newTestManager(t)
+	p := NewProgram("php", "8.3", "/usr/bin/php", "", "", "{php}")
+	if got := m.BinaryPath(p); got != "/usr/bin/php" {
+		t.Errorf("BinaryPath = %q, want /usr/bin/php", got)
+	}
+}
+
 // TestCommandPlaceholders проверяет подстановку плейсхолдеров {имя}
 // в полную команду программы.
 func TestCommandPlaceholders(t *testing.T) {
 	m := newTestManager(t)
 
-	php := Program{Name: "php", Version: "8.3", Binary: "usr/bin/php8.3"}
-	phpstan := Program{
-		Name:        "phpstan",
-		Version:     "1.12.0",
-		Binary:      "phpstan.phar",
-		FullCommand: "{php} {phpstan}",
-		Require:     []Program{php},
-	}
+	php := PhpProgram("8.3")
+	phpstan := NewProgram("phpstan", "1.12.0", "phpstan.phar", "", "", "{php} {phpstan}", php)
 	name, args := m.Command(phpstan, []string{"analyse", "."})
 	wantName := filepath.Join(m.dir, "phpstan", "1.12.0", "phpstan.phar")
 	wantPhp := filepath.Join(m.dir, "php", "8.3", "usr/bin/php8.3")
@@ -108,34 +123,35 @@ func TestCommandPlaceholders(t *testing.T) {
 
 // TestExpandPrograms проверяет разворачивание программ с зависимостями.
 func TestExpandPrograms(t *testing.T) {
-	php := Program{Name: "php"}
-	stan := Program{Name: "phpstan", Require: []Program{php}}
-	all := expandPrograms([]Program{stan})
+	php := NewProgram("php", "", "", "", "", "")
+	stan := NewProgram("phpstan", "", "", "", "", "", php)
+	all := expandPrograms([]Executable{stan})
 	if len(all) != 2 {
 		t.Fatalf("expandPrograms length = %d, want 2", len(all))
 	}
-	if all[0].Name != "phpstan" || all[1].Name != "php" {
-		t.Errorf("expandPrograms names = %v", all)
+	if all[0].Name() != "phpstan" || all[1].Name() != "php" {
+		t.Errorf("expandPrograms names = %v", []string{all[0].Name(), all[1].Name()})
 	}
 }
 
 // TestRebuildWithDeps проверяет, что зависимости заменяются на актуальные версии.
 func TestRebuildWithDeps(t *testing.T) {
-	php := Program{Name: "php", Version: "8.1", Binary: "usr/bin/php8.1"}
-	stan := Program{Name: "phpstan", Require: []Program{php}}
-	flat := []Program{stan, php}
-	current := map[string]Program{
-		"phpstan": {Name: "phpstan", Version: "1.12.0"},
-		"php":     {Name: "php", Version: "8.2", Binary: "usr/bin/php8.2"},
+	php := NewProgram("php", "8.1", "usr/bin/php8.1", "", "", "")
+	stan := NewProgram("phpstan", "", "", "", "", "", php)
+	flat := []Executable{stan, php}
+	current := map[string]Executable{
+		"phpstan": NewProgram("phpstan", "1.12.0", "phpstan.phar", "", "", ""),
+		"php":     NewProgram("php", "8.2", "usr/bin/php8.2", "", "", ""),
 	}
 	result := rebuildWithDeps(flat, current)
 	if len(result) != 2 {
 		t.Fatalf("rebuildWithDeps length = %d, want 2", len(result))
 	}
-	if result[0].Require == nil || len(result[0].Require) != 1 {
-		t.Fatalf("phpstan require = %v", result[0].Require)
+	req := result[0].Require()
+	if len(req) != 1 {
+		t.Fatalf("phpstan require = %v", req)
 	}
-	if got := result[0].Require[0].Version; got != "8.2" {
+	if got := req[0].Version(); got != "8.2" {
 		t.Errorf("php dependency version = %q, want 8.2", got)
 	}
 }
@@ -169,13 +185,10 @@ func TestCompareMajorMinor(t *testing.T) {
 		{"8.3", "8.4", -1},
 		{"8.5", "8.3", 1},
 		{"8.3", "8.3", 0},
-		// Патч-версия (три компонента) не должна влиять на сравнение major.minor:
-		// системный go 1.22.2 подходит под требование go 1.22.
 		{"1.22.2", "1.22", 0},
 		{"1.22", "1.22.5", 0},
 		{"1.23.1", "1.22", 1},
 		{"1.21", "1.22.9", -1},
-		// Версия без minor трактуется как major.0.
 		{"8", "8.1", -1},
 		{"9", "8.5", 1},
 	}
@@ -186,11 +199,11 @@ func TestCompareMajorMinor(t *testing.T) {
 	}
 }
 
-// installProgram создаёт в менеджере m установленную программу p
+// installProgram создаёт в менеджере m установленную программу ex
 // (создаёт папку и исполняемый файл по пути BinaryPath).
-func installProgram(t *testing.T, m *Manager, p Program) {
+func installProgram(t *testing.T, m *Manager, ex Executable) {
 	t.Helper()
-	path := m.BinaryPath(p)
+	path := m.BinaryPath(ex)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -199,83 +212,184 @@ func installProgram(t *testing.T, m *Manager, p Program) {
 	}
 }
 
-// TestResolveLocalMatchesMinor проверяет, что локальная резолюция находит
-// скачанную полную версию (1.22.12) по минорному требованию (1.22) без сети.
-func TestResolveLocalMatchesMinor(t *testing.T) {
+// TestRuntimeResolveMatchesMinor проверяет, что резолюция находит скачанную
+// полную версию (1.22.12) по минорному требованию (1.22) без сети.
+func TestRuntimeResolveMatchesMinor(t *testing.T) {
+	withEmptyPath(t)
 	m := newTestManager(t)
 	installProgram(t, m, GoProgram("1.22.12"))
 
-	resolved, ok := m.resolveLocal(GoProgram("1.22"))
+	rt := NewGo("1.22")
+	resolved, ok := rt.Resolve(m.dir, "1.22")
 	if !ok {
-		t.Fatalf("resolveLocal(1.22) не нашла установленную 1.22.12")
+		t.Fatalf("Resolve(1.22) не нашла установленную 1.22.12")
 	}
-	if resolved.Version != "1.22.12" {
-		t.Errorf("resolved.Version = %q, want 1.22.12", resolved.Version)
+	if resolved.Version() != "1.22.12" {
+		t.Errorf("resolved.Version = %q, want 1.22.12", resolved.Version())
 	}
 	if !m.IsInstalled(resolved) {
 		t.Errorf("resolved программа должна быть установлена")
 	}
 }
 
-// TestResolveLocalMismatch проверяет, что локальная резолюция не находит
-// версию, не удовлетворяющую требованию (1.21 не подходит под 1.22).
-func TestResolveLocalMismatch(t *testing.T) {
+// TestRuntimeResolveMismatch проверяет, что резолюция не находит версию,
+// не удовлетворяющую требованию (1.21 не подходит под 1.22).
+func TestRuntimeResolveMismatch(t *testing.T) {
+	withEmptyPath(t)
 	m := newTestManager(t)
 	installProgram(t, m, GoProgram("1.21.4"))
 
-	if _, ok := m.resolveLocal(GoProgram("1.22")); ok {
-		t.Fatalf("resolveLocal(1.22) не должна найти установленную 1.21.4")
+	rt := NewGo("1.22")
+	if _, ok := rt.Resolve(m.dir, "1.22"); ok {
+		t.Fatalf("Resolve(1.22) не должна найти установленную 1.21.4")
 	}
 }
 
-// TestResolveLocalIgnoresMissingFile проверяет, что папка версии без
-// исполняемого файла игнорируется локальной резолюцией.
-func TestResolveLocalIgnoresMissingFile(t *testing.T) {
+// TestRuntimeResolveFindsVersionFolder показывает, что наличие папки версии
+// считается установленной версией (достаточно существования папки, файл не
+// проверяется).
+func TestRuntimeResolveFindsVersionFolder(t *testing.T) {
+	withEmptyPath(t)
 	m := newTestManager(t)
 	// Создаём только папку версии, без бинаря.
 	p := GoProgram("1.22.12")
-	if err := os.MkdirAll(filepath.Join(m.dir, "go", p.Version), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(m.dir, "go", p.Version()), 0755); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, ok := m.resolveLocal(GoProgram("1.22")); ok {
-		t.Fatalf("resolveLocal(1.22) не должна найти версию без исполняемого файла")
+	rt := NewGo("1.22")
+	if _, ok := rt.Resolve(m.dir, "1.22"); !ok {
+		t.Fatalf("Resolve(1.22) должна найти версию по наличию папки")
 	}
 }
 
-// TestResolveLocalAnyForLatest проверяет, что при пустом требовании или
+// TestRuntimeResolveAnyForLatest проверяет, что при пустом требовании или
 // "latest" подходит любая установленная версия.
-func TestResolveLocalAnyForLatest(t *testing.T) {
+func TestRuntimeResolveAnyForLatest(t *testing.T) {
+	withEmptyPath(t)
 	m := newTestManager(t)
 	installProgram(t, m, GoProgram("1.24.2"))
 
+	rt := NewGo("")
 	for _, req := range []string{"", "latest"} {
-		if _, ok := m.resolveLocal(GoProgram(req)); !ok {
-			t.Errorf("resolveLocal(%q) не нашла установленную версию", req)
+		if _, ok := rt.Resolve(m.dir, req); !ok {
+			t.Errorf("Resolve(%q) не нашла установленную версию", req)
 		}
 	}
 }
 
-// TestMatchesRequirement проверяет сопоставление установленной и требуемой
-// версии, включая случай полная (1.22.12) против минорной (1.22).
-func TestMatchesRequirement(t *testing.T) {
+// TestSatisfiesExact проверяет стратегию точного совпадения major.minor для Go.
+func TestSatisfiesExact(t *testing.T) {
 	cases := []struct {
 		installed, required string
 		want                bool
 	}{
-		// Полная установленная версия удовлетворяет минорному требованию.
 		{"1.22.12", "1.22", true},
 		{"1.22", "1.22.5", true},
-		// Разные major/minor — не подходит.
-		{"1.21.4", "1.22", false},
 		{"1.23.1", "1.22", false},
-		// Пустое требование и "latest" — подходит любая установленная.
+		{"1.23", "1.22", false},
+		{"2.0", "1.22", false},
 		{"1.21.4", "", true},
 		{"1.21.4", "latest", true},
 	}
 	for _, c := range cases {
-		if got := matchesRequirement(c.installed, c.required); got != c.want {
-			t.Errorf("matchesRequirement(%q, %q) = %v, want %v", c.installed, c.required, got, c.want)
+		if got := NewGo("").Satisfies(c.installed, c.required); got != c.want {
+			t.Errorf("Go.Satisfies(%q, %q) = %v, want %v", c.installed, c.required, got, c.want)
 		}
+	}
+}
+
+// TestSatisfiesAtLeast проверяет стратегию "минорно старшая или равная" для PHP.
+func TestSatisfiesAtLeast(t *testing.T) {
+	cases := []struct {
+		installed, required string
+		want                bool
+	}{
+		{"8.3", "8.2", true},
+		{"8.3", "8.3", true},
+		{"8.3", "8.5", false},
+		{"8.2", "8.3", false},
+		{"9.0", "8.3", false},
+		{"8.3", "9.0", false},
+		{"8.3", "", true},
+		{"8.3", "latest", true},
+	}
+	for _, c := range cases {
+		if got := NewPhp("").Satisfies(c.installed, c.required); got != c.want {
+			t.Errorf("Php.Satisfies(%q, %q) = %v, want %v", c.installed, c.required, got, c.want)
+		}
+	}
+}
+
+// TestEnsureUsesSystemPhp показывает, что при наличии подходящего системного
+// php Manager.Ensure использует его и НЕ скачивает рантайм в dev-команду.
+func TestEnsureUsesSystemPhp(t *testing.T) {
+	// Системный php 8.3 доступен в PATH (fake-бинарь).
+	addFakeBinary(t, "php", "8.3")
+	m := newTestManager(t)
+
+	programs, err := m.Ensure(PhpProgram("8.3"))
+	if err != nil {
+		t.Fatalf("Ensure с системным php не должна обращаться к сети: %v", err)
+	}
+	if len(programs) != 1 {
+		t.Fatalf("Ensure вернула %d программ, want 1", len(programs))
+	}
+	got := programs[0]
+	if got.Name() != "php" {
+		t.Errorf("Name() = %q, want php", got.Name())
+	}
+	if got.Version() != "8.3" {
+		t.Errorf("Version() = %q, want 8.3", got.Version())
+	}
+	// Бинарь должен быть системным (абсолютный путь).
+	binary := m.BinaryPath(got)
+	if !filepath.IsAbs(binary) {
+		t.Errorf("BinaryPath = %q, want абсолютный путь системного php", binary)
+	}
+}
+
+// TestEnsurePrefersSystemOverDownloaded показывает, что системный рантайм идёт
+// первым в списке кандидатов и выбирается раньше скачанного в dev-command.
+func TestEnsurePrefersSystemOverDownloaded(t *testing.T) {
+	// Системный php 8.3 доступен в PATH, и в dev-command тоже скачана 8.3.
+	addFakeBinary(t, "php", "8.3")
+	m := newTestManager(t)
+	installProgram(t, m, PhpProgram("8.3"))
+
+	rt := NewPhp("8.3")
+	resolved, ok := rt.Resolve(m.dir, "8.3")
+	if !ok {
+		t.Fatalf("Resolve(8.3) не нашла ни одного кандидата")
+	}
+	sys, isRT := resolved.(Runtime)
+	if !isRT || !sys.IsSystem() {
+		t.Errorf("выбран не системный рантайм, а скачанный: %v", m.BinaryPath(resolved))
+	}
+}
+
+// TestEnsureDoesNotDownloadUnmatchedSystemPhp показывает, что системный php,
+// не удовлетворяющий требованию, не выбирается.
+func TestEnsureDoesNotDownloadUnmatchedSystemPhp(t *testing.T) {
+	// Системный php 8.2 младше требуемой 8.3.
+	addFakeBinary(t, "php", "8.2")
+	m := newTestManager(t)
+
+	rt := NewPhp("8.3")
+	if _, ok := rt.Resolve(m.dir, "8.3"); ok {
+		t.Errorf("Resolve(php 8.2 под требование 8.3) = true, want false")
+	}
+}
+
+// TestRuntimeResolveGoExact показывает, что для go требуется точная минорная
+// версия: системный go 1.23 не подходит под требование 1.22.
+func TestRuntimeResolveGoExact(t *testing.T) {
+	// Системный go 1.23 доступен в PATH.
+	addFakeBinary(t, "go", "go1.23")
+	m := newTestManager(t)
+
+	rt := NewGo("1.22")
+	if _, ok := rt.Resolve(m.dir, "1.22"); ok {
+		t.Errorf("Resolve(go 1.23 под требование 1.22) = true, want false (нужна точная версия)")
 	}
 }

@@ -17,7 +17,7 @@ import (
 // download скачивает программу в папку инструментов. Если у программы задан
 // тип архива (Archive), архив распаковывается целиком в папку инструментов,
 // сохраняя внутреннюю структуру. Иначе скачанный файл кладётся по пути Binary.
-func (m *Manager) download(p Program) error {
+func (m *Manager) download(ex Executable) error {
 	if err := os.MkdirAll(m.dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %v", m.dir, err)
 	}
@@ -32,54 +32,54 @@ func (m *Manager) download(p Program) error {
 		os.Remove(tmpName)
 	}()
 
-	resp, err := http.Get(p.URL)
+	resp, err := http.Get(ex.URL())
 	if err != nil {
-		return fmt.Errorf("failed to download %s: %v", p.Name, err)
+		return fmt.Errorf("failed to download %s: %v", ex.Name(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download %s: HTTP %d", p.Name, resp.StatusCode)
+		return fmt.Errorf("failed to download %s: HTTP %d", ex.Name(), resp.StatusCode)
 	}
 
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		return fmt.Errorf("error writing %s: %v", p.Name, err)
+		return fmt.Errorf("error writing %s: %v", ex.Name(), err)
 	}
 	tmpFile.Close()
 
 	// Папка, в которую распаковывается/сохраняется программа (учитывает версию).
-	progDir := m.programDir(p)
+	progDir := m.programDir(ex)
 
-	switch p.Archive {
+	switch ex.Archive() {
 	case "tar.gz":
 		if err := extractTarGzAll(tmpName, progDir); err != nil {
-			return fmt.Errorf("error extracting %s: %v", p.Name, err)
+			return fmt.Errorf("error extracting %s: %v", ex.Name(), err)
 		}
 	case "tar.xz":
 		if err := extractTarXZAll(tmpName, progDir); err != nil {
-			return fmt.Errorf("error extracting %s: %v", p.Name, err)
+			return fmt.Errorf("error extracting %s: %v", ex.Name(), err)
 		}
 	case "zip":
 		if err := extractZipAll(tmpName, progDir); err != nil {
-			return fmt.Errorf("error extracting %s: %v", p.Name, err)
+			return fmt.Errorf("error extracting %s: %v", ex.Name(), err)
 		}
 	default:
 		// Простой файл — перемещаем на место.
-		target := m.BinaryPath(p)
+		target := m.BinaryPath(ex)
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for %s: %v", p.Name, err)
+			return fmt.Errorf("failed to create directory for %s: %v", ex.Name(), err)
 		}
 		if err := os.Rename(tmpName, target); err != nil {
 			if err := copyFile(tmpName, target); err != nil {
-				return fmt.Errorf("error saving %s: %v", p.Name, err)
+				return fmt.Errorf("error saving %s: %v", ex.Name(), err)
 			}
 			os.Remove(tmpName)
 		}
 	}
 
 	// Даём права на выполнение.
-	if err := os.Chmod(m.BinaryPath(p), 0755); err != nil {
-		return fmt.Errorf("failed to set permissions on %s: %v", p.Name, err)
+	if err := os.Chmod(m.BinaryPath(ex), 0755); err != nil {
+		return fmt.Errorf("failed to set permissions on %s: %v", ex.Name(), err)
 	}
 
 	return nil

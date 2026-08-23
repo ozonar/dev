@@ -34,31 +34,54 @@ var distroPrefixes = map[string]string{
 	"debian13":    "debian13",
 }
 
-// PhpProgram описывает php-рантайм требуемой версии без обращения к сети.
-// URL и тип архива определяются позже, в Manager.Ensure, если нужной версии
-// нет локально. Binary известен сразу: в дистрибутиве php-builder бинарь
-// лежит по пути usr/bin/php<major.minor>.
-func PhpProgram(version string) Program {
-	return Program{
-		Name:        "php",
-		Version:     version,
-		Binary:      "usr/bin/php" + version,
-		FullCommand: "{php}",
-	}
+// Php — рантайм PHP.
+type Php struct {
+	runtimeBase
 }
 
-// resolvePhp определяет конкретный URL скачивания php для требуемой версии.
-// Обращается к php.net (определение актуальной версии) и к php-builder
-// (формирование URL). Обновляет версию и путь к бинарю в переданной программе.
-func resolvePhp(p Program) (Program, error) {
-	majorMinor, err := resolvePhpVersion(p.Version)
+// NewPhp возвращает php-рантайм требуемой версии без обращения к сети.
+func NewPhp(version string) Runtime {
+	return &Php{runtimeBase{
+		name:        "php",
+		fullCommand: "{php}",
+		binary:      "usr/bin/php" + version,
+		systemBin:   "php",
+		systemVer:   "php -r 'echo PHP_MAJOR_VERSION.\".\".PHP_MINOR_VERSION;'",
+		version:     version,
+	}}
+}
+
+// ResolveDownload определяет URL для скачивания php требуемой версии.
+func (p *Php) ResolveDownload() (Runtime, error) {
+	resolved, url, archive, err := p.resolveDownload()
 	if err != nil {
-		return Program{}, err
+		return nil, err
+	}
+	np := NewPhp(resolved)
+	pp := np.(*Php)
+	pp.url = url
+	pp.archive = archive
+	return pp, nil
+}
+
+// markSystem помечает рантайм как системный с заданным путём к бинарю.
+func (p *Php) markSystem(path string) {
+	p.binary = path
+	p.isSystem = true
+}
+
+// resolveDownload определяет конкретный URL скачивания php для требуемой версии.
+// Обращается к php.net (определение актуальной версии) и к php-builder
+// (формирование URL). Возвращает фактическую версию, URL и тип архива.
+func (p *Php) resolveDownload() (resolved, url, archive string, err error) {
+	majorMinor, err := resolvePhpVersion(p.version)
+	if err != nil {
+		return "", "", "", err
 	}
 
 	distro, err := detectDistro()
 	if err != nil {
-		return Program{}, err
+		return "", "", "", err
 	}
 
 	archSuffix := ""
@@ -66,11 +89,8 @@ func resolvePhp(p Program) (Program, error) {
 		archSuffix = "_arm64"
 	}
 
-	p.Version = majorMinor
-	p.Binary = "usr/bin/php" + majorMinor
-	p.URL = fmt.Sprintf("%s/%s/php_%s+%s%s.tar.xz", phpBuilderReleasesURL, majorMinor, majorMinor, distro, archSuffix)
-	p.Archive = "tar.xz"
-	return p, nil
+	url = fmt.Sprintf("%s/%s/php_%s+%s%s.tar.xz", phpBuilderReleasesURL, majorMinor, majorMinor, distro, archSuffix)
+	return majorMinor, url, "tar.xz", nil
 }
 
 // resolvePhpVersion определяет major.minor версию PHP по требованию проекта.
@@ -163,4 +183,17 @@ func detectDistro() (string, error) {
 		return prefix, nil
 	}
 	return "", fmt.Errorf("unsupported distribution %s %s", id, versionID)
+}
+
+// Satisfies определяет, что installed минорно старше или равен required,
+// но major обязан совпадать. Например php 8.3 подходит под требование 8.2,
+// а php 9.0 — нет. Пустое требование или "latest" подходят любой версии.
+func (p *Php) Satisfies(installed, required string) bool {
+	required = strings.TrimSpace(required)
+	if required == "" || required == "latest" {
+		return true
+	}
+	a := parseMajorMinor(installed)
+	b := parseMajorMinor(required)
+	return a[0] == b[0] && a[1] >= b[1]
 }

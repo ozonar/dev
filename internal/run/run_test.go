@@ -12,10 +12,13 @@ import (
 // файл name и помещает эту директорию в начало PATH. Позволяет замокать
 // резолюцию рантайма (ResolveRuntime найдёт фейковый бинарь без обращения
 // к сети) и тестировать логику RunProject без сетевых запросов.
+//
+// Скрипт выводит версию 8.3, чтобы systemProgram мог определить системный
+// рантайм (для php версия обязательна; для npm вывод не используется).
 func withFakeBinary(t *testing.T, name string) {
 	t.Helper()
 	dir := t.TempDir()
-	script := "#!/bin/sh\nexit 0\n"
+	script := "#!/bin/sh\necho \"8.3\"\nexit 0\n"
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0755); err != nil {
 		t.Fatal(err)
 	}

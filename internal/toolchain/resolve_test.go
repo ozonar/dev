@@ -23,80 +23,68 @@ func addFakeBinary(t *testing.T, name, output string) {
 	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
 }
 
-// TestResolveSystemUnknown проверяет, что для неизвестного языка резолюция
-// возвращает пустой результат.
-func TestResolveSystemUnknown(t *testing.T) {
-	path, ok := resolveSystem("unknown", "1.0")
-	if ok {
-		t.Errorf("resolveSystem(unknown) = (%q, true), want false", path)
+// TestRuntimeUnknown проверяет, что для неизвестного языка нет рантайма.
+func TestRuntimeUnknown(t *testing.T) {
+	if _, ok := runtimeFor("unknown"); ok {
+		t.Errorf("runtimeFor(unknown) = true, want false")
 	}
 }
 
-// TestResolveSystemPhpVersionMismatch проверяет, что при системном PHP ниже
-// требуемой версии инструмент не используется (резолюция вернёт false),
-// что приводит к скачиванию требуемой версии.
-func TestResolveSystemPhpVersionMismatch(t *testing.T) {
+// TestSystemProgramPhpVersionMismatch проверяет, что системный php ниже требуемой
+// версии не подходит по стратегии satisfiesAtLeast (младшая минорная версия).
+func TestSystemProgramPhpVersionMismatch(t *testing.T) {
 	// Системный php выдаёт 8.3, а проект требует 8.5.
 	addFakeBinary(t, "php", "8.3")
-	path, ok := resolveSystem("php", "8.5")
-	if ok {
-		t.Errorf("resolveSystem(php, 8.5) = (%q, true), want false (системная 8.3 < 8.5)", path)
+	if NewPhp("").Satisfies("8.3", "8.5") {
+		t.Error("Php.Satisfies(8.3, 8.5) = true, want false")
 	}
 }
 
-// TestResolveSystemPhpVersionOk проверяет, что системный PHP, удовлетворяющий
-// требованию, используется (резолюция возвращает путь).
-func TestResolveSystemPhpVersionOk(t *testing.T) {
+// TestSystemProgramPhpVersionOk проверяет, что системный php, удовлетворяющий
+// требованию, подходит по стратегии satisfiesAtLeast.
+func TestSystemProgramPhpVersionOk(t *testing.T) {
 	// Системный php выдаёт 8.6 — подходит под требование 8.5.
 	addFakeBinary(t, "php", "8.6")
-	path, ok := resolveSystem("php", "8.5")
-	if !ok {
-		t.Fatalf("resolveSystem(php, 8.5) не нашла подходящий системный php")
-	}
-	if path == "" {
-		t.Error("resolveSystem вернула пустой путь при ok=true")
+	if !NewPhp("").Satisfies("8.6", "8.5") {
+		t.Error("Php.Satisfies(8.6, 8.5) = false, want true")
 	}
 }
 
-// TestResolveSystemPhpNoRequirement проверяет, что без требования версии
+// TestSystemProgramPhpNoRequirement проверяет, что без требования версии
 // системный php подходит безусловно.
-func TestResolveSystemPhpNoRequirement(t *testing.T) {
+func TestSystemProgramPhpNoRequirement(t *testing.T) {
 	addFakeBinary(t, "php", "8.3")
-	path, ok := resolveSystem("php", "")
-	if !ok {
-		t.Fatalf("resolveSystem(php, \"\") не нашла системный php")
-	}
-	if path == "" {
-		t.Error("resolveSystem вернула пустой путь при ok=true")
+	if !NewPhp("").Satisfies("8.3", "") {
+		t.Error("Php.Satisfies(8.3, \"\") = false, want true")
 	}
 }
 
-// TestResolveSystemNodePresence проверяет, что для node достаточно наличия
+// TestSystemProgramNodePresence проверяет, что для node достаточно наличия
 // инструмента в PATH, без проверки версии.
-func TestResolveSystemNodePresence(t *testing.T) {
+func TestSystemProgramNodePresence(t *testing.T) {
 	// Проверяем node, у которого нет реальной версии в выводе — но он есть.
 	addFakeBinary(t, "npm", "not a version")
-	path, ok := resolveSystem("node", "18")
+	path, ok := systemPresence("npm")
 	if !ok {
-		t.Fatalf("resolveSystem(node) не нашла npm при наличии в PATH")
+		t.Fatalf("systemPresence(npm) не нашла npm при наличии в PATH")
 	}
 	if path == "" {
-		t.Error("resolveSystem(node) вернула пустой путь при ok=true")
+		t.Error("systemPresence(npm) вернула пустой путь при ok=true")
 	}
 }
 
-// TestResolveSystemPythonAbsent проверяет, что при отсутствии python резолюция
-// возвращает false.
-func TestResolveSystemPythonAbsent(t *testing.T) {
+// TestSystemProgramPythonAbsent проверяет, что при отсутствии python в PATH
+// presence-проверка возвращает false.
+func TestSystemProgramPythonAbsent(t *testing.T) {
 	// Гарантируем, что python недоступен в PATH, подменяя PATH пустой папкой.
 	dir := t.TempDir()
 	oldPath := os.Getenv("PATH")
 	os.Setenv("PATH", dir)
 	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
 
-	path, ok := resolveSystem("python", "")
+	path, ok := systemPresence("python")
 	if ok {
-		t.Errorf("resolveSystem(python) = (%q, true), want false при отсутствии python", path)
+		t.Errorf("systemPresence(python) = (%q, true), want false при отсутствии python", path)
 	}
 }
 
@@ -112,5 +100,41 @@ func TestSystemPresence(t *testing.T) {
 	}
 	if !strings.Contains(path, "php") {
 		t.Errorf("path = %q, ожидается путь, содержащий 'php'", path)
+	}
+}
+
+// TestSystemProgramPhpParsesVersionCmd ловит ошибку в команде определения
+// версии php. Команда выполняется через sh -c, и если одинарные кавычки
+// в PHP-коде закрываются раньше времени, php получает несколько аргументов и
+// завершается с ошибкой (как настоящий php). Fake-бинарь ведёт себя так же:
+// требует ровно один аргумент кода после флага -r и возвращает версию только
+// в этом случае.
+func TestSystemProgramPhpParsesVersionCmd(t *testing.T) {
+	// Кастомный fake php: валиден только когда после -r передан один аргумент
+	// кода (корректная команда). Иначе — parse error, как у настоящего php.
+	script := `#!/bin/sh
+if [ "$1" = "-r" ] && [ "$#" -eq 2 ]; then
+	echo "8.3"
+	exit 0
+fi
+echo "PHP Parse error: syntax error" >&2
+exit 255
+`
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "php"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := os.Getenv("PATH")
+	os.Setenv("PATH", dir+string(os.PathListSeparator)+oldPath)
+	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+
+	m := newTestManager(t)
+	cand, ok := NewPhp("8.3").Resolve(m.dir, "8.3")
+	if !ok {
+		t.Fatalf("не найден подходящий php: команда определения версии некорректна")
+	}
+	rt, isRT := cand.(Runtime)
+	if !isRT || !rt.IsSystem() || rt.Version() != "8.3" {
+		t.Fatalf("ожидался системный php 8.3, получен %v", m.BinaryPath(cand))
 	}
 }

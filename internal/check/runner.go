@@ -21,9 +21,9 @@ const (
 
 // buildArgs формирует аргументы запуска для конкретной программы
 // с учётом объёма проверки и режима (dry-run/fix).
-func buildArgs(prog Program, scope Scope, mode Mode) []string {
+func buildArgs(prog toolchain.Executable, scope Scope, mode Mode) []string {
 	var args []string
-	switch prog.Name {
+	switch prog.Name() {
 	case "golangci-lint":
 		// golangci-lint run [--fix] <dirs>
 		// golangci-lint не принимает файлы из разных директорий одновременно
@@ -93,7 +93,7 @@ func buildArgs(prog Program, scope Scope, mode Mode) []string {
 
 // runProgram запускает одну программу с потоковым выводом stdout/stderr
 // в консоль. Возвращает ошибку, если выполнение завершилось неуспешно.
-func runProgram(manager *toolchain.Manager, prog Program, args []string) error {
+func runProgram(manager *toolchain.Manager, prog toolchain.Executable, args []string) error {
 	name, cmdArgs := manager.Command(prog, args)
 
 	cmd := exec.Command(name, cmdArgs...)
@@ -106,8 +106,8 @@ func runProgram(manager *toolchain.Manager, prog Program, args []string) error {
 }
 
 // printProgramHeader выводит заголовок перед запуском программы.
-func printProgramHeader(prog Program) {
-	color.Cyan("\n=== %s ===\n", prog.Name)
+func printProgramHeader(prog toolchain.Executable) {
+	color.Cyan("\n=== %s ===\n", prog.Name())
 }
 
 // goDirArgs возвращает директории, пригодные для golangci-lint:

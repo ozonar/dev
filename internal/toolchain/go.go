@@ -30,43 +30,65 @@ type goReleaseFile struct {
 // находятся при резолюции.
 const goDevIndexURL = "https://go.dev/dl/?mode=json&include=all"
 
-// GoProgram описывает Go-тулчейн требуемой версии без обращения к сети.
-// URL и полная версия определяются позже, в Manager.Ensure, если нужной
-// версии нет локально. Binary известен сразу: в дистрибутиве Go бинарь лежит
-// по пути go/bin/go.
-func GoProgram(version string) Program {
-	return Program{
-		Name:        "go",
-		Version:     version,
-		Binary:      "go/bin/go",
-		FullCommand: "{go}",
-	}
+// Go — рантайм Go.
+type Go struct {
+	runtimeBase
 }
 
-// resolveGo определяет конкретный URL скачивания Go для требуемой версии.
+// NewGo возвращает go-рантайм требуемой версии без обращения к сети.
+func NewGo(version string) Runtime {
+	return &Go{runtimeBase{
+		name:        "go",
+		fullCommand: "{go}",
+		binary:      "go/bin/go",
+		systemBin:   "go",
+		systemVer:   "go version | awk '{print $3}' | sed 's/^go//'",
+		version:     version,
+	}}
+}
+
+// ResolveDownload определяет URL для скачивания go требуемой версии.
+func (g *Go) ResolveDownload() (Runtime, error) {
+	resolved, url, archive, err := g.resolveDownload()
+	if err != nil {
+		return nil, err
+	}
+	ng := NewGo(resolved)
+	gg := ng.(*Go)
+	gg.url = url
+	gg.archive = archive
+	return gg, nil
+}
+
+// markSystem помечает рантайм как системный с заданным путём к бинарю.
+func (g *Go) markSystem(path string) {
+	g.binary = path
+	g.isSystem = true
+}
+
+// resolveDownload определяет конкретный URL скачивания Go для требуемой версии.
 // Обращается к go.dev (JSON-индекс релизов), находит подходящую полную версию
-// и дистрибутив под текущую платформу. Обновляет версию и URL в программе.
-func resolveGo(p Program) (Program, error) {
+// и дистрибутив под текущую платформу. Возвращает фактическую версию, URL
+// и тип архива.
+func (g *Go) resolveDownload() (resolved, url, archive string, err error) {
 	releases, err := fetchGoReleases()
 	if err != nil {
-		return Program{}, err
+		return "", "", "", err
 	}
 
-	release, err := findGoRelease(releases, p.Version)
+	release, err := findGoRelease(releases, g.version)
 	if err != nil {
-		return Program{}, err
+		return "", "", "", err
 	}
 
 	file, err := findGoArchive(release, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
-		return Program{}, err
+		return "", "", "", err
 	}
 
 	// Полная версия (например "1.22.12") без префикса "go".
-	p.Version = strings.TrimPrefix(release.Version, "go")
-	p.URL = "https://go.dev/dl/" + file.Filename
-	p.Archive = "tar.gz"
-	return p, nil
+	resolved = strings.TrimPrefix(release.Version, "go")
+	return resolved, "https://go.dev/dl/" + file.Filename, "tar.gz", nil
 }
 
 // fetchGoReleases загружает и разбирает список релизов Go из JSON-индекса.
@@ -128,4 +150,17 @@ func findGoArchive(release goRelease, goos, goarch string) (goReleaseFile, error
 		return f, nil
 	}
 	return goReleaseFile{}, fmt.Errorf("no Go archive for %s/%s", goos, goarch)
+}
+
+// Satisfies определяет, что installed в точности соответствует required по
+// major.minor (патч-компонент не влияет: "1.22.12" подходит под требование
+// "1.22"). Go требует конкретную минорную версию: системный go 1.23 не
+// подходит под требование 1.22, даже если он новее. Пустое требование или
+// "latest" подходят любой версии.
+func (g *Go) Satisfies(installed, required string) bool {
+	required = strings.TrimSpace(required)
+	if required == "" || required == "latest" {
+		return true
+	}
+	return compareMajorMinor(installed, required) == 0
 }

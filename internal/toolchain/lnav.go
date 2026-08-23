@@ -9,8 +9,8 @@ import (
 // новых релизов.
 const lnavVersion = "0.14.0"
 
-// LnavProgram описывает lnav — просмотрщик логов.
-func LnavProgram() Program {
+// LnavProgram возвращает описание lnav — просмотрщика логов.
+func LnavProgram() Executable {
 	osPart := "linux-musl"
 	switch runtime.GOOS {
 	case "darwin":
@@ -29,13 +29,7 @@ func LnavProgram() Program {
 	}
 
 	filename := fmt.Sprintf("lnav-%s-%s-%s.zip", lnavVersion, osPart, arch)
+	url := fmt.Sprintf("https://github.com/tstack/lnav/releases/download/v%s/%s", lnavVersion, filename)
 
-	return Program{
-		Name:        "lnav",
-		Version:     lnavVersion,
-		Binary:      "lnav",
-		URL:         fmt.Sprintf("https://github.com/tstack/lnav/releases/download/v%s/%s", lnavVersion, filename),
-		Archive:     "zip",
-		FullCommand: "{lnav}",
-	}
+	return NewProgram("lnav", lnavVersion, "lnav", url, "zip", "{lnav}")
 }

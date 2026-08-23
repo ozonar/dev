@@ -1,12 +1,10 @@
 // Пакет toolchain инкапсулирует механизм скачивания и хранения внешних
 // инструментов (go, php, lnav, линтеры) в папке ~/dev-config/tools.
 //
-// Каждая программа описывается структурой Program. Разные версии одной
-// программы хранятся в разных подпапках, поэтому версии не пересекаются.
-//
-// Скачивание выполняется лениво: фабрики (PhpProgram, GoProgram, LnavProgram)
-// не обращаются к сети. Сеть используется только в Manager.Ensure, когда
-// нужной версии нет в локальной папке инструментов.
+// Разные версии одной программы хранятся в разных подпапках, поэтому версии
+// не пересекаются. Скачивание выполняется лениво: фабрики (PhpProgram,
+// GoProgram, LnavProgram) не обращаются к сети. Сеть используется только в
+// Manager.Ensure, когда нужной версии нет ни в системе, ни в локальной папке.
 package toolchain
 
 import (
@@ -19,33 +17,38 @@ import (
 // DirName — имя подпапки внутри dev-config, куда скачиваются программы.
 const DirName = "tools"
 
-// Program описывает одну программу: рантайм (go, php), просмотрщик (lnav)
-// или линтер.
+// Program описывает программу с фиксированной версией (lnav, линтеры).
+// Реализует Executable. Версие-логики не имеет — её нет в рантаймах.
 type Program struct {
-	// Name — короткое имя программы, используется в плейсхолдерах команд
-	// (например {go}, {php}, {phpstan}).
-	Name string
-	// Version — требуемая версия программы. Определяет подпапку хранения
-	// (<name>/<version>), поэтому разные версии не пересекаются.
-	Version string
-	// Binary — относительный путь к исполняемому файлу внутри подпапки
-	// программы. Для программ, URL которых определяется динамически (php, go),
-	// Binary известен без сети.
-	Binary string
-	// URL — адрес скачивания. Для программ с динамически определяемым URL
-	// (php, go) заполняется только при резолюции в Ensure. Для остальных
-	// задаётся фабрикой.
-	URL string
-	// Archive — тип архива: "" (простой файл), "tar.gz", "tar.xz", "zip".
-	// Заполняется так же, как URL.
-	Archive string
-	// FullCommand — команда для запуска программы. Плейсхолдеры вида {имя}
-	// заменяются на полные пути соответствующих программ из набора.
-	FullCommand string
-	// Require — зависимости программы (программы, которые должны быть скачаны
-	// до запуска данной).
-	Require []Program
+	name        string
+	version     string
+	binary      string
+	url         string
+	archive     string
+	fullCommand string
+	require     []Executable
 }
+
+// NewProgram создаёт описание программы с заданными параметрами.
+func NewProgram(name, version, binary, url, archive, fullCommand string, require ...Executable) *Program {
+	return &Program{
+		name:        name,
+		version:     version,
+		binary:      binary,
+		url:         url,
+		archive:     archive,
+		fullCommand: fullCommand,
+		require:     require,
+	}
+}
+
+func (p *Program) Name() string          { return p.name }
+func (p *Program) Version() string       { return p.version }
+func (p *Program) Binary() string        { return p.binary }
+func (p *Program) URL() string           { return p.url }
+func (p *Program) Archive() string       { return p.archive }
+func (p *Program) FullCommand() string   { return p.fullCommand }
+func (p *Program) Require() []Executable { return p.require }
 
 // Manager управляет загрузкой и хранением инструментов.
 type Manager struct {
@@ -71,35 +74,40 @@ func (m *Manager) Dir() string {
 }
 
 // programDir возвращает путь к папке, в которую распаковывается программа.
-// Путь строится как <папка-инструментов>/<name>/<version>
-func (m *Manager) programDir(p Program) string {
-	return filepath.Join(m.dir, p.Name, p.Version)
+// Путь строится как <папка-инструментов>/<name>/<version>.
+func (m *Manager) programDir(ex Executable) string {
+	return filepath.Join(m.dir, ex.Name(), ex.Version())
 }
 
 // BinaryPath возвращает полный путь к исполняемому файлу программы.
-func (m *Manager) BinaryPath(p Program) string {
-	return filepath.Join(m.programDir(p), p.Binary)
+// Если у программы задан абсолютный путь к бинарю (системный рантайм из PATH),
+// он возвращается как есть. Иначе путь строится внутри папки хранения.
+func (m *Manager) BinaryPath(ex Executable) string {
+	if filepath.IsAbs(ex.Binary()) {
+		return ex.Binary()
+	}
+	return filepath.Join(m.programDir(ex), ex.Binary())
 }
 
 // IsInstalled проверяет, существует ли исполняемый файл программы нужной версии.
-func (m *Manager) IsInstalled(p Program) bool {
-	_, err := os.Stat(m.BinaryPath(p))
+func (m *Manager) IsInstalled(ex Executable) bool {
+	_, err := os.Stat(m.BinaryPath(ex))
 	return err == nil
 }
 
 // Command строит имя команды и список аргументов для запуска программы,
 // заменяя плейсхолдеры {имя} на полные пути бинарей всех программ набора.
-func (m *Manager) Command(p Program, args []string) (string, []string) {
-	full := p.FullCommand
+func (m *Manager) Command(ex Executable, args []string) (string, []string) {
+	full := ex.FullCommand()
 	// Подставляем саму программу.
-	full = strings.ReplaceAll(full, "{"+p.Name+"}", m.BinaryPath(p))
+	full = strings.ReplaceAll(full, "{"+ex.Name()+"}", m.BinaryPath(ex))
 	// Подставляем зависимости (Require) программы.
-	for _, v := range p.Require {
-		full = strings.ReplaceAll(full, "{"+v.Name+"}", m.BinaryPath(v))
+	for _, v := range ex.Require() {
+		full = strings.ReplaceAll(full, "{"+v.Name()+"}", m.BinaryPath(v))
 	}
 	parts := strings.Fields(full)
 	if len(parts) == 0 {
-		parts = []string{m.BinaryPath(p)}
+		parts = []string{m.BinaryPath(ex)}
 	}
 	parts = append(parts, args...)
 	return parts[0], parts[1:]
@@ -108,18 +116,18 @@ func (m *Manager) Command(p Program, args []string) (string, []string) {
 // expandPrograms разворачивает список программ с учётом их зависимостей
 // (Require) в плоский список без дубликатов. Зависимости идут после
 // программы, которая их требует.
-func expandPrograms(programs []Program) []Program {
-	var result []Program
+func expandPrograms(programs []Executable) []Executable {
+	var result []Executable
 	seen := make(map[string]bool)
-	var walk func([]Program)
-	walk = func(list []Program) {
+	var walk func([]Executable)
+	walk = func(list []Executable) {
 		for _, p := range list {
-			if seen[p.Name] {
+			if seen[p.Name()] {
 				continue
 			}
-			seen[p.Name] = true
+			seen[p.Name()] = true
 			result = append(result, p)
-			walk(p.Require)
+			walk(p.Require())
 		}
 	}
 	walk(programs)
@@ -127,118 +135,90 @@ func expandPrograms(programs []Program) []Program {
 }
 
 // Ensure гарантирует, что переданные программы и их зависимости доступны
-// локально. Если нужной версии программы нет в папке инструментов, программа
-// резолвится (определяется конкретный URL) и скачивается. Сеть используется
-// только при отсутствии нужной версии.
-func (m *Manager) Ensure(programs ...Program) ([]Program, error) {
+// локально. Если нужной версии нет ни в системе, ни в папке инструментов,
+// программа резолвится (определяется конкретный URL) и скачивается. Сеть
+// используется только при отсутствии нужной версии.
+func (m *Manager) Ensure(executables ...Executable) ([]Executable, error) {
 	if err := os.MkdirAll(m.dir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create directory %s: %v", m.dir, err)
 	}
-	flat := expandPrograms(programs)
-	current := make(map[string]Program)
+	flat := expandPrograms(executables)
+	current := make(map[string]Executable)
 	for _, p := range flat {
-		// Сначала резолвим программу (определяем полную версию и URL для php/go),
-		// так как хранение и проверка установки идут по полной версии.
 		resolved, err := m.resolve(p)
 		if err != nil {
 			return nil, err
 		}
-		// Проверяем установку именно резолвленной версии: короткая требуемая
-		// версия (например "1.25") и полная (например "1.25.13") — разные папки.
 		if m.IsInstalled(resolved) {
-			current[resolved.Name] = resolved
+			current[resolved.Name()] = resolved
 			continue
 		}
-		// Сообщаем пользователю о начале скачивания требуемой версии.
-		fmt.Printf("Downloading %s %s\n", resolved.Name, resolved.Version)
+		fmt.Printf("Downloading %s %s\n", resolved.Name(), resolved.Version())
 		if err := m.download(resolved); err != nil {
 			return nil, err
 		}
-		current[resolved.Name] = resolved
+		current[resolved.Name()] = resolved
 	}
 	return rebuildWithDeps(flat, current), nil
 }
 
 // rebuildWithDeps собирает итоговый список программ, заменяя каждую программу
-// на актуальную установленную версию и обновляя зависимости (Require)
-// на актуальные версии.
-func rebuildWithDeps(flat []Program, current map[string]Program) []Program {
-	result := make([]Program, 0, len(flat))
+// на актуальную установленную версию и обновляя зависимости (Require):
+// каждая зависимость заменяется на её актуальную установленную версию.
+func rebuildWithDeps(flat []Executable, current map[string]Executable) []Executable {
+	result := make([]Executable, 0, len(flat))
 	for _, p := range flat {
-		cp := current[p.Name]
-		cp.Require = nil
-		for _, dep := range p.Require {
-			if act, ok := current[dep.Name]; ok {
-				cp.Require = append(cp.Require, act)
+		cp := current[p.Name()]
+		var require []Executable
+		for _, dep := range p.Require() {
+			if act, ok := current[dep.Name()]; ok {
+				require = append(require, act)
 			} else {
-				cp.Require = append(cp.Require, dep)
+				require = append(require, dep)
 			}
+		}
+		if len(require) > 0 {
+			cp = setRequire(cp, require)
 		}
 		result = append(result, cp)
 	}
 	return result
 }
 
-// resolve определяет версию и URL для программы, следуя порядку:
-//  1. Сначала ищем требуемую версию среди уже скачанных в dev-команду
-//     программ — сеть при этом не используется. Требуемая версия проекта
-//     может быть минорной ("1.22"), а скачанная — полной ("1.22.12"),
-//     поэтому сопоставление идёт по major.minor через compareMajorMinor.
-//  2. Если подходящей локальной версии нет, для php и go резолвим через
-//     сеть
-func (m *Manager) resolve(p Program) (Program, error) {
-	if local, ok := m.resolveLocal(p); ok {
-		return local, nil
+// setRequire возвращает копию программы ex с заданным списком зависимостей.
+// Для рантаймов (без собственных зависимостей) список не меняется.
+func setRequire(ex Executable, require []Executable) Executable {
+	if pr, ok := ex.(*Program); ok {
+		np := *pr
+		np.require = require
+		return &np
 	}
-
-	switch p.Name {
-	case "php":
-		return resolvePhp(p)
-	case "go":
-		return resolveGo(p)
-	default:
-		return p, nil
-	}
+	return ex
 }
 
-// resolveLocal ищет среди скачанных в dev-команду программ версию,
-// удовлетворяющую требованию, без обращения к сети. Перебирает подпапки
-// <папка>/<name>/<version> и для каждой проверяет наличие исполняемого файла.
-// Требуемая версия (p.Version) может быть минорной ("1.22"), а скачанная —
-// полной ("1.22.12"); они сопоставляются по major.minor. Возвращает найденную
-// программу и true, если подходящая версия установлена.
-func (m *Manager) resolveLocal(p Program) (Program, bool) {
-	dir := filepath.Join(m.dir, p.Name)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return Program{}, false
+// resolve определяет версию и URL для программы. Для рантаймов (php/go)
+// сначала выбирается уже доступный кандидат (системный или скачанный) без
+// сети; если такого нет — определяются URL и полная версия через сеть.
+// Для обычных программ (не рантаймов) резолюции не требуется.
+func (m *Manager) resolve(ex Executable) (Executable, error) {
+	rt, ok := ex.(Runtime)
+	if !ok {
+		return ex, nil
 	}
-
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		cand := p
-		cand.Version = e.Name()
-		if !m.IsInstalled(cand) {
-			continue
-		}
-		if !matchesRequirement(cand.Version, p.Version) {
-			continue
-		}
-		return cand, true
-	}
-	return Program{}, false
+	return m.resolveRuntime(rt)
 }
 
-// matchesRequirement проверяет, что установленная версия installed
-// удовлетворяет требованию required. Пустое требование или "latest" означают,
-// что подходит любая установленная версия. Иначе сравниваются major.minor
-// компоненты: установленная "1.22.12" удовлетворяет требованию "1.22".
-func matchesRequirement(installed, required string) bool {
-	required = strings.TrimSpace(required)
-	if required == "" || required == "latest" {
-		return true
+// resolveRuntime выбирает рантайм: сначала подходящего кандидата без сети,
+// затем, при отсутствии, определяет URL для скачивания.
+func (m *Manager) resolveRuntime(rt Runtime) (Executable, error) {
+	if cand, ok := rt.Resolve(m.dir, rt.Version()); ok {
+		if sys, isRT := cand.(Runtime); isRT && sys.IsSystem() {
+			fmt.Printf("Using local %s %s\n", cand.Name(), cand.Version())
+		} else {
+			fmt.Printf("Using downloaded %s %s\n", cand.Name(), cand.Version())
+		}
+		return cand, nil
 	}
-	return compareMajorMinor(installed, required) == 0
+	// Сеть используется только когда реально нужно скачивание.
+	return rt.ResolveDownload()
 }

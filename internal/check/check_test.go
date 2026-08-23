@@ -5,11 +5,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dev/internal/toolchain"
 )
 
 // TestBuildArgs_Golangci проверяет построение аргументов golangci-lint.
 func TestBuildArgs_Golangci(t *testing.T) {
-	prog := goLinter()
+	prog := goLinter(toolchain.NewGo(""))
 
 	// Весь код в dry-run.
 	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
@@ -49,7 +51,7 @@ func TestBuildArgs_Golangci(t *testing.T) {
 
 // TestBuildArgs_Phpstan проверяет построение аргументов PHPStan.
 func TestBuildArgs_Phpstan(t *testing.T) {
-	prog := phpStanLinter(Program{Name: "php"})
+	prog := phpStanLinter(toolchain.NewPhp(""))
 
 	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
 	if got := strings.Join(args, " "); got != "analyse --memory-limit=1G --level=5 ." {
@@ -65,7 +67,7 @@ func TestBuildArgs_Phpstan(t *testing.T) {
 
 // TestBuildArgs_PhpCsFixer проверяет построение аргументов PHP CS Fixer.
 func TestBuildArgs_PhpCsFixer(t *testing.T) {
-	prog := phpCsFixerLinter(Program{Name: "php"})
+	prog := phpCsFixerLinter(toolchain.NewPhp(""))
 
 	// Dry-run добавляет флаг --dry-run.
 	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
@@ -85,7 +87,7 @@ func TestBuildArgs_PhpCsFixer(t *testing.T) {
 // Фабрика PhpProgram не обращается к сети, поэтому тест безопасен.
 func TestProgramsFor(t *testing.T) {
 	progs, err := programsFor("go", "")
-	if err != nil || len(progs) != 1 || progs[0].Name != "golangci-lint" {
+	if err != nil || len(progs) != 1 || progs[0].Name() != "golangci-lint" {
 		t.Errorf("programsFor(go) = %v, err = %v", progs, err)
 	}
 
@@ -96,7 +98,7 @@ func TestProgramsFor(t *testing.T) {
 	}
 	if len(progs) != 2 {
 		t.Errorf("programsFor(php) length = %d, want 2", len(progs))
-	} else if progs[0].Name != "phpstan" || progs[1].Name != "php-cs-fixer" {
+	} else if progs[0].Name() != "phpstan" || progs[1].Name() != "php-cs-fixer" {
 		t.Errorf("programsFor(php) names = %v", progs)
 	}
 
@@ -105,7 +107,7 @@ func TestProgramsFor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("programsFor(javascript) error = %v", err)
 	}
-	if len(progs) != 1 || progs[0].Name != "biome" {
+	if len(progs) != 1 || progs[0].Name() != "biome" {
 		t.Errorf("programsFor(javascript) = %v, want [biome]", progs)
 	}
 
@@ -114,7 +116,7 @@ func TestProgramsFor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("programsFor(python) error = %v", err)
 	}
-	if len(progs) != 1 || progs[0].Name != "ruff" {
+	if len(progs) != 1 || progs[0].Name() != "ruff" {
 		t.Errorf("programsFor(python) = %v, want [ruff]", progs)
 	}
 
@@ -128,40 +130,40 @@ func TestProgramsFor(t *testing.T) {
 // исполняемый файл и корректный URL.
 func TestBiomeLinter(t *testing.T) {
 	prog := biomeLinter()
-	if prog.Name != "biome" {
-		t.Errorf("biome name = %q", prog.Name)
+	if prog.Name() != "biome" {
+		t.Errorf("biome name = %q", prog.Name())
 	}
-	if prog.Archive != "" {
-		t.Errorf("biome archive = %q, want empty (single file)", prog.Archive)
+	if prog.Archive() != "" {
+		t.Errorf("biome archive = %q, want empty (single file)", prog.Archive())
 	}
-	if prog.Binary == "" || prog.URL == "" {
+	if prog.Binary() == "" || prog.URL() == "" {
 		t.Errorf("biome binary/url empty: %+v", prog)
 	}
-	if prog.FullCommand != "{biome}" {
-		t.Errorf("biome fullCommand = %q", prog.FullCommand)
+	if prog.FullCommand() != "{biome}" {
+		t.Errorf("biome fullCommand = %q", prog.FullCommand())
 	}
-	if len(prog.Require) != 0 {
-		t.Errorf("biome require = %v, want none", prog.Require)
+	if len(prog.Require()) != 0 {
+		t.Errorf("biome require = %v, want none", prog.Require())
 	}
 }
 
 // TestRuffLinter проверяет описание Ruff: tar.gz архив и корректный URL.
 func TestRuffLinter(t *testing.T) {
 	prog := ruffLinter()
-	if prog.Name != "ruff" {
-		t.Errorf("ruff name = %q", prog.Name)
+	if prog.Name() != "ruff" {
+		t.Errorf("ruff name = %q", prog.Name())
 	}
-	if prog.Archive != "tar.gz" {
-		t.Errorf("ruff archive = %q, want tar.gz", prog.Archive)
+	if prog.Archive() != "tar.gz" {
+		t.Errorf("ruff archive = %q, want tar.gz", prog.Archive())
 	}
-	if prog.Binary == "" || prog.URL == "" {
+	if prog.Binary() == "" || prog.URL() == "" {
 		t.Errorf("ruff binary/url empty: %+v", prog)
 	}
-	if prog.FullCommand != "{ruff}" {
-		t.Errorf("ruff fullCommand = %q", prog.FullCommand)
+	if prog.FullCommand() != "{ruff}" {
+		t.Errorf("ruff fullCommand = %q", prog.FullCommand())
 	}
-	if len(prog.Require) != 0 {
-		t.Errorf("ruff require = %v, want none", prog.Require)
+	if len(prog.Require()) != 0 {
+		t.Errorf("ruff require = %v, want none", prog.Require())
 	}
 }
 
@@ -215,9 +217,10 @@ func TestBuildArgs_Ruff(t *testing.T) {
 
 // TestPhpStanRequiresPhp проверяет, что PHPStan зависит от php-рантайма.
 func TestPhpStanRequiresPhp(t *testing.T) {
-	prog := phpStanLinter(Program{Name: "php", Version: "8.3"})
-	if len(prog.Require) != 1 || prog.Require[0].Name != "php" {
-		t.Errorf("phpstan require = %v, want php", prog.Require)
+	prog := phpStanLinter(toolchain.NewPhp("8.3"))
+	req := prog.Require()
+	if len(req) != 1 || req[0].Name() != "php" {
+		t.Errorf("phpstan require = %v, want php", req)
 	}
 }
 
