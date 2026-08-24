@@ -198,7 +198,13 @@ func runAnalyze() {
 	fmt.Println()
 
 	color.Cyan("=== Project Analysis ===")
-	fmt.Printf("Language:  %s\n", green(info.Language))
+
+	// Версия языка проекта (например "go 1.23"), если она определена.
+	languageLabel := info.Language
+	if info.LanguageVersion != "" {
+		languageLabel = info.Language + " " + info.LanguageVersion
+	}
+	fmt.Printf("Language:  %s\n", green(languageLabel))
 	fmt.Printf("Framework: %s\n", green(info.Framework))
 
 	if info.HasEnv {
