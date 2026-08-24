@@ -589,6 +589,94 @@ func TestDetectLanguageVersion(t *testing.T) {
 }
 
 // TestNormalizeMajorMinor проверяет нормализацию версий к major.minor.
+// TestDetectLangFrameworkByExtension проверяет fallback-определение языка
+// по расширению файлов, лежащих в корне проекта.
+func TestDetectLangFrameworkByExtension(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name          string
+		files         map[string]string // имя файла -> содержимое
+		wantLang      string
+		wantFramework string
+	}{
+		{
+			name: "Python по .py",
+			files: map[string]string{
+				"main.py": "print('hi')",
+			},
+			wantLang:      "python",
+			wantFramework: "generic",
+		},
+		{
+			name: "Go по .go",
+			files: map[string]string{
+				"main.go": "package main",
+			},
+			wantLang:      "go",
+			wantFramework: "generic",
+		},
+		{
+			name: "PHP по .php",
+			files: map[string]string{
+				"index.php": "<?php",
+			},
+			wantLang:      "php",
+			wantFramework: "generic",
+		},
+		{
+			name: "Node по .js",
+			files: map[string]string{
+				"app.js": "console.log(1)",
+			},
+			wantLang:      "javascript",
+			wantFramework: "generic",
+		},
+		{
+			name: "Расширение в подкаталоге не учитывается",
+			files: map[string]string{
+				"sub/main.go": "package main",
+			},
+			wantLang:      "unknown",
+			wantFramework: "",
+		},
+		{
+			name: "Нет файлов с распознаваемым расширением",
+			files: map[string]string{
+				"README.md": "# hello",
+			},
+			wantLang:      "unknown",
+			wantFramework: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := filepath.Join(tmpDir, strings.ReplaceAll(tt.name, " ", "_"))
+			if err := os.MkdirAll(root, 0755); err != nil {
+				t.Fatal(err)
+			}
+			for name, content := range tt.files {
+				path := filepath.Join(root, name)
+				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			lang, framework := detectLangFramework(root)
+			if lang != tt.wantLang {
+				t.Errorf("detectLangFramework() lang = %v, want %v", lang, tt.wantLang)
+			}
+			if framework != tt.wantFramework {
+				t.Errorf("detectLangFramework() framework = %v, want %v", framework, tt.wantFramework)
+			}
+		})
+	}
+}
+
 func TestNormalizeMajorMinor(t *testing.T) {
 	cases := []struct {
 		in   string

@@ -165,8 +165,49 @@ func detectLangFramework(root string) (string, string) {
 		}
 		return "python", "generic"
 	}
+	// Fallback: если стандартные маркеры не найдены, пытаемся определить язык
+	// по расширению файлов в корне проекта (например .py -> python, .go -> go).
+	if lang, ok := detectLangByExtension(root); ok {
+		return lang, "generic"
+	}
 	// Default
 	return "unknown", ""
+}
+
+// detectLangByExtension пытается определить язык проекта по расширениям
+// файлов, лежащих непосредственно в корне (без рекурсивного обхода).
+// Возвращает язык и true, если какой-то из маркерных файлов найден.
+func detectLangByExtension(root string) (string, bool) {
+	// Карта расширение -> язык.
+	extLang := map[string]string{
+		".py":   "python",
+		".go":   "go",
+		".rb":   "ruby",
+		".php":  "php",
+		".twig": "php",
+		".html": "php",
+		".htm":  "php",
+		".js":   "javascript",
+		".jsx":  "javascript",
+		".mjs":  "javascript",
+		".ts":   "javascript",
+		".tsx":  "javascript",
+	}
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if lang, ok := extLang[ext]; ok {
+			return lang, true
+		}
+	}
+	return "", false
 }
 
 // detectLanguageVersion определяет требуемую версию языка из конфигурации проекта.
