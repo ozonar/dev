@@ -81,7 +81,7 @@ func checkPathDirs() ([]string, error) {
 		allDirs = append(allDirs, dir)
 	}
 	if len(allDirs) == 0 {
-		return nil, fmt.Errorf("переменная PATH пуста")
+		return nil, fmt.Errorf("PATH variable is empty")
 	}
 	return allDirs, nil
 }
@@ -100,7 +100,7 @@ func chooseInstallDir() (string, error) {
 	for i, dir := range candidates {
 		fmt.Printf("%d. %s\n", i+1, dir)
 	}
-	fmt.Print("Выбор (1): ")
+	fmt.Print("Selection (1): ")
 
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
@@ -110,7 +110,7 @@ func chooseInstallDir() (string, error) {
 	}
 	idx := 0
 	if n, err := fmt.Sscanf(input, "%d", &idx); err != nil || n != 1 || idx < 1 || idx > len(candidates) {
-		return "", fmt.Errorf("неверный выбор")
+		return "", fmt.Errorf("invalid selection")
 	}
 	return candidates[idx-1], nil
 }
@@ -123,14 +123,14 @@ func Install(sourceFile string) error {
 	if sourceFile == "" {
 		exe, err := os.Executable()
 		if err != nil {
-			return fmt.Errorf("не удалось определить путь к исполняемому файлу: %v", err)
+			return fmt.Errorf("could not determine executable path: %v", err)
 		}
 		srcPath = exe
 	} else {
 		srcPath = sourceFile
 		// Проверяем, существует ли файл
 		if _, err := os.Stat(srcPath); err != nil {
-			return fmt.Errorf("исходный файл не существует: %v", err)
+			return fmt.Errorf("source file does not exist: %v", err)
 		}
 	}
 
@@ -147,7 +147,7 @@ func Install(sourceFile string) error {
 	if _, err := os.Stat(targetDir); err != nil {
 		// Молча создаём (рекурсивно)
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			return fmt.Errorf("не удалось создать директорию %s: %v", targetDir, err)
+			return fmt.Errorf("could not create directory %s: %v", targetDir, err)
 		}
 	}
 
@@ -163,7 +163,7 @@ func Install(sourceFile string) error {
 		targetAbs = targetPath
 	}
 	if srcAbs == targetAbs {
-		return fmt.Errorf("Попытка установить %[1]s в %[1]s.\n", targetPath)
+		return fmt.Errorf("Attempting to install %[1]s into itself.\n", targetPath)
 	}
 
 	// Убиваем процесс, использующий целевой файл (если такой есть)
@@ -176,7 +176,7 @@ func Install(sourceFile string) error {
 	// Копируем файл
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
-		return fmt.Errorf("не удалось открыть исходный файл %s: %v", srcPath, err)
+		return fmt.Errorf("could not open source file %s: %v", srcPath, err)
 	}
 	defer srcFile.Close()
 
@@ -185,17 +185,17 @@ func Install(sourceFile string) error {
 
 	dstFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
-		return fmt.Errorf("не удалось создать целевой файл %s: %v", targetPath, err)
+		return fmt.Errorf("could not create target file %s: %v", targetPath, err)
 	}
 	defer dstFile.Close()
 
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		return fmt.Errorf("ошибка копирования: %v", err)
+		return fmt.Errorf("copy failed: %v", err)
 	}
 
 	// Устанавливаем права на выполнение (chmod +x)
 	if err := os.Chmod(targetPath, 0755); err != nil {
-		return fmt.Errorf("не удалось установить права на выполнение: %v", err)
+		return fmt.Errorf("could not set executable permissions: %v", err)
 	}
 
 	fmt.Printf("Installation successful as %s\n", targetPath)

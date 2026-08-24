@@ -72,7 +72,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			OnlyMainGo:       false,
 		})
 		if err != nil {
-			return fmt.Errorf("ошибка поиска main файлов: %v", err)
+			return fmt.Errorf("error finding main files: %v", err)
 		}
 		if len(mainFiles) == 0 {
 			return fmt.Errorf("no Go main files found")

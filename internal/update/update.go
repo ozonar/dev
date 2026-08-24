@@ -31,7 +31,7 @@ func SelfUpdate() error {
 	}
 	releaseArch, ok := archMap[arch]
 	if !ok {
-		return fmt.Errorf("неподдерживаемая архитектура: %s", arch)
+		return fmt.Errorf("unsupported architecture: %s", arch)
 	}
 
 	// Имя файла в релизе: dev-{os}-{arch}, для windows добавляем .exe
@@ -44,7 +44,7 @@ func SelfUpdate() error {
 	// Определяем домашнюю директорию
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("не удалось получить домашнюю директорию: %v", err)
+		return fmt.Errorf("could not get home directory: %v", err)
 	}
 
 	// Скачиваем под именем "dev" (или "dev.exe" на windows)
@@ -54,50 +54,50 @@ func SelfUpdate() error {
 	}
 	tmpPath := filepath.Join(home, tmpName)
 
-	color.Cyan("Скачивание %s ...", downloadURL)
+	color.Cyan("Downloading %s ...", downloadURL)
 
 	// Скачиваем файл
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Get(downloadURL)
 	if err != nil {
-		return fmt.Errorf("ошибка скачивания: %v", err)
+		return fmt.Errorf("download failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("сервер вернул статус %d", resp.StatusCode)
+		return fmt.Errorf("server returned status %d", resp.StatusCode)
 	}
 
 	outFile, err := os.Create(tmpPath)
 	if err != nil {
-		return fmt.Errorf("не удалось создать файл %s: %v", tmpPath, err)
+		return fmt.Errorf("could not create file %s: %v", tmpPath, err)
 	}
 
 	written, err := io.Copy(outFile, resp.Body)
 	if err != nil {
 		outFile.Close()
 		os.Remove(tmpPath)
-		return fmt.Errorf("ошибка записи файла: %v", err)
+		return fmt.Errorf("file write failed: %v", err)
 	}
 	outFile.Close()
 
 	// Устанавливаем права на выполнение
 	if err := os.Chmod(tmpPath, 0755); err != nil {
 		os.Remove(tmpPath)
-		return fmt.Errorf("не удалось установить права на выполнение: %v", err)
+		return fmt.Errorf("could not set executable permissions: %v", err)
 	}
 
-	color.Green("Скачано %d байт в %s", written, tmpPath)
+	color.Green("Downloaded %d bytes to %s", written, tmpPath)
 
 	// Определяем текущий путь к dev через which/where
 	currentPath, err := findDevPath()
 	if err != nil {
 		os.Remove(tmpPath)
-		return fmt.Errorf("не удалось определить текущий путь dev: %v", err)
+		return fmt.Errorf("could not determine current dev path: %v", err)
 	}
 
-	color.Cyan("Текущий путь dev: %s", currentPath)
-	color.Cyan("Установка новой версии через скачанный файл...")
+	color.Cyan("Current dev path: %s", currentPath)
+	color.Cyan("Installing new version from the downloaded file...")
 
 	// Запускаем скачанный файл с командой install
 	// Передаём текущий путь как аргумент, чтобы install знал куда копировать
@@ -108,16 +108,16 @@ func SelfUpdate() error {
 
 	if err := cmd.Run(); err != nil {
 		os.Remove(tmpPath)
-		return fmt.Errorf("установка не удалась: %v", err)
+		return fmt.Errorf("installation failed: %v", err)
 	}
 
 	// Удаляем скачанный файл
-	color.Cyan("Удаление временного файла...")
+	color.Cyan("Removing temporary file...")
 	if err := os.Remove(tmpPath); err != nil {
-		return fmt.Errorf("не удалось удалить временный файл %s: %v", tmpPath, err)
+		return fmt.Errorf("could not remove temporary file %s: %v", tmpPath, err)
 	}
 
-	color.Green("Обновление завершено успешно!")
+	color.Green("Update completed successfully!")
 	return nil
 }
 
@@ -142,12 +142,12 @@ func findDevPath() (string, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("dev не найден в PATH")
+		return "", fmt.Errorf("dev not found in PATH")
 	}
 
 	path := strings.TrimSpace(string(out))
 	if path == "" {
-		return "", fmt.Errorf("dev не найден в PATH")
+		return "", fmt.Errorf("dev not found in PATH")
 	}
 
 	return path, nil

@@ -25,7 +25,7 @@ func Run(rawURL, method string) error {
 	// Парсим URL для получения имени хоста (для имени файла)
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("неверный URL: %v", err)
+		return fmt.Errorf("invalid URL: %v", err)
 	}
 
 	// Приводим метод к верхнему регистру
@@ -52,14 +52,14 @@ func Run(rawURL, method string) error {
 	// Создаём запрос
 	req, err := http.NewRequest(method, rawURL, nil)
 	if err != nil {
-		return fmt.Errorf("ошибка создания запроса: %v", err)
+		return fmt.Errorf("request creation failed: %v", err)
 	}
 
 	// Выполняем запрос
 	start := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("ошибка выполнения запроса: %v", err)
+		return fmt.Errorf("request execution failed: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -68,7 +68,7 @@ func Run(rawURL, method string) error {
 	// Читаем тело ответа
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("ошибка чтения ответа: %v", err)
+		return fmt.Errorf("response read failed: %v", err)
 	}
 
 	// Выводим статус
@@ -125,7 +125,7 @@ func saveToFile(host string, body []byte) error {
 	}
 
 	if err := os.WriteFile(filename, body, 0644); err != nil {
-		return fmt.Errorf("ошибка записи файла: %v", err)
+		return fmt.Errorf("file write failed: %v", err)
 	}
 
 	absPath, _ := filepath.Abs(filename)

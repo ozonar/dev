@@ -536,14 +536,14 @@ Examples:
 func runPortCheck(addr string) {
 	err := port.CheckPort(addr)
 	if err != nil {
-		color.Red("Ошибка: %v", err)
+		color.Red("Error: %v", err)
 	}
 }
 
 func runCurl(url, method string) {
 	err := curl.Run(url, method)
 	if err != nil {
-		color.Red("Ошибка: %v", err)
+		color.Red("Error: %v", err)
 	}
 }
 
@@ -555,7 +555,7 @@ The binary is downloaded to the home directory, installed via 'dev install',
 and then the temporary file is removed.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := update.SelfUpdate(); err != nil {
-			color.Red("Ошибка: %v", err)
+			color.Red("Error: %v", err)
 		}
 	},
 }
@@ -568,7 +568,7 @@ Creates the file with default empty parameters if it doesn't exist.
 Uses $EDITOR or nano by default.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := ai.EditConfig(); err != nil {
-			color.Red("Ошибка: %v", err)
+			color.Red("Error: %v", err)
 		}
 	},
 }
@@ -589,7 +589,7 @@ Use 'dev self-config' to set up your API endpoint, token, and model.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		text := strings.Join(args, " ")
 		if err := ai.RunAI(text); err != nil {
-			color.Red("Ошибка: %v", err)
+			color.Red("Error: %v", err)
 		}
 	},
 }

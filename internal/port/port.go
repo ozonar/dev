@@ -43,7 +43,7 @@ func KillProcessOnPort(port int) error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("не удалось найти процесс на порту %d: %v", port, err)
+		return fmt.Errorf("could not find process on port %d: %v", port, err)
 	}
 
 	pids := strings.Fields(string(output))
@@ -57,7 +57,7 @@ func KillProcessOnPort(port int) error {
 	killCmd.Stdout = os.Stdout
 	killCmd.Stderr = os.Stderr
 	if err := killCmd.Run(); err != nil {
-		return fmt.Errorf("не удалось убить процесс на порту %d: %v", port, err)
+		return fmt.Errorf("could not kill process on port %d: %v", port, err)
 	}
 	return nil
 }
@@ -68,7 +68,7 @@ func KillProcessOnPort(port int) error {
 func CheckPort(addr string) error {
 	host, port, err := parseAddr(addr)
 	if err != nil {
-		return fmt.Errorf("неверный формат адреса %q: %v", addr, err)
+		return fmt.Errorf("invalid address format %q: %v", addr, err)
 	}
 
 	var occupied bool
@@ -87,12 +87,12 @@ func CheckPort(addr string) error {
 		}
 
 		if !occupied {
-			fmt.Printf("Порт %s:%s — свободен\n", host, port)
+			fmt.Printf("Port %s:%s is free\n", host, port)
 			return nil
 		}
 
 		// Порт занят — показываем детали
-		fmt.Printf("Порт %s:%s — занят\n", host, port)
+		fmt.Printf("Port %s:%s is in use\n", host, port)
 		if procInfo != "" {
 			fmt.Println(procInfo)
 		}
@@ -129,7 +129,7 @@ func parseAddr(addr string) (host, port string, err error) {
 
 	parts := strings.Split(addr, ":")
 	if len(parts) != 2 {
-		return "", "", fmt.Errorf("ожидается формат host:port, получено %q", addr)
+		return "", "", fmt.Errorf("expected host:port format, got %q", addr)
 	}
 	host = parts[0]
 	port = parts[1]
@@ -214,7 +214,7 @@ func checkPortLsof(port string) (bool, string) {
 func runNmap(host, port string) {
 	p, err := strconv.Atoi(port)
 	if err != nil || p < 1 || p > 65535 {
-		fmt.Printf("неверный порт: %s\n", port)
+		fmt.Printf("invalid port: %s\n", port)
 		return
 	}
 

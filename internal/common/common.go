@@ -104,7 +104,7 @@ func RunCommandWithOutput(name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("команда %s %v завершилась с ошибкой: %v", name, args, err)
+		return "", fmt.Errorf("command %s %v failed: %v", name, args, err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }

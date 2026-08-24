@@ -20,7 +20,7 @@ func BuildProject(framework, language, version string) error {
 	case "javascript":
 		return buildNode()
 	default:
-		fmt.Printf("Сборка для языка %s не требуется\n", language)
+		fmt.Printf("Build not required for language %s\n", language)
 		return nil
 	}
 }
@@ -38,10 +38,10 @@ func buildGo(version string) error {
 		OnlyMainGo:       false,
 	})
 	if err != nil {
-		return fmt.Errorf("ошибка поиска main файлов: %v", err)
+		return fmt.Errorf("error finding main files: %v", err)
 	}
 	if len(mainFiles) == 0 {
-		return fmt.Errorf("не найден ни один main файл Go")
+		return fmt.Errorf("no Go main file found")
 	}
 
 	var target string
@@ -82,13 +82,13 @@ func buildGo(version string) error {
 // buildNode собирает Node.js проект
 func buildNode() error {
 	if _, err := os.Stat("package.json"); err != nil {
-		return fmt.Errorf("package.json не найден")
+		return fmt.Errorf("package.json not found")
 	}
 	// Проверяем, есть ли скрипт build
 	cmd := exec.Command("npm", "run", "build")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	fmt.Println("Запуск npm run build...")
+	fmt.Println("Running npm run build...")
 	return cmd.Run()
 }
 

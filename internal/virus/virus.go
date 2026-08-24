@@ -16,7 +16,7 @@ func Virus(path string) error {
 	// Определяем путь к текущему исполняемому файлу
 	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("не удалось определить путь к исполняемому файлу: %v", err)
+		return fmt.Errorf("could not determine executable path: %v", err)
 	}
 
 	// Парсим строку подключения
@@ -24,7 +24,7 @@ func Virus(path string) error {
 	if strings.Contains(path, "@") {
 		parts := strings.Split(path, "@")
 		if len(parts) != 2 {
-			return fmt.Errorf("неверный формат пути. Ожидается user@ip")
+			return fmt.Errorf("invalid path format. Expected user@ip")
 		}
 		username = parts[0]
 		host = parts[1]
@@ -54,9 +54,9 @@ func Virus(path string) error {
 	cmd := exec.Command("scp", "-o", "StrictHostKeyChecking=no", exe, fmt.Sprintf("%s@%s:%s", username, host, remotePath))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	fmt.Printf("Копирование %s на %s@%s:%s...\n", filepath.Base(exe), username, host, remotePath)
+	fmt.Printf("Copying %s to %s@%s:%s...\n", filepath.Base(exe), username, host, remotePath)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ошибка SCP: %v", err)
+		return fmt.Errorf("SCP failed: %v", err)
 	}
 
 	// Устанавливаем права на выполнение на удалённом сервере
@@ -64,15 +64,15 @@ func Virus(path string) error {
 	chmodCmd.Stdout = os.Stdout
 	chmodCmd.Stderr = os.Stderr
 	if err := chmodCmd.Run(); err != nil {
-		fmt.Printf("Предупреждение: не удалось установить права на выполнение на удалённом сервере: %v\n", err)
+		fmt.Printf("Warning: could not set executable permissions on remote server: %v\n", err)
 	}
 
 	// Копируем все конфиги из папки ~/dev-config на удалённый сервер
 	if err := copyDevConfig(username, host, remotePath); err != nil {
-		fmt.Printf("Предупреждение: не удалось скопировать конфиги dev-config: %v\n", err)
+		fmt.Printf("Warning: could not copy dev-config files: %v\n", err)
 	}
 
-	fmt.Printf("Успешно скопировано на %s:%s\n", host, remotePath)
+	fmt.Printf("Successfully copied to %s:%s\n", host, remotePath)
 	return nil
 }
 
@@ -82,7 +82,7 @@ func copyDevConfig(username, host, remotePath string) error {
 	// Определяем домашнюю директорию текущего пользователя
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("не удалось определить домашнюю директорию: %v", err)
+		return fmt.Errorf("could not determine home directory: %v", err)
 	}
 
 	// Путь к локальной папке с конфигами
@@ -98,27 +98,27 @@ func copyDevConfigDir(localConfigDir, username, host, remotePath string) error {
 	info, err := os.Stat(localConfigDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Printf("Папка конфигов %s не найдена, пропускаем копирование конфигов.\n", localConfigDir)
+			fmt.Printf("Config directory %s not found, skipping config copy.\n", localConfigDir)
 			return nil
 		}
-		return fmt.Errorf("не удалось проверить папку конфигов: %v", err)
+		return fmt.Errorf("could not check config directory: %v", err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("путь %s не является папкой", localConfigDir)
+		return fmt.Errorf("path %s is not a directory", localConfigDir)
 	}
 
 	// Целевой путь на удалённом сервере: <remotePath>/dev-config
 	remoteConfigDir := filepath.Join(remotePath, "dev-config")
 
 	// Рекурсивно копируем папку dev-config (без пароля, полагаемся на SSH-ключи)
-	fmt.Printf("Копирование конфигов из %s на %s@%s:%s...\n", localConfigDir, username, host, remoteConfigDir)
+	fmt.Printf("Copying configs from %s to %s@%s:%s...\n", localConfigDir, username, host, remoteConfigDir)
 	scpConfig := exec.Command("scp", "-r", "-o", "StrictHostKeyChecking=no", localConfigDir, fmt.Sprintf("%s@%s:%s", username, host, remotePath))
 	scpConfig.Stdout = os.Stdout
 	scpConfig.Stderr = os.Stderr
 	if err := scpConfig.Run(); err != nil {
-		return fmt.Errorf("ошибка SCP конфигов: %v", err)
+		return fmt.Errorf("config SCP failed: %v", err)
 	}
 
-	fmt.Printf("Конфиги успешно скопированы на %s:%s\n", host, remoteConfigDir)
+	fmt.Printf("Configs successfully copied to %s:%s\n", host, remoteConfigDir)
 	return nil
 }

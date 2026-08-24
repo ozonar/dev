@@ -509,7 +509,7 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 		// Парсим команды
 		var commands []CommandAction
 		if err := json.Unmarshal([]byte(content), &commands); err != nil {
-			color.Red("LLM вернул невалидный JSON (попытка %d/3)", attempt+1)
+			color.Red("LLM returned invalid JSON (attempt %d/3)", attempt+1)
 			// Добавляем в историю ответ LLM и просьбу исправиться
 			history = append(history, HistoryEntry{
 				Role:    "assistant",
@@ -525,7 +525,7 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 		return commands, nil
 	}
 
-	return nil, fmt.Errorf("LLM не смог вернуть валидный JSON после 3 попыток")
+	return nil, fmt.Errorf("LLM could not return valid JSON after 3 attempts")
 }
 
 // extractJSON извлекает JSON из markdown-блока если есть

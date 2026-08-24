@@ -32,7 +32,7 @@ func TestCopyDevConfigDirNotDir(t *testing.T) {
 	if err == nil {
 		t.Error("ожидалась ошибка, когда путь не является папкой")
 	}
-	if !strings.Contains(err.Error(), "не является папкой") {
-		t.Errorf("сообщение об ошибке должно содержать 'не является папкой', получено: %v", err)
+	if !strings.Contains(err.Error(), "is not a directory") {
+		t.Errorf("сообщение об ошибке должно содержать 'is not a directory', получено: %v", err)
 	}
 }
