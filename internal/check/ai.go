@@ -17,12 +17,9 @@ import (
 const maxCodeSize = 100000
 
 // RunAI выполняет AI-код-ревью изменённого кода.
-func RunAI(root string, opts Options, instruction string) error {
-	info, err := detector.DetectProject(root)
-	if err != nil {
-		return fmt.Errorf("failed to detect project: %v", err)
-	}
-
+// info — уже определённая информация о проекте (детекция и принудительный
+// язык из флагов выполняются на уровне команд перед вызовом).
+func RunAI(info *detector.ProjectInfo, opts Options, instruction string) error {
 	color.Green("Project: %s (%s)", info.Language, info.Framework)
 
 	// Определяем объём проверки.

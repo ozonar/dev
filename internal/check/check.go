@@ -20,12 +20,7 @@ type Options struct {
 }
 
 // Run выполняет статическую проверку кода анализаторами.
-func Run(root string, opts Options) error {
-	info, err := detector.DetectProject(root)
-	if err != nil {
-		return fmt.Errorf("failed to detect project: %v", err)
-	}
-
+func Run(info *detector.ProjectInfo, opts Options) error {
 	if info.Language == "" || info.Language == "unknown" {
 		return fmt.Errorf("unsupported project language: %q", info.Language)
 	}

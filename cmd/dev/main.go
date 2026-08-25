@@ -80,8 +80,120 @@ var runCmd = &cobra.Command{
 
 var runPort int
 
+// Флаги принудительного выбора языка для команд run/build/review.
+// Позволяют запустить/собрать/проверить код указанного языка, игнорируя
+// автоматическое определение проекта.
+var forcedGo, forcedPHP, forcedJS, forcedPython bool
+
+// forcedVersion — версия форсированного языка (флаг --version).
+var forcedVersion string
+
 func init() {
 	runCmd.Flags().IntVarP(&runPort, "port", "p", 0, "Port for the dev server (default: 8000)")
+	addLanguageFlags(runCmd, false)
+	addLanguageFlags(buildCmd, false)
+}
+
+// addLanguageFlags регистрирует флаги --go/--php/--js/--python на команде.
+// Если persistent=true — флаги добавляются как PersistentFlags (наследуются
+// подкомандами, например review fix / review ai).
+func addLanguageFlags(cmd *cobra.Command, persistent bool) {
+	f := cmd.Flags()
+	if persistent {
+		f = cmd.PersistentFlags()
+	}
+	f.BoolVar(&forcedGo, "go", false, "Force Go runtime (ignore detection)")
+	f.BoolVar(&forcedPHP, "php", false, "Force PHP runtime (ignore detection)")
+	f.BoolVar(&forcedJS, "js", false, "Force JavaScript/Node.js runtime (ignore detection)")
+	f.BoolVar(&forcedPython, "python", false, "Force Python runtime (ignore detection)")
+	f.StringVar(&forcedVersion, "version", "", "Force language version (e.g. 8.3 for PHP)")
+}
+
+// applyForcedLanguage переопределяет язык и framework проекта на основе флагов
+// --go/--php/--js/--python (если они заданы), игнорируя результат детектора.
+func applyForcedLanguage(info *detector.ProjectInfo) error {
+	// Выбираем язык по флагам; конфликт нескольких флагов недопустим.
+	lang, flag := "", ""
+	set := func(name, value string) error {
+		if lang != "" {
+			return fmt.Errorf("conflicting language flags: --%s and --%s",
+				flagName(flag), name)
+		}
+		lang, flag = value, name
+		return nil
+	}
+	if forcedGo {
+		if err := set("go", "go"); err != nil {
+			return err
+		}
+	}
+	if forcedPHP {
+		if err := set("php", "php"); err != nil {
+			return err
+		}
+	}
+	if forcedJS {
+		if err := set("js", "javascript"); err != nil {
+			return err
+		}
+	}
+	if forcedPython {
+		if err := set("python", "python"); err != nil {
+			return err
+		}
+	}
+
+	// Версия из --version применяется к любому выбранному языку: и к
+	// форсированному, и к детектированному (когда языковой флаг не задан).
+	if forcedVersion != "" {
+		info.LanguageVersion = forcedVersion
+	}
+
+	// Языковой флаг не задан — язык и framework оставляем детектированными.
+	if lang == "" {
+		return nil
+	}
+
+	// Перезаписываем информацию о проекте нужным языком.
+	info.Language = lang
+	// При форсировании языка версия от детектора к нему не относится —
+	// сбрасываем, чтобы рантайм выбирался системный/по умолчанию,
+	// если версия не задана явно через --version.
+	if forcedVersion == "" {
+		info.LanguageVersion = ""
+	}
+	switch lang {
+	case "go":
+		info.Framework = "go"
+	case "javascript":
+		info.Framework = "node"
+	case "python":
+		info.Framework = "python"
+	case "php":
+		info.Framework = "generic"
+	}
+	return nil
+}
+
+// flagName возвращает имя CLI-флага для внутреннего названия языка.
+func flagName(lang string) string {
+	if lang == "javascript" {
+		return "js"
+	}
+	return lang
+}
+
+// detectProject определяет проект и сразу применяет принудительный язык
+// из флагов --go/--php/--js/--python, если они заданы.
+func detectProject(cwd string) (*detector.ProjectInfo, error) {
+	info, err := detector.DetectProject(cwd)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyForcedLanguage(info); err != nil {
+		return nil, err
+	}
+	return info, nil
 }
 
 var dcrCmd = &cobra.Command{
@@ -379,7 +491,7 @@ func runLogs() {
 
 func runRun() {
 	cwd, _ := os.Getwd()
-	info, err := detector.DetectProject(cwd)
+	info, err := detectProject(cwd)
 	if err != nil {
 		color.Red("Error detecting project: %v", err)
 		return
@@ -440,7 +552,7 @@ func runVirus(path string) {
 
 func runBuild() {
 	cwd, _ := os.Getwd()
-	info, err := detector.DetectProject(cwd)
+	info, err := detectProject(cwd)
 	if err != nil {
 		color.Red("Error detecting project: %v", err)
 		return
@@ -660,6 +772,7 @@ func init() {
 	checkCmd.PersistentFlags().BoolVar(&checkAll, "all", false, "Check all code")
 	checkCmd.PersistentFlags().IntVar(&checkCommit, "commit", 0, "Check changed code plus last N commits")
 	checkCmd.PersistentFlags().StringVar(&checkBranch, "branch", "", "Check diff with the given branch (master|develop)")
+	addLanguageFlags(checkCmd, true)
 }
 
 // runCheck запускает статическую проверку кода.
@@ -668,7 +781,13 @@ func runCheck(opts check.Options) {
 	cwd, _ := os.Getwd()
 	applyCheckScopeFlags(&opts)
 
-	if err := check.Run(cwd, opts); err != nil {
+	info, err := detectProject(cwd)
+	if err != nil {
+		color.Red("Error detecting project: %v", err)
+		return
+	}
+
+	if err := check.Run(info, opts); err != nil {
 		color.Red("Check failed: %v", err)
 	}
 }
@@ -681,7 +800,13 @@ func runCheckAI(text string) {
 	opts := check.Options{}
 	applyCheckScopeFlags(&opts)
 
-	if err := check.RunAI(cwd, opts, text); err != nil {
+	info, err := detectProject(cwd)
+	if err != nil {
+		color.Red("Error detecting project: %v", err)
+		return
+	}
+
+	if err := check.RunAI(info, opts, text); err != nil {
 		color.Red("AI check failed: %v", err)
 	}
 }
