@@ -28,6 +28,21 @@ func (s Scope) GetChanges() string {
 	return s.Changes
 }
 
+// FilesWithExt возвращает файлы Scope с одним из переданных расширений.
+func (s Scope) FilesWithExt(exts ...string) []string {
+	extSet := make(map[string]bool, len(exts))
+	for _, e := range exts {
+		extSet[strings.ToLower(e)] = true
+	}
+	var result []string
+	for _, f := range s.Files {
+		if extSet[strings.ToLower(filepath.Ext(f))] {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
 // scopeKind — тип объёма проверки.
 type scopeKind int
 
@@ -111,7 +126,13 @@ func buildScope(kind scopeKind) Scope {
 		files := diffWithBranch("develop")
 		return makeScope(kind, "diff with develop", files, diffBranchText("develop", files))
 	default:
-		return Scope{Name: "all code"}
+		files := projectFiles()
+		return Scope{
+			kind:  scopeAll,
+			Name:  "all code",
+			Files: files,
+			Dirs:  uniqueDirs(files),
+		}
 	}
 }
 
@@ -341,6 +362,21 @@ func filterVendor(files []string) []string {
 		}
 	}
 	return result
+}
+
+// projectFiles возвращает список всех файлов проекта (отслеживаемых и
+// untracked), исключая каталоги вендоров через filterVendor. Используется
+// для полной проверки (scopeAll), когда нужно проверить весь код, а не
+// только изменения. Если git недоступен, возвращается пустой список.
+func projectFiles() []string {
+	var result []string
+	if out, err := gitOutput("ls-files"); err == nil {
+		result = append(result, lines(out)...)
+	}
+	if out, err := gitOutput("ls-files", "--others", "--exclude-standard"); err == nil {
+		result = append(result, lines(out)...)
+	}
+	return uniqueSorted(filterVendor(result))
 }
 
 // commitSubjectLimit — максимальная длина отображаемого текста коммита.

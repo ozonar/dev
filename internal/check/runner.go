@@ -45,8 +45,9 @@ func buildArgs(prog toolchain.Executable, scope Scope, mode Mode) []string {
 	case "phpstan":
 		// PHPStan не поддерживает автоисправление, поэтому режим fix не влияет.
 		args = append(args, "analyse", "--memory-limit=1G", "--level=5")
-		if len(scope.Files) > 0 {
-			args = append(args, scope.Files...)
+		files := scope.FilesWithExt(".php")
+		if len(files) > 0 {
+			args = append(args, files...)
 		} else {
 			args = append(args, ".")
 		}
@@ -59,8 +60,9 @@ func buildArgs(prog toolchain.Executable, scope Scope, mode Mode) []string {
 		if cfg := ensurePhpCsFixerConfig("."); cfg != "" {
 			args = append(args, "--config="+cfg)
 		}
-		if len(scope.Files) > 0 {
-			args = append(args, scope.Files...)
+		files := scope.FilesWithExt(".php")
+		if len(files) > 0 {
+			args = append(args, files...)
 		} else {
 			args = append(args, ".")
 		}
@@ -72,8 +74,9 @@ func buildArgs(prog toolchain.Executable, scope Scope, mode Mode) []string {
 		if mode == ModeFix {
 			args = append(args, "--write")
 		}
-		if len(scope.Files) > 0 {
-			args = append(args, scope.Files...)
+		files := scope.FilesWithExt(".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+		if len(files) > 0 {
+			args = append(args, files...)
 		} else {
 			args = append(args, ".")
 		}
@@ -84,8 +87,9 @@ func buildArgs(prog toolchain.Executable, scope Scope, mode Mode) []string {
 		if mode == ModeFix {
 			args = append(args, "--fix")
 		}
-		if len(scope.Files) > 0 {
-			args = append(args, scope.Files...)
+		files := scope.FilesWithExt(".py")
+		if len(files) > 0 {
+			args = append(args, files...)
 		} else {
 			args = append(args, ".")
 		}

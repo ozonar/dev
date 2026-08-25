@@ -460,3 +460,101 @@ func TestBuildScope_FiltersVendorDiff(t *testing.T) {
 		t.Fatal("scope.Files пуст, ожидался как минимум main.go")
 	}
 }
+
+// TestScopeFilesWithExt проверяет, что метод FilesWithExt возвращает только
+// файлы Scope с одним из переданных расширений (без учёта регистра).
+func TestScopeFilesWithExt(t *testing.T) {
+	s := Scope{Files: []string{"src/a.php", "web/app.ts", "lib/b.php", "lib/c.py"}}
+
+	if got := s.FilesWithExt(".php"); !reflect.DeepEqual(got, []string{"src/a.php", "lib/b.php"}) {
+		t.Errorf("FilesWithExt(.php) = %v", got)
+	}
+
+	// Несколько расширений и нечувствительность к регистру.
+	if got := s.FilesWithExt(".TS", ".PY"); !reflect.DeepEqual(got, []string{"web/app.ts", "lib/c.py"}) {
+		t.Errorf("FilesWithExt(.TS,.PY) = %v", got)
+	}
+
+	// Нет совпадений — пустой результат (fallback на "." происходит в buildArgs).
+	if got := s.FilesWithExt(".go"); len(got) != 0 {
+		t.Errorf("FilesWithExt(.go) = %v, want empty", got)
+	}
+}
+
+// TestBuildScope_AllCodeExcludesVendor проверяет, что полный анализ (scopeAll)
+// сразу собирает Files и Dirs проекта, исключая каталоги вендоров.
+func TestBuildScope_AllCodeExcludesVendor(t *testing.T) {
+	tmp := t.TempDir()
+
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+	} {
+		if err := gitRun(tmp, args...); err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+	}
+
+	writeFile(t, filepath.Join(tmp, "src", "app.php"), "<?php\n")
+	writeFile(t, filepath.Join(tmp, "tests", "T.php"), "<?php\n")
+	writeFile(t, filepath.Join(tmp, "vendor", "dep", "vendor.php"), "<?php\n")
+	writeFile(t, filepath.Join(tmp, "README.md"), "# readme\n")
+
+	if err := gitRun(tmp, "add", "."); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+	if err := gitRun(tmp, "commit", "-qm", "init"); err != nil {
+		t.Fatalf("git commit: %v", err)
+	}
+
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldDir) }()
+
+	scope := buildScope(scopeAll)
+
+	if scope.Name != "all code" {
+		t.Errorf("scopeAll name = %q, want %q", scope.Name, "all code")
+	}
+
+	// Вендорные файлы не должны попасть в список.
+	for _, f := range scope.Files {
+		if isVendorPath(f) {
+			t.Errorf("scopeAll содержит вендорный файл: %q", f)
+		}
+	}
+
+	// Исходные файлы должны присутствовать.
+	for _, want := range []string{"src/app.php", "tests/T.php"} {
+		found := false
+		for _, f := range scope.Files {
+			if f == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("scope.Files не содержит %q: %v", want, scope.Files)
+		}
+	}
+
+	// Dirs должны быть заполнены исходными директориями.
+	for _, want := range []string{"src", "tests"} {
+		found := false
+		for _, d := range scope.Dirs {
+			if d == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("scope.Dirs не содержит %q: %v", want, scope.Dirs)
+		}
+	}
+}
