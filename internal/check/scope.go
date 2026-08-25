@@ -85,23 +85,31 @@ func defaultScopeKind() scopeKind {
 	return scopeAll
 }
 
-// buildScope формирует Scope для заданного вида.
+// buildScope формирует Scope для заданного вида. Файлы из папок вендоров
+// исключаются как из списка файлов, так и из текста diff.
 func buildScope(kind scopeKind) Scope {
 	switch kind {
 	case scopeChanged:
-		return makeScope(kind, "changed code", changedFiles(), changedDiffText())
+		files := changedFiles()
+		return makeScope(kind, "changed code", files, changedDiffText(files))
 	case scopeFiles:
-		return makeScope(kind, "changed files", changedFiles(), changedDiffText())
+		files := changedFiles()
+		return makeScope(kind, "changed files", files, changedDiffText(files))
 	case scopeCommit1:
-		return makeScope(kind, "changed code + 1 commit", filesSinceCommit(1), diffSinceCommitText(1))
+		files := filesSinceCommit(1)
+		return makeScope(kind, "changed code + 1 commit", files, diffSinceCommitText(1, files))
 	case scopeCommit2:
-		return makeScope(kind, "changed code + 2 commits", filesSinceCommit(2), diffSinceCommitText(2))
+		files := filesSinceCommit(2)
+		return makeScope(kind, "changed code + 2 commits", files, diffSinceCommitText(2, files))
 	case scopeCommit3:
-		return makeScope(kind, "changed code + 3 commits", filesSinceCommit(3), diffSinceCommitText(3))
+		files := filesSinceCommit(3)
+		return makeScope(kind, "changed code + 3 commits", files, diffSinceCommitText(3, files))
 	case scopeMaster:
-		return makeScope(kind, "diff with master", diffWithBranch("master"), diffBranchText("master"))
+		files := diffWithBranch("master")
+		return makeScope(kind, "diff with master", files, diffBranchText("master", files))
 	case scopeDevelop:
-		return makeScope(kind, "diff with develop", diffWithBranch("develop"), diffBranchText("develop"))
+		files := diffWithBranch("develop")
+		return makeScope(kind, "diff with develop", files, diffBranchText("develop", files))
 	default:
 		return Scope{Name: "all code"}
 	}
@@ -136,34 +144,61 @@ func uniqueDirs(files []string) []string {
 	return dirs
 }
 
-// changedDiffText возвращает текст незакоммиченных изменений (unstaged + staged).
-func changedDiffText() string {
+// diffPathArgs формирует аргументы diff-команды для переданного списка путей.
+// Если список пуст, возвращается nil (diff по всему проекту не строится).
+func diffPathArgs(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	args := make([]string, 0, len(paths)+1)
+	args = append(args, "--")
+	args = append(args, paths...)
+	return args
+}
+
+// changedDiffText возвращает текст незакоммиченных изменений (unstaged + staged)
+func changedDiffText(paths []string) string {
+	pathArgs := diffPathArgs(paths)
+	if pathArgs == nil {
+		return ""
+	}
 	var sb strings.Builder
-	if out, err := gitOutput("diff"); err == nil {
+	if out, err := gitOutput(append([]string{"diff"}, pathArgs...)...); err == nil {
 		sb.WriteString(out)
 	}
-	if out, err := gitOutput("diff", "--cached"); err == nil {
+	if out, err := gitOutput(append([]string{"diff", "--cached"}, pathArgs...)...); err == nil {
 		sb.WriteString(out)
 	}
 	return sb.String()
 }
 
 // diffSinceCommitText возвращает текст изменений за последние n коммитов
-// вместе с незакоммиченными изменениями.
-func diffSinceCommitText(n int) string {
+// вместе с незакоммиченными изменениями, ограниченный переданными путями.
+func diffSinceCommitText(n int, paths []string) string {
+	pathArgs := diffPathArgs(paths)
+	if pathArgs == nil {
+		return ""
+	}
 	var sb strings.Builder
 	if n > 0 {
-		if out, err := gitOutput("diff", fmt.Sprintf("HEAD~%d", n), "HEAD"); err == nil {
+		base := []string{"diff", fmt.Sprintf("HEAD~%d", n), "HEAD"}
+		if out, err := gitOutput(append(base, pathArgs...)...); err == nil {
 			sb.WriteString(out)
 		}
 	}
-	sb.WriteString(changedDiffText())
+	sb.WriteString(changedDiffText(paths))
 	return sb.String()
 }
 
-// diffBranchText возвращает текст изменений текущей ветки относительно branch.
-func diffBranchText(branch string) string {
-	out, err := gitOutput("diff", "origin/"+branch+"...HEAD")
+// diffBranchText возвращает текст изменений текущей ветки относительно branch,
+// ограниченный переданными путями.
+func diffBranchText(branch string, paths []string) string {
+	pathArgs := diffPathArgs(paths)
+	if pathArgs == nil {
+		return ""
+	}
+	base := []string{"diff", "origin/" + branch + "...HEAD"}
+	out, err := gitOutput(append(base, pathArgs...)...)
 	if err != nil {
 		return ""
 	}
@@ -243,7 +278,7 @@ func changedFiles() []string {
 	if out, err := gitOutput("ls-files", "--others", "--exclude-standard"); err == nil {
 		result = append(result, lines(out)...)
 	}
-	return uniqueSorted(result)
+	return uniqueSorted(filterVendor(result))
 }
 
 // filesSinceCommit возвращает изменённые файлы за последние n коммитов
@@ -266,7 +301,46 @@ func diffWithBranch(branch string) []string {
 	if out, err := gitOutput("diff", "origin/"+branch+"...HEAD", "--name-only"); err == nil {
 		result = append(result, lines(out)...)
 	}
-	return uniqueSorted(result)
+	return uniqueSorted(filterVendor(result))
+}
+
+// vendorDirNames — имена каталогов вендоров, которые не должны попадать
+// на проверку: это внешний код, который не относится к разработке проекта.
+var vendorDirNames = map[string]bool{
+	"vendor":           true, // Go, PHP Composer и др.
+	"node_modules":     true, // npm/yarn/pnpm
+	"venv":             true, // Python virtualenv
+	".venv":            true, // Python virtualenv (скрытый вариант)
+	"bower_components": true, // Bower
+	"third_party":      true, // третья сторона
+	"Pods":             true, // CocoaPods
+	"__pycache__":      true, // Python кэш байт-кода
+	"site-packages":    true, // Python установленные пакеты
+	"dist":             true, // сборки (иногда содержат вендорный код)
+}
+
+// isVendorPath определяет, находится ли путь внутри каталога вендора.
+// Проверяются все сегменты пути, поэтому вложенные папки вендоров также
+// отфильтровываются. Пути нормализуются с прямыми слешами.
+func isVendorPath(path string) bool {
+	p := filepath.ToSlash(path)
+	for _, seg := range strings.Split(p, "/") {
+		if vendorDirNames[seg] {
+			return true
+		}
+	}
+	return false
+}
+
+// filterVendor оставляет только файлы, не находящиеся в каталогах вендоров.
+func filterVendor(files []string) []string {
+	var result []string
+	for _, f := range files {
+		if !isVendorPath(f) {
+			result = append(result, f)
+		}
+	}
+	return result
 }
 
 // commitSubjectLimit — максимальная длина отображаемого текста коммита.

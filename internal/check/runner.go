@@ -1,10 +1,12 @@
 package check
 
 import (
-	"dev/internal/toolchain"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+
+	"dev/internal/toolchain"
 
 	"github.com/fatih/color"
 )
@@ -49,10 +51,13 @@ func buildArgs(prog toolchain.Executable, scope Scope, mode Mode) []string {
 			args = append(args, ".")
 		}
 	case "php-cs-fixer":
-		// php-cs-fixer fix [--dry-run] <paths>. При пустых путях — текущая директория.
+		// php-cs-fixer fix [--dry-run] [--config=...] <paths>.
 		args = append(args, "fix")
 		if mode == ModeDryRun {
 			args = append(args, "--dry-run")
+		}
+		if cfg := ensurePhpCsFixerConfig("."); cfg != "" {
+			args = append(args, "--config="+cfg)
 		}
 		if len(scope.Files) > 0 {
 			args = append(args, scope.Files...)
@@ -137,4 +142,53 @@ func hasGoFiles(dir string) bool {
 		}
 	}
 	return false
+}
+
+// phpCsFixerConfigNames — стандартные имена конфигов php-cs-fixer,
+// которые могут существовать в проекте.
+var phpCsFixerConfigNames = []string{
+	".php-cs-fixer.php",
+	".php-cs-fixer.dist.php",
+	".php_cs",
+	".php_cs.dist",
+}
+
+// phpCsFixerDefaultConfig — содержимое генерируемого конфига php-cs-fixer
+// с базовыми правилами форматирования PSR-12.
+const phpCsFixerDefaultConfig = `<?php
+
+return (new PhpCsFixer\Config())
+    ->setRules([
+        '@PSR12' => true,
+    ]);` + "\n"
+
+// ensurePhpCsFixerConfig возвращает путь к конфигу php-cs-fixer.
+// Сначала ищется стандартный конфиг в проекте (dir) — он приоритетен, чтобы
+// уважать настройки проекта. Если конфига в проекте нет, генерируется файл
+// .php-cs-fixer.php в папке девконфига (~/dev-config)
+// (без конфига возникает ошибка "For multiple paths config parameter is required").
+func ensurePhpCsFixerConfig(dir string) string {
+	for _, name := range phpCsFixerConfigNames {
+		p := filepath.Join(dir, name)
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return p
+		}
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	devDir := filepath.Join(home, "dev-config")
+	if err := os.MkdirAll(devDir, 0o755); err != nil {
+		return ""
+	}
+	path := filepath.Join(devDir, "php-cs-fixer.php")
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	if err := os.WriteFile(path, []byte(phpCsFixerDefaultConfig), 0o644); err != nil {
+		return ""
+	}
+	return path
 }

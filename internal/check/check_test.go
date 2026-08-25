@@ -2,7 +2,9 @@ package check
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -68,18 +70,23 @@ func TestBuildArgs_Phpstan(t *testing.T) {
 // TestBuildArgs_PhpCsFixer проверяет построение аргументов PHP CS Fixer.
 func TestBuildArgs_PhpCsFixer(t *testing.T) {
 	prog := phpCsFixerLinter(toolchain.NewPhp(""))
+	// Конфиг генерируется в папке девконфига и всегда передаётся через --config.
+	cfg := ensurePhpCsFixerConfig(".")
+	configArg := "--config=" + cfg
 
-	// Dry-run добавляет флаг --dry-run.
+	// Dry-run добавляет флаг --dry-run и конфиг.
 	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
-	if got := strings.Join(args, " "); got != "fix --dry-run ." {
-		t.Errorf("php-cs-fixer dry-run all args = %q, want %q", got, "fix --dry-run .")
+	want := "fix --dry-run " + configArg + " ."
+	if got := strings.Join(args, " "); got != want {
+		t.Errorf("php-cs-fixer dry-run all args = %q, want %q", got, want)
 	}
 
-	// Fix-режим убирает --dry-run.
+	// Fix-режим убирает --dry-run, но сохраняет конфиг и пути файлов.
 	scope := Scope{Name: "changed", Files: []string{"src/a.php"}}
 	args = buildArgs(prog, scope, ModeFix)
-	if got := strings.Join(args, " "); got != "fix src/a.php" {
-		t.Errorf("php-cs-fixer fix args = %q, want %q", got, "fix src/a.php")
+	want = "fix " + configArg + " src/a.php"
+	if got := strings.Join(args, " "); got != want {
+		t.Errorf("php-cs-fixer fix args = %q, want %q", got, want)
 	}
 }
 
@@ -299,5 +306,157 @@ func TestGoDirArgs(t *testing.T) {
 	// Только несуществующие/пустые директории — тоже пусто.
 	if got := goDirArgs([]string{missing, noGo}); len(got) != 0 {
 		t.Errorf("goDirArgs(no go dirs) = %v, want empty", got)
+	}
+}
+
+// TestIsVendorPath проверяет распознавание путей внутри каталогов вендоров.
+func TestIsVendorPath(t *testing.T) {
+	vendor := []string{
+		"vendor/github.com/pkg/errors/errors.go",
+		"vendor/foo/bar.go",
+		"src/vendor/a.go",
+		"node_modules/lodash/index.js",
+		"app/node_modules/pkg/main.ts",
+		"venv/lib/python/site.py",
+		".venv/bin/pip",
+		"Pods/AFNetworking/AFNetworking.h",
+		"bower_components/jquery/dist/jquery.js",
+		"third_party/protobuf/foo.pb.go",
+		"lib/site-packages/requests/api.py",
+		"src/__pycache__/mod.cpython-311.pyc",
+	}
+	for _, p := range vendor {
+		if !isVendorPath(p) {
+			t.Errorf("isVendorPath(%q) = false, want true", p)
+		}
+	}
+
+	notVendor := []string{
+		"src/main.go",
+		"cmd/dev/main.go",
+		"README.md",
+		"internal/pkg/core.go",
+		"dist-not-vendor/file.txt", // имя начинается с "dist", но это не каталог dist
+	}
+	for _, p := range notVendor {
+		if isVendorPath(p) {
+			t.Errorf("isVendorPath(%q) = true, want false", p)
+		}
+	}
+}
+
+// TestFilterVendor проверяет, что filterVendor отбрасывает файлы из папок
+// вендоров, сохраняя остальные.
+func TestFilterVendor(t *testing.T) {
+	input := []string{
+		"src/main.go",
+		"vendor/github.com/pkg/errors/errors.go",
+		"cmd/dev/main.go",
+		"node_modules/lodash/index.js",
+		"internal/pkg/core.go",
+		"venv/bin/activate",
+	}
+	got := filterVendor(input)
+	want := []string{
+		"src/main.go",
+		"cmd/dev/main.go",
+		"internal/pkg/core.go",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("filterVendor = %v, want %v", got, want)
+	}
+}
+
+// TestDiffPathArgs проверяет построение аргументов diff для списка путей:
+// добавляется разделитель "--" перед путями; пустой список даёт nil.
+func TestDiffPathArgs(t *testing.T) {
+	if got := diffPathArgs(nil); got != nil {
+		t.Errorf("diffPathArgs(nil) = %v, want nil", got)
+	}
+	if got := diffPathArgs([]string{}); got != nil {
+		t.Errorf("diffPathArgs(empty) = %v, want nil", got)
+	}
+
+	got := diffPathArgs([]string{"src/a.go", "cmd/main.go"})
+	want := []string{"--", "src/a.go", "cmd/main.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("diffPathArgs = %v, want %v", got, want)
+	}
+}
+
+// gitRun запускает git-команду в заданной директории и возвращает ошибку.
+func gitRun(dir string, args ...string) error {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	return cmd.Run()
+}
+
+// writeFile создаёт файл (и каталоги) и записывает содержимое.
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+// TestBuildScope_FiltersVendorDiff проверяет, что изменённый файл внутри
+// папки вендора исключается из scope как из списка файлов, так и из diff.
+func TestBuildScope_FiltersVendorDiff(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Инициализируем git-репозиторий.
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+	} {
+		if err := gitRun(tmp, args...); err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+	}
+
+	// Создаём и коммитим два файла: обычный и внутри vendor.
+	writeFile(t, filepath.Join(tmp, "main.go"), "package main\nfunc main() {}\n")
+	writeFile(t, filepath.Join(tmp, "vendor", "dep", "dep.go"), "package dep\n")
+	if err := gitRun(tmp, "add", "."); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+	if err := gitRun(tmp, "commit", "-qm", "init"); err != nil {
+		t.Fatalf("git commit: %v", err)
+	}
+
+	// Вносим изменения в оба файла.
+	writeFile(t, filepath.Join(tmp, "main.go"), "package main\n\nfunc main() { println(\"hi\") }\n")
+	writeFile(t, filepath.Join(tmp, "vendor", "dep", "dep.go"), "package dep\n\n// vendor change\n")
+
+	// Переключаем рабочую директорию на временный репозиторий и обязательно
+	// восстанавливаем исходную после теста.
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldDir) }()
+
+	scope := buildScope(scopeChanged)
+
+	// Файл вендора не должен попасть в список файлов.
+	for _, f := range scope.Files {
+		if isVendorPath(f) {
+			t.Errorf("scope.Files содержит вендорный файл: %q", f)
+		}
+	}
+	// Текст изменений не должен содержать упоминание вендорного файла.
+	if strings.Contains(scope.Changes, "vendor/dep/dep.go") {
+		t.Errorf("scope.Changes не должен содержать diff вендорного файла:\n%s", scope.Changes)
+	}
+	// Обычный файл должен остаться в списке.
+	if len(scope.Files) == 0 {
+		t.Fatal("scope.Files пуст, ожидался как минимум main.go")
 	}
 }

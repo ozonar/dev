@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"dev/internal/detector"
+	"dev/internal/toolchain"
 
 	"github.com/fatih/color"
 )
@@ -55,12 +56,15 @@ func Run(root string, opts Options) error {
 	}
 	color.Cyan("Mode: %s\n", modeLabel)
 
-	// Запускаем все программы.
+	// Запускаем линтеры
 	for _, prog := range programs {
+		if _, isRuntime := prog.(toolchain.Runtime); isRuntime {
+			continue
+		}
 		printProgramHeader(prog)
 		args := buildArgs(prog, scope, opts.Mode)
 		if err := runProgram(manager, prog, args); err != nil {
-			color.Red("%s finished with error: %v", prog.Name, err)
+			color.Red("%s finished with error: %v", prog.Name(), err)
 		}
 	}
 
