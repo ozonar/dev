@@ -13,6 +13,7 @@ import (
 	"dev/internal/check"
 	"dev/internal/curl"
 	"dev/internal/db"
+	"dev/internal/debug"
 	"dev/internal/detector"
 	"dev/internal/docker"
 	"dev/internal/install"
@@ -92,6 +93,8 @@ func init() {
 	runCmd.Flags().IntVarP(&runPort, "port", "p", 0, "Port for the dev server (default: 8000)")
 	addLanguageFlags(runCmd, false)
 	addLanguageFlags(buildCmd, false)
+	addLanguageFlags(debugCmd, false)
+	debugCmd.Flags().IntVarP(&debugPort, "port", "p", 0, "Port for the PHP debug server (default: 8000)")
 }
 
 // addLanguageFlags регистрирует флаги --go/--php/--js/--python на команде.
@@ -242,6 +245,34 @@ var buildCmd = &cobra.Command{
 	Short: "Build the project",
 	Run: func(cmd *cobra.Command, args []string) {
 		runBuild()
+	},
+}
+
+// debugPort — порт для PHP-сервера в рамках dev debug.
+var debugPort int
+
+var debugCmd = &cobra.Command{
+	Use:     "debug [params]",
+	Aliases: []string{"dbg"},
+	Short:   "Run the project under a debugger",
+	Long: `Run the current project under a debugger.
+
+For Go projects, Delve (dlv) is installed on demand and the program is run
+under it: dlv debug <package> -- <params>. Any arguments after 'debug' are
+passed to the debugged program.
+
+For PHP projects, Xdebug is downloaded and built from source, then the dev
+server is started with the Xdebug extension enabled, according to the project
+framework (Symfony, Laravel, Yii or the built-in PHP server).
+
+Examples:
+  dev debug
+  dev debug serve --addr=:8080
+  dev debug --go
+  dev debug --php`,
+	Args: cobra.ArbitraryArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		runDebug(args)
 	},
 }
 
@@ -567,6 +598,28 @@ func runBuild() {
 	color.Green("Build successful.")
 }
 
+func runDebug(params []string) {
+	cwd, _ := os.Getwd()
+	info, err := detectProject(cwd)
+	if err != nil {
+		color.Red("Error detecting project: %v", err)
+		return
+	}
+
+	color.Green("Debugging project: %s (%s)", info.Framework, info.Language)
+	opts := debug.Options{
+		Framework: info.Framework,
+		Language:  info.Language,
+		Version:   info.LanguageVersion,
+		PublicDir: info.PublicDir,
+		Params:    params,
+		Port:      debugPort,
+	}
+	if err := debug.Run(opts); err != nil {
+		color.Red("Debug failed: %v", err)
+	}
+}
+
 func runMigrate() {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
@@ -839,6 +892,7 @@ func main() {
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(virusCmd)
 	rootCmd.AddCommand(buildCmd)
+	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(dbCmd)
 	rootCmd.AddCommand(portCmd)
