@@ -14,9 +14,11 @@ import (
 	"github.com/ulikunitz/xz"
 )
 
-// download скачивает программу в папку инструментов. Если у программы задан
-// тип архива (Archive), архив распаковывается целиком в папку инструментов,
-// сохраняя внутреннюю структуру. Иначе скачанный файл кладётся по пути Binary.
+// download скачивает программу в папку инструментов. Установка выполняется
+// атомарно: архив (или простой файл) сначала раскладывается во временную папку
+// внутри папки инструментов, и только после полного успеха переносится в
+// целевую папку версии. Это исключает появление «установленной», но битой
+// версии при прерывании загрузки или распаковки.
 func (m *Manager) download(ex Executable) error {
 	if err := os.MkdirAll(m.dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %v", m.dir, err)
@@ -47,39 +49,45 @@ func (m *Manager) download(ex Executable) error {
 	}
 	tmpFile.Close()
 
-	// Папка, в которую распаковывается/сохраняется программа (учитывает версию).
-	progDir := m.programDir(ex)
+	// Распаковываем во временную папку в корне папки инструментов (та же ФС,
+	// что и целевая, поэтому финальный rename атомарен). Папка .install-* не
+	// попадает в downloadedVersions, которая смотрит только подпапки <имя>/.
+	tmpDir, err := os.MkdirTemp(m.dir, ".install-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
 
 	switch ex.Archive() {
 	case "tar.gz":
-		if err := extractTarGzAll(tmpName, progDir); err != nil {
+		if err := extractTarGzAll(tmpName, tmpDir); err != nil {
 			return fmt.Errorf("error extracting %s: %v", ex.Name(), err)
 		}
 	case "tar.xz":
-		if err := extractTarXZAll(tmpName, progDir); err != nil {
+		if err := extractTarXZAll(tmpName, tmpDir); err != nil {
 			return fmt.Errorf("error extracting %s: %v", ex.Name(), err)
 		}
 	case "zip":
-		if err := extractZipAll(tmpName, progDir); err != nil {
+		if err := extractZipAll(tmpName, tmpDir); err != nil {
 			return fmt.Errorf("error extracting %s: %v", ex.Name(), err)
 		}
 	default:
-		// Простой файл — перемещаем на место.
-		target := m.BinaryPath(ex)
-		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for %s: %v", ex.Name(), err)
-		}
-		if err := os.Rename(tmpName, target); err != nil {
-			if err := copyFile(tmpName, target); err != nil {
-				return fmt.Errorf("error saving %s: %v", ex.Name(), err)
-			}
-			os.Remove(tmpName)
+		// Простой файл — кладём в корень временной папки.
+		target := filepath.Join(tmpDir, filepath.Base(ex.Binary()))
+		if err := copyFile(tmpName, target); err != nil {
+			return fmt.Errorf("error saving %s: %v", ex.Name(), err)
 		}
 	}
 
-	// Даём права на выполнение.
-	if err := os.Chmod(m.BinaryPath(ex), 0755); err != nil {
+	// Даём права на выполнение исполняемому файлу.
+	if err := os.Chmod(filepath.Join(tmpDir, ex.Binary()), 0755); err != nil {
 		return fmt.Errorf("failed to set permissions on %s: %v", ex.Name(), err)
+	}
+
+	// Атомарно переносим готовую папку в целевую папку версии.
+	progDir := m.programDir(ex)
+	if err := replaceDir(progDir, tmpDir); err != nil {
+		return fmt.Errorf("failed to install %s: %v", ex.Name(), err)
 	}
 
 	return nil

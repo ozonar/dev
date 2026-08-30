@@ -90,9 +90,24 @@ func (m *Manager) BinaryPath(ex Executable) string {
 }
 
 // IsInstalled проверяет, существует ли исполняемый файл программы нужной версии.
+// Установка выполняется атомарно (см. download), поэтому наличие бинаря
+// гарантирует, что версия полностью распакована и готова к запуску.
 func (m *Manager) IsInstalled(ex Executable) bool {
 	_, err := os.Stat(m.BinaryPath(ex))
 	return err == nil
+}
+
+// replaceDir атомарно заменяет папку dst содержимым src: удаляет прежнее
+// значение и перемещает src на место dst. Гарантирует, что dst всегда содержит
+// либо полностью готовую программу, либо отсутствует вовсе (никогда — частично
+// распакованную).
+func replaceDir(dst, src string) error {
+	if _, err := os.Lstat(dst); err == nil {
+		if err := os.RemoveAll(dst); err != nil {
+			return err
+		}
+	}
+	return os.Rename(src, dst)
 }
 
 // Command строит имя команды и список аргументов для запуска программы,

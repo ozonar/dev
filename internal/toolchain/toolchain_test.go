@@ -212,6 +212,45 @@ func installProgram(t *testing.T, m *Manager, ex Executable) {
 	}
 }
 
+// TestReplaceDir проверяет атомарную замену папки версии: новое содержимое
+// попадает на место старого, а временная папка исчезает.
+func TestReplaceDir(t *testing.T) {
+	root := t.TempDir()
+	dst := filepath.Join(root, "go", "1.22")
+	src := filepath.Join(root, ".install-123")
+
+	// Старая (битая) версия уже существует на месте.
+	if err := os.MkdirAll(filepath.Join(dst, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "bin", "go"), []byte("old"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Готовим новую, полностью распакованную версию.
+	if err := os.MkdirAll(filepath.Join(src, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "bin", "go"), []byte("new"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := replaceDir(dst, src); err != nil {
+		t.Fatalf("replaceDir: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dst, "bin", "go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "new" {
+		t.Errorf("после replaceDir содержимое = %q, want new", data)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Errorf("временная папка должна быть перемещена, got err=%v", err)
+	}
+}
+
 // TestRuntimeResolveMatchesMinor проверяет, что резолюция находит скачанную
 // полную версию (1.22.12) по минорному требованию (1.22) без сети.
 func TestRuntimeResolveMatchesMinor(t *testing.T) {
