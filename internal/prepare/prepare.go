@@ -76,11 +76,6 @@ func PrepareProject(framework, language string) error {
 
 		action := &actions[idx-1]
 
-		if action.Status == StatusDone {
-			fmt.Println(colors.Yellow("Action already completed. Skipping."))
-			continue
-		}
-
 		fmt.Printf("\n%s %s...\n", colors.Cyan("▶"), action.Name)
 		err = action.Run()
 		if err != nil {
