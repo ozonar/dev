@@ -74,9 +74,9 @@ func TestBuildArgs_PhpCsFixer(t *testing.T) {
 	cfg := ensurePhpCsFixerConfig(".")
 	configArg := "--config=" + cfg
 
-	// Dry-run добавляет флаг --dry-run и конфиг.
+	// Dry-run добавляет флаг --dry-run и конфиг. Кэш всегда отключён.
 	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
-	want := "fix --dry-run " + configArg + " ."
+	want := "fix --using-cache=no --dry-run " + configArg + " ."
 	if got := strings.Join(args, " "); got != want {
 		t.Errorf("php-cs-fixer dry-run all args = %q, want %q", got, want)
 	}
@@ -84,7 +84,7 @@ func TestBuildArgs_PhpCsFixer(t *testing.T) {
 	// Fix-режим убирает --dry-run, но сохраняет конфиг и пути файлов.
 	scope := Scope{Name: "changed", Files: []string{"src/a.php"}}
 	args = buildArgs(prog, scope, ModeFix)
-	want = "fix " + configArg + " src/a.php"
+	want = "fix --using-cache=no " + configArg + " src/a.php"
 	if got := strings.Join(args, " "); got != want {
 		t.Errorf("php-cs-fixer fix args = %q, want %q", got, want)
 	}

@@ -52,8 +52,10 @@ func buildArgs(prog toolchain.Executable, scope Scope, mode Mode) []string {
 			args = append(args, ".")
 		}
 	case "php-cs-fixer":
-		// php-cs-fixer fix [--dry-run] [--config=...] <paths>.
+		// php-cs-fixer fix [--dry-run] [--using-cache=no] [--config=...] <paths>.
 		args = append(args, "fix")
+		// Отключаем кэш, чтобы не создавать файл .php-cs-fixer.cache в проекте.
+		args = append(args, "--using-cache=no")
 		if mode == ModeDryRun {
 			args = append(args, "--dry-run")
 		}
