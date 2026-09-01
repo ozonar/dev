@@ -166,12 +166,9 @@ func Install(sourceFile string) error {
 		return fmt.Errorf("Attempting to install %[1]s into itself.\n", targetPath)
 	}
 
-	// Убиваем процесс, использующий целевой файл (если такой есть)
-	fuserCmd := exec.Command("fuser", "-k", targetPath)
-	fuserOutput, _ := fuserCmd.CombinedOutput()
-	if len(fuserOutput) > 0 {
-		fmt.Printf("  %s", string(fuserOutput))
-	}
+	// Убиваем процесс, использующий целевой файл (если такой есть).
+	// Вывод fuser не показываем, чтобы не засорять консоль после промпта выбора.
+	_ = exec.Command("fuser", "-k", targetPath).Run()
 
 	// Копируем файл
 	srcFile, err := os.Open(srcPath)
