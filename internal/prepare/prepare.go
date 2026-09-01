@@ -392,6 +392,17 @@ func buildActions(framework, language string) []Action {
 		})
 	}
 
+	// 10.1. Синхронизация переменных окружения между основным .env и его доп.файлами.
+	// Находим доп.файлы к .env (например .env.dist, .env.local), исключая .env.test*,
+	// и для каждого создаём действие переноса недостающих переменных.
+	if common.FileExists(".env") {
+		actions = append(actions, buildEnvSyncActions(".env", findEnvSourceFiles(".", ".env", true))...)
+	}
+	// Для тестового окружения сравниваем .env.test с его доп.файлами (.env.test*).
+	if common.FileExists(".env.test") {
+		actions = append(actions, buildEnvSyncActions(".env.test", findEnvSourceFiles(".", ".env.test", false))...)
+	}
+
 	// 11. git submodule update --init --recursive
 	if common.FileExists(".gitmodules") {
 		actions = append(actions, Action{
@@ -539,6 +550,151 @@ func copyEnvFiles(sources []string) error {
 		}
 	}
 	return fmt.Errorf("no .env source file found")
+}
+
+// parseEnvVariables читает файл формата .env и возвращает карту переменных
+// (имя → значение). Пропускаются пустые строки и комментарии, начинающиеся с #.
+// Из значений снимаются обрамляющие одинарные/двойные кавычки.
+func parseEnvVariables(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	vars := make(map[string]string)
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Убираем необязательный префикс export
+		line = strings.TrimPrefix(line, "export ")
+		idx := strings.Index(line, "=")
+		if idx < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:idx])
+		if key == "" {
+			continue
+		}
+		val := strings.TrimSpace(line[idx+1:])
+		val = strings.Trim(val, "\"'")
+		vars[key] = val
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return vars, nil
+}
+
+// findEnvSourceFiles возвращает файлы в директории dir, чьи имена начинаются
+// с префикса base, исключая сам базовый файл base. Если excludeTest истинно,
+// файлы, содержащие в имени подстроку ".test", исключаются.
+func findEnvSourceFiles(dir, base string, excludeTest bool) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if name == base || !strings.HasPrefix(name, base) {
+			continue
+		}
+		if excludeTest && strings.Contains(name, ".test") {
+			continue
+		}
+		files = append(files, filepath.Join(dir, name))
+	}
+	return files
+}
+
+// buildEnvSyncActions строит действия переноса переменных из каждого source-файла
+// в целевой файл target. Статус действия:
+//   - StatusDone, если все переменные source уже присутствуют в target;
+//   - StatusPending, если в target отсутствуют какие-то переменные source.
+//
+// Run выполняет фактический перенос недостающих переменных из source в target.
+func buildEnvSyncActions(target string, sources []string) []Action {
+	targetVars, err := parseEnvVariables(target)
+	if err != nil {
+		return nil
+	}
+	var actions []Action
+	for _, src := range sources {
+		srcVars, err := parseEnvVariables(src)
+		if err != nil {
+			continue
+		}
+		var missing []string
+		for k := range srcVars {
+			if _, ok := targetVars[k]; !ok {
+				missing = append(missing, k)
+			}
+		}
+		status := StatusDone
+		desc := fmt.Sprintf("All variables from %s are already in %s", src, target)
+		if len(missing) > 0 {
+			status = StatusPending
+			desc = fmt.Sprintf("Missing in %s: %s", target, strings.Join(missing, ", "))
+		}
+		srcCopy := src
+		actions = append(actions, Action{
+			Name:        fmt.Sprintf("Transfer to %s from %s", target, src),
+			Description: desc,
+			Status:      status,
+			Run: func() error {
+				return mergeEnvFile(target, srcCopy)
+			},
+		})
+	}
+	return actions
+}
+
+// mergeEnvFile дописывает в файл target недостающие переменные из файла source.
+// Существующие переменные не перезаписываются; новые добавляются в порядке source.
+func mergeEnvFile(target, source string) error {
+	targetVars, err := parseEnvVariables(target)
+	if err != nil {
+		return fmt.Errorf("failed to parse %s: %v", target, err)
+	}
+	srcVars, err := parseEnvVariables(source)
+	if err != nil {
+		return fmt.Errorf("failed to parse %s: %v", source, err)
+	}
+	var lines []string
+	for k, v := range srcVars {
+		if _, ok := targetVars[k]; !ok {
+			lines = append(lines, k+"="+v)
+		}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return fmt.Errorf("failed to stat %s: %v", target, err)
+	}
+	f, err := os.OpenFile(target, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	// Перед добавлением гарантируем наличие перевода строки
+	if info.Size() > 0 {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+	for _, l := range lines {
+		if _, err := f.WriteString(l + "\n"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // findGenericCacheDirs ищет все директории с именем cache рекурсивно,
