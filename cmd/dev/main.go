@@ -261,8 +261,8 @@ For Go projects, Delve (dlv) is installed on demand and the program is run
 under it: dlv debug <package> -- <params>. Any arguments after 'debug' are
 passed to the debugged program.
 
-For PHP projects, Xdebug is downloaded and built from source, then the dev
-server is started with the Xdebug extension enabled, according to the project
+For PHP projects, the local PHP must already have the Xdebug extension loaded;
+the dev server is then started with Xdebug enabled, according to the project
 framework (Symfony, Laravel, Yii or the built-in PHP server).
 
 Examples:

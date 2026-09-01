@@ -560,14 +560,10 @@ func parseConnectionString(url, dbType string) *DatabaseInfo {
 		location = LocationLocal
 	} else if strings.Contains(host, "docker") || strings.Contains(host, "container") {
 		location = LocationDocker
-	} else {
-		// Эвристика: если хост не содержит точек и не является IP адресом, то вероятно docker контейнер
-		if !strings.Contains(host, ".") && !strings.Contains(host, ":") {
-			// Проверяем, не является ли числовым IP (например, "192168")
-			// Простая проверка: если host состоит только из цифр и точек, то это IP, но точек нет
-			// Считаем docker
-			location = LocationDocker
-		}
+	} else if !strings.Contains(host, ".") && !strings.Contains(host, ":") {
+		// Эвристика: имя без точек и двоеточий (например имя compose-сервиса)
+		// считаем docker-контейнером.
+		location = LocationDocker
 	}
 
 	return &DatabaseInfo{

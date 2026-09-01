@@ -185,15 +185,13 @@ func ensureDebugPortFree(portNum int) error {
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
-	if input == "n" || input == "N" || input == "no" || input == "NO" {
+	if strings.EqualFold(input, "n") || strings.EqualFold(input, "no") {
 		return fmt.Errorf("port %d is already in use", portNum)
 	}
 
 	if err := port.KillProcessOnPort(portNum); err != nil {
 		color.Yellow("  %v", err)
 	}
-	fuserCmd := exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", portNum))
-	fuserCmd.Run()
 
 	color.Green("Process on port %d killed.", portNum)
 	return nil
@@ -203,7 +201,7 @@ func ensureDebugPortFree(portNum int) error {
 // Сначала проверяется системный dlv; если его нет — устанавливается через
 // go install github.com/go-delve/delve/cmd/dlv@latest.
 func installDlv(goPath string) (string, error) {
-	if p := lookupSystem("dlv"); p != "" {
+	if p, err := exec.LookPath("dlv"); err == nil {
 		color.Cyan("Using local Delve: %s", p)
 		return p, nil
 	}
@@ -293,14 +291,4 @@ func phpHasXdebug(phpPath string) bool {
 		return false
 	}
 	return strings.Contains(strings.ToLower(string(out)), "xdebug")
-}
-
-// lookupSystem ищет исполняемый файл в PATH. Пустая строка означает,
-// что инструмент в системе отсутствует.
-func lookupSystem(name string) string {
-	path, err := exec.LookPath(name)
-	if err != nil {
-		return ""
-	}
-	return path
 }
