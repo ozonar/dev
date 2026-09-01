@@ -63,7 +63,8 @@ func KillProcessOnPort(port int) error {
 }
 
 // CheckPort проверяет, занят ли указанный адрес:порт, и если да — показывает
-// информацию о процессе и предлагает запустить nmap для детекции сервиса.
+// информацию о процессе и предлагает выбор: убить процесс или запустить nmap
+// для детекции сервиса. По умолчанию выбирается убийство процесса.
 // Формат addr: "127.0.0.1:1000", ":8080" или просто "8080"
 func CheckPort(addr string) error {
 	host, port, err := parseAddr(addr)
@@ -96,15 +97,32 @@ func CheckPort(addr string) error {
 		fmt.Println(procInfo)
 	}
 
-	// Спрашиваем, запускать ли nmap (по умолчанию — да).
-	fmt.Print("\nWant nmap for port? [Y/n]: ")
+	// Предлагаем выбор: убить процесс или запустить nmap (по умолчанию — убить).
+	fmt.Println("\n1. Kill the process occupying the port")
+	fmt.Println("2. Run nmap")
+	fmt.Print("Choose (default 1): ")
+
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 
-	if !strings.EqualFold(input, "n") && !strings.EqualFold(input, "no") {
+	switch input {
+	case "", "1":
+		// По умолчанию и явный выбор "1" — убиваем процесс на порту
+		portNum, err := strconv.Atoi(port)
+		if err != nil {
+			return fmt.Errorf("invalid port %q: %v", port, err)
+		}
+		fmt.Printf("Killing process on port %s:%s...\n", host, port)
+		if err := KillProcessOnPort(portNum); err != nil {
+			return fmt.Errorf("failed to kill process on port %s:%s: %v", host, port, err)
+		}
+		fmt.Println("Process killed")
+	case "2":
 		fmt.Println()
 		runNmap(host, port)
+	default:
+		fmt.Println("Invalid selection, nothing done")
 	}
 
 	return nil
