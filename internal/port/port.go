@@ -104,12 +104,12 @@ func CheckPort(addr string) error {
 	}
 
 	// Для локальных — спрашиваем, запускать ли nmap
-	fmt.Print("\nWant nmap for port? [y/N]: ")
+	fmt.Print("\nWant nmap for port? [Y/n]: ")
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 
-	if input == "y" || input == "Y" || input == "yes" || input == "YES" {
+	if !strings.EqualFold(input, "n") && !strings.EqualFold(input, "no") {
 		fmt.Println()
 		runNmap(host, port)
 	}
