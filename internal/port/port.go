@@ -71,39 +71,32 @@ func CheckPort(addr string) error {
 		return fmt.Errorf("invalid address format %q: %v", addr, err)
 	}
 
-	var occupied bool
-	var procInfo string
-
-	if isLocalHost(host) {
-		// Для локальных хостов — проверка через fuser/ss/lsof
-		occupied, procInfo = checkPortFuser(port)
-
-		if !occupied {
-			occupied, procInfo = checkPortSS(port)
-		}
-
-		if !occupied {
-			occupied, procInfo = checkPortLsof(port)
-		}
-
-		if !occupied {
-			fmt.Printf("Port %s:%s is free\n", host, port)
-			return nil
-		}
-
-		// Порт занят — показываем детали
-		fmt.Printf("Port %s:%s is in use\n", host, port)
-		if procInfo != "" {
-			fmt.Println(procInfo)
-		}
-	} else {
+	if !isLocalHost(host) {
 		// Для удалённых хостов — сразу запускаем nmap без вопроса
 		fmt.Println()
 		runNmap(host, port)
 		return nil
 	}
 
-	// Для локальных — спрашиваем, запускать ли nmap
+	portNum, err := strconv.Atoi(port)
+	if err != nil {
+		return fmt.Errorf("invalid port %q: %v", port, err)
+	}
+
+	// Для локальных хостов — проверка через fuser/ss/lsof.
+	occupied, procInfo := IsPortOccupied(portNum)
+	if !occupied {
+		fmt.Printf("Port %s:%s is free\n", host, port)
+		return nil
+	}
+
+	// Порт занят — показываем детали
+	fmt.Printf("Port %s:%s is in use\n", host, port)
+	if procInfo != "" {
+		fmt.Println(procInfo)
+	}
+
+	// Спрашиваем, запускать ли nmap (по умолчанию — да).
 	fmt.Print("\nWant nmap for port? [Y/n]: ")
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
