@@ -76,7 +76,16 @@ func buildGo(version string) error {
 	cmd := exec.Command(runtimePath, "build", "-o", output, target)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	// После успешной сборки выводим полный путь к сгенерированному исполняемому файлу
+	absPath, err := filepath.Abs(output)
+	if err != nil {
+		return fmt.Errorf("error resolving absolute path: %v", err)
+	}
+	fmt.Printf("Executable file: %s\n", absPath)
+	return nil
 }
 
 // buildNode собирает Node.js проект
