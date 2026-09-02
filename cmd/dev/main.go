@@ -12,6 +12,7 @@ import (
 	"dev/internal/cache"
 	"dev/internal/check"
 	"dev/internal/curl"
+	"dev/internal/custom"
 	"dev/internal/db"
 	"dev/internal/debug"
 	"dev/internal/detector"
@@ -746,6 +747,19 @@ Uses $EDITOR or nano by default.`,
 	},
 }
 
+var selfCommandCmd = &cobra.Command{
+	Use:   "self-command",
+	Short: "Open custom commands config for editing",
+	Long: `Open the custom commands config (~/dev-command/custom.yml) for editing.
+Creates the file with a default template if it doesn't exist.
+Uses $EDITOR or nano by default.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := custom.Edit(); err != nil {
+			color.Red("Error: %v", err)
+		}
+	},
+}
+
 var aiCmd = &cobra.Command{
 	Use:   "ai <text>",
 	Short: "Ask AI to generate and execute commands",
@@ -890,6 +904,51 @@ func applyCheckScopeFlags(opts *check.Options) {
 	}
 }
 
+// runRoot обрабатывает вызовы корневой команды.
+// Без аргументов выполняется анализ проекта. Незнакомая команда сверяется
+// с пользовательскими командами из ~/dev-command/custom.yml и, если найдена,
+// запускается с пробросом параметров: текущий путь, язык и фреймворк.
+func runRoot(args []string) {
+	if len(args) == 0 {
+		runAnalyze()
+		return
+	}
+
+	name := args[0]
+	cwd, _ := os.Getwd()
+
+	// Определяем проект, чтобы пробросить язык и фреймворк в команду.
+	// Ошибка детекции не блокирует запуск пользовательской команды.
+	lang, framework := "", ""
+	if info, err := detectProject(cwd); err == nil {
+		lang = info.Language
+		framework = info.Framework
+	}
+
+	cfg, err := custom.Load()
+	if err != nil {
+		color.Red("Failed to load custom commands: %v", err)
+		os.Exit(1)
+		return
+	}
+
+	ctx := custom.Context{Dir: cwd, Language: lang, Framework: framework}
+	found, err := cfg.RunCommand(name, ctx)
+	if err != nil {
+		color.Red("Custom command %q failed: %v", name, err)
+		os.Exit(1)
+		return
+	}
+	if !found {
+		color.Red("Unknown command %q for \"dev\"", name)
+		if names := cfg.Names(); len(names) > 0 {
+			color.Yellow("Available custom commands: %s", strings.Join(names, ", "))
+		}
+		fmt.Fprintln(os.Stderr, "Run 'dev --help' for usage.")
+		os.Exit(1)
+	}
+}
+
 func main() {
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(cacheCmd)
@@ -907,15 +966,19 @@ func main() {
 	rootCmd.AddCommand(curlCmd)
 	rootCmd.AddCommand(selfUpdateCmd)
 	rootCmd.AddCommand(selfConfigCmd)
+	rootCmd.AddCommand(selfCommandCmd)
 	rootCmd.AddCommand(aiCmd)
 	rootCmd.AddCommand(checkCmd)
 	checkCmd.AddCommand(checkFixCmd)
 	checkCmd.AddCommand(checkAICmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateNewCmd)
-	// Default action is analyze
+	// Разрешаем произвольные аргументы на корне, чтобы перехватывать
+	// незнакомые команды и сверять их с пользовательскими командами.
+	rootCmd.Args = cobra.ArbitraryArgs
+	// Default action is analyze; незнакомые команды обрабатываются в runRoot.
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
-		runAnalyze()
+		runRoot(args)
 	}
 
 	if err := rootCmd.Execute(); err != nil {
