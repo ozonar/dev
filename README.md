@@ -90,7 +90,7 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Interactive selection of the check scope (changed code, changed code + N commits, all code, diff with master/develop)
   - Runs by default in **dry-run** mode; output is streamed to the console
   - Subcommands: `dev check fix` (auto-fix issues), `dev check ai` (AI review, planned)
-  - Non-interactive flags: `--all`, `--commit=N`, `--branch=master|develop`
+  - Non-interactive flags: `--all`, `--commit=N`, `--branch=master|develop`, `--code`
 
 ## Installation
 

@@ -320,7 +320,9 @@ var dbCmd = &cobra.Command{
 	Short: "Interactive database explorer",
 	Long:  "Analyze databases in the project, connect, list tables, and view data.",
 	Run: func(cmd *cobra.Command, args []string) {
-		db.Run()
+		if err := db.Run(); err != nil {
+			color.Red("Error: %v", err)
+		}
 	},
 }
 
@@ -768,6 +770,7 @@ Use 'dev self-config' to set up your API endpoint, token, and model.`,
 var checkAll bool
 var checkCommit int
 var checkBranch string
+var checkCode bool
 
 var checkCmd = &cobra.Command{
 	Use:     "review",
@@ -782,7 +785,8 @@ Use 'dev review fix' to automatically fix fixable issues.
 Available non-interactive flags to choose the scope:
 	 dev review --all
 	 dev review --commit=3
-	 dev review --branch=master`,
+	 dev review --branch=master
+	 dev review --code`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runCheck(check.Options{})
 	},
@@ -825,6 +829,7 @@ func init() {
 	checkCmd.PersistentFlags().BoolVar(&checkAll, "all", false, "Check all code")
 	checkCmd.PersistentFlags().IntVar(&checkCommit, "commit", 0, "Check changed code plus last N commits")
 	checkCmd.PersistentFlags().StringVar(&checkBranch, "branch", "", "Check diff with the given branch (master|develop)")
+	checkCmd.PersistentFlags().BoolVar(&checkCode, "code", false, "Check only changed code")
 	addLanguageFlags(checkCmd, true)
 }
 
@@ -876,6 +881,9 @@ func applyCheckScopeFlags(opts *check.Options) {
 		opts.Scope = &s
 	case checkBranch != "":
 		s := check.ScopeDiff(checkBranch)
+		opts.Scope = &s
+	case checkCode:
+		s := check.ScopeChanged()
 		opts.Scope = &s
 	default:
 		opts.Interactive = true
