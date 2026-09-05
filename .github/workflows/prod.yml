@@ -1,0 +1,126 @@
+name: Prod
+
+"on":
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'cmd/prod/**'
+      - 'internal/prod/**'
+      - '.github/workflows/prod.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'cmd/prod/**'
+      - 'internal/prod/**'
+      - '.github/workflows/prod.yml'
+  release:
+    types: [ created ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            artifact_name: prod-linux-amd64
+            output_name: prod
+          - goos: linux
+            goarch: arm64
+            artifact_name: prod-linux-arm64
+            output_name: prod
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          REF="${{ github.ref }}"
+          case "$REF" in
+            refs/tags/*)
+              TAG="${REF#refs/tags/}"
+              VERSION="${TAG#v}"
+              ;;
+            *)
+              VERSION=$(git describe --tags --always --dirty)
+              ;;
+          esac
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          go build -v -trimpath -ldflags="-X dev/internal/version.Version=$VERSION -s -w" -o ${{ matrix.output_name }} ./cmd/prod
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.output_name }}
+          if-no-files-found: error
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.2'
+
+      - name: Vet
+        run: go vet ./cmd/prod/... ./internal/prod/...
+
+      - name: Run tests
+        run: go test ./cmd/prod/... ./internal/prod/...
+
+  release:
+    needs: [ build, test ]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Upload Linux amd64 executable
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: artifacts/prod-linux-amd64/prod
+          asset_name: prod-linux-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload Linux arm64 executable
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: artifacts/prod-linux-arm64/prod
+          asset_name: prod-linux-arm64
+          asset_content_type: application/octet-stream
