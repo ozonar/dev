@@ -251,6 +251,39 @@ func TestReplaceDir(t *testing.T) {
 	}
 }
 
+// TestReplaceDirCreatesParent проверяет атомарную замену при первой установке,
+// когда родительской папки <имя>/ ещё не существует. replaceDir должен создать
+// промежуточные каталоги цели, а не падать с ошибкой "no such file or directory".
+func TestReplaceDirCreatesParent(t *testing.T) {
+	root := t.TempDir()
+	// Целевая папка версии глубоко вложена, а родительских каталогов нет.
+	dst := filepath.Join(root, "golangci-lint", "1.61.0")
+	src := filepath.Join(root, ".install-123")
+
+	// Готовим полностью распакованную версию во временной папке.
+	if err := os.MkdirAll(filepath.Join(src, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "bin", "golangci-lint"), []byte("new"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := replaceDir(dst, src); err != nil {
+		t.Fatalf("replaceDir при отсутствующем родителе: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dst, "bin", "golangci-lint"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "new" {
+		t.Errorf("после replaceDir содержимое = %q, want new", data)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Errorf("временная папка должна быть перемещена, got err=%v", err)
+	}
+}
+
 // TestRuntimeResolveMatchesMinor проверяет, что резолюция находит скачанную
 // полную версию (1.22.12) по минорному требованию (1.22) без сети.
 func TestRuntimeResolveMatchesMinor(t *testing.T) {

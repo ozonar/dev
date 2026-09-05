@@ -100,8 +100,12 @@ func (m *Manager) IsInstalled(ex Executable) bool {
 // replaceDir атомарно заменяет папку dst содержимым src: удаляет прежнее
 // значение и перемещает src на место dst. Гарантирует, что dst всегда содержит
 // либо полностью готовую программу, либо отсутствует вовсе (никогда — частично
-// распакованную).
+// распакованную). Родительская директория dist создаётся при необходимости,
+// поэтому перенос работает и при первой установке версии.
 func replaceDir(dst, src string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
 	if _, err := os.Lstat(dst); err == nil {
 		if err := os.RemoveAll(dst); err != nil {
 			return err
