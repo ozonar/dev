@@ -122,6 +122,27 @@ func TestFindGoMainOutsideCmd(t *testing.T) {
 	}
 }
 
+// TestResolveOutput проверяет выбор имени выходного файла с учётом флага -o
+func TestResolveOutput(t *testing.T) {
+	tests := []struct {
+		target string
+		output string
+		want   string
+	}{
+		{"cmd/foo/main.go", "", "foo"},
+		{"main.go", "", "main"},
+		{"cmd/foo/main.go", "mybin", "mybin"},
+		{"main.go", "./out/app", "./out/app"},
+		{"cmd/bar/main.go", "custom", "custom"},
+	}
+	for _, tt := range tests {
+		got := resolveOutput(tt.target, tt.output)
+		if got != tt.want {
+			t.Errorf("resolveOutput(%q, %q) = %q, want %q", tt.target, tt.output, got, tt.want)
+		}
+	}
+}
+
 // TestOutputName проверяет генерацию имени выходного файла
 func TestOutputName(t *testing.T) {
 	tests := []struct {

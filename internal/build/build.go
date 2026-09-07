@@ -13,10 +13,10 @@ import (
 )
 
 // BuildProject выполняет сборку проекта в зависимости от фреймворка и языка.
-func BuildProject(framework, language, version string) error {
+func BuildProject(framework, language, version, output string) error {
 	switch language {
 	case "go":
-		return buildGo(version)
+		return buildGo(version, output)
 	case "javascript":
 		return buildNode()
 	default:
@@ -26,7 +26,7 @@ func BuildProject(framework, language, version string) error {
 }
 
 // buildGo собирает Go проект
-func buildGo(version string) error {
+func buildGo(version, output string) error {
 	runtimePath, err := toolchain.ResolveRuntime("go", version)
 	if err != nil {
 		return err
@@ -69,8 +69,8 @@ func buildGo(version string) error {
 		}
 	}
 
-	// Имя исполняемого файла: если путь содержит cmd/, берём имя поддиректории внутри cmd
-	output := outputName(target)
+	// Имя исполняемого файла: явно заданное через -o, либо выведенное из пути
+	output = resolveOutput(target, output)
 
 	fmt.Printf("Build %s to %s...\n", target, output)
 	cmd := exec.Command(runtimePath, "build", "-o", output, target)
@@ -116,4 +116,13 @@ func outputName(target string) string {
 	// Иначе берём имя файла без расширения
 	base := filepath.Base(target)
 	return strings.TrimSuffix(base, ".go")
+}
+
+// resolveOutput возвращает имя выходного файла: явно заданное через -o,
+// либо выведенное из пути к main-файлу.
+func resolveOutput(target, output string) string {
+	if output != "" {
+		return output
+	}
+	return outputName(target)
 }

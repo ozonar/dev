@@ -95,6 +95,7 @@ func init() {
 	addLanguageFlags(runCmd, false)
 	addLanguageFlags(buildCmd, false)
 	addLanguageFlags(debugCmd, false)
+	buildCmd.Flags().StringVarP(&buildOutput, "output", "o", "", "Output file name for Go build (default: auto-derived from main path)")
 	debugCmd.Flags().IntVarP(&debugPort, "port", "p", 0, "Port for the PHP debug server (default: 8000)")
 }
 
@@ -248,6 +249,9 @@ var buildCmd = &cobra.Command{
 		runBuild()
 	},
 }
+
+// buildOutput — имя выходного файла
+var buildOutput string
 
 // debugPort — порт для PHP-сервера в рамках dev debug.
 var debugPort int
@@ -593,7 +597,7 @@ func runBuild() {
 	}
 
 	color.Green("Building project: %s (%s)", info.Framework, info.Language)
-	err = build.BuildProject(info.Framework, info.Language, info.LanguageVersion)
+	err = build.BuildProject(info.Framework, info.Language, info.LanguageVersion, buildOutput)
 	if err != nil {
 		color.Red("Build failed: %v", err)
 		return

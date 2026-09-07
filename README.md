@@ -43,7 +43,7 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 - **`dev virus [user:pass@ip_addr]`** – Copy the dev executable to a remote server via SCP (supports `user@host` or `user:pass@ip` formats). Automatically sets execute permissions.
 
 - **`dev build`** – Build the project according to its language:
-  - Go: detects main files, offers selection, builds executable
+  - Go: detects main files, offers selection, builds executable (`-o/--output` sets the output file name)
   - Node.js: runs `npm run build`
   - Other languages: no‑op (informs that building is not required)
 
