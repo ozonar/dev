@@ -18,27 +18,26 @@ const (
 	repoURL = "https://github.com/ozonar/dev/releases/latest/download"
 )
 
-// SelfUpdate скачивает последнюю версию dev, устанавливает её и удаляет временный файл.
-func SelfUpdate() error {
+// releaseFileName формирует имя файла релиза вида {name}-{goos}-{goarch}.
+// Имя совпадает с артефактами CI: dev-linux-amd64, prod-linux-arm64 и т.д.
+// Для Windows добавляется расширение .exe.
+func releaseFileName(name, goos, goarch string) string {
+	fileName := fmt.Sprintf("%s-%s-%s", name, goos, goarch)
+	if goos == "windows" {
+		fileName += ".exe"
+	}
+	return fileName
+}
+
+// SelfUpdate скачивает последнюю версию указанного бинарника (dev или prod),
+// устанавливает её через подкоманду install скачанного файла и удаляет временный файл.
+func SelfUpdate(name string) error {
 	// Определяем архитектуру и ОС
-	arch := runtime.GOARCH
+	goarch := runtime.GOARCH
 	goos := runtime.GOOS
 
-	// Маппинг архитектур к именам в релизах
-	archMap := map[string]string{
-		"amd64": "amd64",
-		"arm64": "aarch64",
-	}
-	releaseArch, ok := archMap[arch]
-	if !ok {
-		return fmt.Errorf("unsupported architecture: %s", arch)
-	}
-
-	// Имя файла в релизе: dev-{os}-{arch}, для windows добавляем .exe
-	releaseFile := fmt.Sprintf("dev-%s-%s", goos, releaseArch)
-	if goos == "windows" {
-		releaseFile += ".exe"
-	}
+	// Имя файла в релизе: {name}-{os}-{arch}, для windows добавляем .exe
+	releaseFile := releaseFileName(name, goos, goarch)
 	downloadURL := fmt.Sprintf("%s/%s", repoURL, releaseFile)
 
 	// Определяем домашнюю директорию
@@ -47,10 +46,10 @@ func SelfUpdate() error {
 		return fmt.Errorf("could not get home directory: %v", err)
 	}
 
-	// Скачиваем под именем "dev" (или "dev.exe" на windows)
-	tmpName := "dev"
+	// Скачиваем под именем {name} (или {name}.exe на windows)
+	tmpName := name
 	if goos == "windows" {
-		tmpName = "dev.exe"
+		tmpName += ".exe"
 	}
 	tmpPath := filepath.Join(home, tmpName)
 
@@ -89,18 +88,19 @@ func SelfUpdate() error {
 
 	color.Green("Downloaded %d bytes to %s", written, tmpPath)
 
-	// Определяем текущий путь к dev через which/where
-	currentPath, err := findDevPath()
+	// Определяем текущий путь к бинарнику через which/where
+	currentPath, err := findBinaryPath(name)
 	if err != nil {
 		os.Remove(tmpPath)
-		return fmt.Errorf("could not determine current dev path: %v", err)
+		return fmt.Errorf("could not determine current %s path: %v", name, err)
 	}
 
-	color.Cyan("Current dev path: %s", currentPath)
+	color.Cyan("Current %s path: %s", name, currentPath)
 	color.Cyan("Installing new version from the downloaded file...")
 
-	// Запускаем скачанный файл с командой install
-	// Передаём текущий путь как аргумент, чтобы install знал куда копировать
+	// Запускаем скачанный файл с командой install: install сам определяет
+	// исходный файл как os.Executable() (скачанный бинарник) и спрашивает
+	// директорию назначения.
 	cmd := exec.Command(tmpPath, "install")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -121,8 +121,8 @@ func SelfUpdate() error {
 	return nil
 }
 
-// findDevPath находит путь к текущему исполняемому файлу dev через which/where.
-func findDevPath() (string, error) {
+// findBinaryPath находит путь к текущему исполняемому файлу {name} через which/where.
+func findBinaryPath(name string) (string, error) {
 	// Сначала пробуем os.Executable() — это путь к текущему процессу
 	exe, err := os.Executable()
 	if err == nil {
@@ -135,19 +135,19 @@ func findDevPath() (string, error) {
 	// Fallback: ищем через which (linux/mac) или where (windows)
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.Command("where", "dev")
+		cmd = exec.Command("where", name)
 	} else {
-		cmd = exec.Command("which", "dev")
+		cmd = exec.Command("which", name)
 	}
 
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("dev not found in PATH")
+		return "", fmt.Errorf("%s not found in PATH", name)
 	}
 
 	path := strings.TrimSpace(string(out))
 	if path == "" {
-		return "", fmt.Errorf("dev not found in PATH")
+		return "", fmt.Errorf("%s not found in PATH", name)
 	}
 
 	return path, nil

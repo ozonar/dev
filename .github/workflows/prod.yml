@@ -6,12 +6,16 @@ name: Prod
     paths:
       - 'cmd/prod/**'
       - 'internal/prod/**'
+      - 'internal/update/**'
+      - 'internal/install/**'
       - '.github/workflows/prod.yml'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'cmd/prod/**'
       - 'internal/prod/**'
+      - 'internal/update/**'
+      - 'internal/install/**'
       - '.github/workflows/prod.yml'
   release:
     types: [ created ]
@@ -25,10 +29,6 @@ jobs:
           - goos: linux
             goarch: amd64
             artifact_name: prod-linux-amd64
-            output_name: prod
-          - goos: linux
-            goarch: arm64
-            artifact_name: prod-linux-arm64
             output_name: prod
 
     steps:
@@ -85,10 +85,10 @@ jobs:
           go-version: '1.22.2'
 
       - name: Vet
-        run: go vet ./cmd/prod/... ./internal/prod/...
+        run: go vet ./cmd/prod/... ./internal/prod/... ./internal/update/... ./internal/install/...
 
       - name: Run tests
-        run: go test ./cmd/prod/... ./internal/prod/...
+        run: go test ./cmd/prod/... ./internal/prod/... ./internal/update/... ./internal/install/...
 
   release:
     needs: [ build, test ]
@@ -113,14 +113,4 @@ jobs:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: artifacts/prod-linux-amd64/prod
           asset_name: prod-linux-amd64
-          asset_content_type: application/octet-stream
-
-      - name: Upload Linux arm64 executable
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: artifacts/prod-linux-arm64/prod
-          asset_name: prod-linux-arm64
           asset_content_type: application/octet-stream

@@ -11,8 +11,10 @@ import (
 
 	"dev/internal/ai"
 	"dev/internal/colors"
+	"dev/internal/install"
 	"dev/internal/prod"
 	"dev/internal/release"
+	"dev/internal/update"
 	"dev/internal/virus"
 
 	"github.com/fatih/color"
@@ -153,6 +155,35 @@ Format: user@ip or just ip (SSH key auth only, password is not supported).`,
 	},
 }
 
+var selfUpdateCmd = &cobra.Command{
+	Use:   "self-update",
+	Short: "Update prod to the latest version",
+	Long: `Download the latest prod binary from GitHub releases and install it.
+The binary is downloaded to the home directory, installed via 'prod install',
+and then the temporary file is removed.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := update.SelfUpdate("prod"); err != nil {
+			fmt.Println(colors.Red("Update failed: " + err.Error()))
+		}
+	},
+}
+
+var installCmd = &cobra.Command{
+	Use:   "install [file]",
+	Short: "Install prod (or specified file) to system",
+	Long: `Install copies the prod executable (or a specified file) to a system directory.
+If no file argument is provided, installs the currently running prod binary.
+You will be prompted to choose installation directory: /usr/local/bin (default) or ~/bin.`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var file string
+		if len(args) > 0 {
+			file = args[0]
+		}
+		runInstall(file)
+	},
+}
+
 func main() {
 	statCmd.Flags().BoolVarP(&statAll, "all", "a", false, "Show full report with all categories")
 	releaseCmd.PersistentFlags().IntVarP(&releaseLines, "lines", "l", 5, "Number of recent releases to show")
@@ -164,6 +195,8 @@ func main() {
 	releaseCmd.AddCommand(releaseSwitchCmd)
 	rootCmd.AddCommand(releaseCmd)
 	rootCmd.AddCommand(virusCmd)
+	rootCmd.AddCommand(selfUpdateCmd)
+	rootCmd.AddCommand(installCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -180,6 +213,17 @@ func runVirus(path string) {
 		return
 	}
 	fmt.Println(colors.Green("Copy successful."))
+}
+
+// runInstall выполняет команду install: копирует указанный файл (или текущий
+// бинарник) в выбранную системную директорию.
+func runInstall(file string) {
+	fmt.Println(colors.Cyan("Installing prod..."))
+	if err := install.Install(file); err != nil {
+		fmt.Println(colors.Red("Install failed: " + err.Error()))
+		return
+	}
+	fmt.Println(colors.Green("Installation successful."))
 }
 
 // collectAndSave собирает отчёт (с учётом предыдущего снапшота) и сохраняет.

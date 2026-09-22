@@ -116,6 +116,12 @@ func stageWithoutReports(src string) (string, error) {
 		return "", err
 	}
 	dst := filepath.Join(parent, filepath.Base(src))
+	// Корневую папку копии создаём явно: файлы верхнего уровня src
+	// записываются прямо в неё.
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		os.RemoveAll(parent)
+		return "", err
+	}
 
 	err = filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {

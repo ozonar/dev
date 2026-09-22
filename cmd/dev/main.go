@@ -732,7 +732,7 @@ var selfUpdateCmd = &cobra.Command{
 The binary is downloaded to the home directory, installed via 'dev install',
 and then the temporary file is removed.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := update.SelfUpdate(); err != nil {
+		if err := update.SelfUpdate("dev"); err != nil {
 			color.Red("Error: %v", err)
 		}
 	},

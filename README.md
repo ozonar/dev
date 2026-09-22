@@ -104,6 +104,10 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - LLM config (`~/dev-config/main.conf` or `/etc/dev-command/main.conf`) so `prod llm` works right away
   - Supports `user@host` or just `ip` formats (SSH key auth only)
 
+- **`prod install [file]`** – Install the prod tool (or a specified executable) to a system directory (`/usr/local/bin`, `~/bin`, etc.) with interactive directory selection.
+
+- **`prod self-update`** – Download and install the latest version of prod from GitHub releases.
+
 ## Installation
 
 ### From GitHub
@@ -148,6 +152,8 @@ prod release            # prepare a new release and switch to it
 prod release prepare    # move build artifacts to releases/release-<datetime>
 prod release switch -l 5  # switch the current release symlink
 prod virus user@host    # copy prod to remote server
+prod install            # install prod to system
+prod self-update        # update prod to latest version
 ```
 
 ## Configuration
@@ -202,6 +208,7 @@ dev/
 │   ├── prod/                # Production server health diagnostics
 │   ├── release/             # Release management (release.yml, symlinks)
 │   ├── run/                 # Project runner
+│   ├── update/              # Self-update logic (dev/prod)
 │   ├── version/             # Version information
 │   └── virus/               # Remote copy via SCP
 ├── cmd/prod/main.go         # prod CLI entry point (health + release)
