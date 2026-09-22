@@ -234,7 +234,7 @@ func runShellCommand(history *[]HistoryEntry, input string) error {
 
 	color.Cyan("\n=== Executing shell command: %s ===", shellCmd)
 	output, execErr := runCommandStreaming(shellCmd)
-	truncatedOutput := truncateOutput(output, 30)
+	truncatedOutput := truncateOutput(output, MaxMessageLines)
 	if execErr != nil {
 		color.Red("Execution error: %v", execErr)
 		*history = append(*history, HistoryEntry{
@@ -346,7 +346,7 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 			}
 
 			output, execErr := runCommandStreaming(cmd.Command)
-			truncatedOutput := truncateOutput(output, 30)
+			truncatedOutput := truncateOutput(output, MaxMessageLines)
 			if execErr != nil {
 				color.Red("Execution error: %v", execErr)
 				*history = append(*history, HistoryEntry{
@@ -453,6 +453,10 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
+		// Ограничиваем историю лимитами: каждое сообщение — MaxMessageLines строк,
+		// суммарный объём — MaxRequestChars символов.
+		history = prepareHistoryForSend(history)
+
 		// Преобразуем историю в формат chatMessage
 		messages := make([]chatMessage, len(history))
 		for i, entry := range history {

@@ -12,10 +12,6 @@ import (
 	"github.com/fatih/color"
 )
 
-// maxCodeSize — максимальный суммарный размер отправляемого кода (символов),
-// чтобы не превысить лимит контекста LLM.
-const maxCodeSize = 100000
-
 // RunAI выполняет AI-код-ревью изменённого кода.
 // info — уже определённая информация о проекте (детекция и принудительный
 // язык из флагов выполняются на уровне команд перед вызовом).
@@ -37,10 +33,10 @@ func RunAI(info *detector.ProjectInfo, opts Options, instruction string) error {
 		return nil
 	}
 
-	// Ограничиваем размер отправляемого кода лимитом контекста LLM
-	if len(text) > maxCodeSize {
-		color.Yellow("Code exceeds %d characters, truncating.", maxCodeSize)
-		text = text[:maxCodeSize]
+	// Ограничиваем размер отправляемого кода общим лимитом символов на ревью
+	if len(text) > ai.MaxReviewTotalChars {
+		color.Yellow("Code exceeds %d characters, truncating.", ai.MaxReviewTotalChars)
+		text = text[:ai.MaxReviewTotalChars]
 	}
 
 	if _, err := ai.RunCodeReview(text, instruction); err != nil {
@@ -64,14 +60,29 @@ func resolveScopeForAI(opts Options) (Scope, error) {
 }
 
 // readScopeFiles читает содержимое файлов из списка и объединяет его в текст.
-// Пропускает бинарные файлы. Сам код файлов собирается целиком;
+// Пропускает бинарные файлы и файлы, размер которых превышает общий лимит
+// MaxReviewFileSize: такие файлы (например, изображения) в ревью не попадают.
+// Размер проверяется через os.Stat до чтения, чтобы не загружать в память
+// потенциально огромные файлы.
 func readScopeFiles(files []string) string {
 	var sb strings.Builder
 
 	for _, f := range files {
-		data, err := os.ReadFile(f)
+		info, err := os.Stat(f)
 		if err != nil {
 			// Файл мог быть удалён или это директория — пропускаем.
+			continue
+		}
+		if info.Size() > ai.MaxReviewFileSize {
+			// Файл слишком большой — исключаем из ревью целиком, не читая его.
+			color.Yellow("Skipping file %s: size %d exceeds limit of %d bytes",
+				f, info.Size(), ai.MaxReviewFileSize)
+			continue
+		}
+
+		data, err := os.ReadFile(f)
+		if err != nil {
+			// Файл мог быть удалён между stat и чтением — пропускаем.
 			continue
 		}
 		if strings.ContainsRune(string(data), 0) {

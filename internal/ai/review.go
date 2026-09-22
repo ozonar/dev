@@ -45,6 +45,10 @@ func buildReviewPrompt(text string) string {
 func queryReviewText(cfg *Config, history []HistoryEntry) (string, error) {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
+		// Ограничиваем историю лимитами: каждое сообщение — MaxMessageLines строк,
+		// суммарный объём — MaxRequestChars символов.
+		history = prepareHistoryForSend(history)
+
 		messages := make([]chatMessage, len(history))
 		for i, entry := range history {
 			messages[i] = chatMessage(entry)
