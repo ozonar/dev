@@ -454,19 +454,22 @@ func uniqueSorted(items []string) []string {
 
 // promptScope показывают пользователю список вариантов и ждёт выбора.
 // Возвращает выбранный объём. При пустом вводе используется вариант по умолчанию.
+// Для статической проверки показывается количество файлов в объёме.
 func promptScope() Scope {
-	return promptScopeWithOptions(scopeOptions(), defaultScopeKind())
+	return promptScopeWithOptions(scopeOptions(), defaultScopeKind(), scopeFileHint)
 }
 
 // promptScopeForAI показывает пользователю варианты объёма для AI-ревью.
 // По умолчанию выбран вариант "Changed code".
+// Для AI-ревью показывается размер отправляемого текста (в символах).
 func promptScopeForAI() Scope {
-	return promptScopeWithOptions(scopeOptionsForAI(), scopeChanged)
+	return promptScopeWithOptions(scopeOptionsForAI(), scopeChanged, scopeSizeHint)
 }
 
 // promptScopeWithOptions показывает список вариантов выбора и ждёт ответа.
-// При пустом вводе используется defaultKind.
-func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind) Scope {
+// При пустом вводе используется defaultKind. hint формирует подсказку
+// о составе объёма (количество файлов для линтеров или символов для AI).
+func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint func(scopeKind) string) Scope {
 	fmt.Println("\nSelect scope:")
 	for i, opt := range options {
 		fmt.Printf("  %d) %s", i+1, opt.label)
@@ -484,9 +487,8 @@ func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind) Scope 
 				fmt.Printf("  (%s)", strings.Join(names, ", "))
 			}
 		}
-		// Показываем размер отправляемого текста в кратком формате (напр. 44k)
-		if hint := scopeSizeHint(opt.kind); hint != "" {
-			fmt.Printf("  (%s)", hint)
+		if h := hint(opt.kind); h != "" {
+			fmt.Printf("  (%s)", h)
 		}
 		fmt.Println()
 	}
@@ -533,6 +535,20 @@ func scopeSizeHint(kind scopeKind) string {
 		return ""
 	}
 	return formatSize(n)
+}
+
+// scopeFileHint возвращает количество файлов в объёме, например "3 files".
+// Возвращает пустую строку, если файлов нет вовсе или объём — весь код.
+// Используется для статической проверки, где важен объём анализа.
+func scopeFileHint(kind scopeKind) string {
+	if kind == scopeAll {
+		return ""
+	}
+	n := len(buildScope(kind).Files)
+	if n <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d files", n)
 }
 
 // formatSize форматирует количество символов в краткий человекочитаемый вид:

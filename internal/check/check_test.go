@@ -762,3 +762,46 @@ func TestCodeExtensionsFor(t *testing.T) {
 		t.Errorf("codeExtensionsFor(ruby) = %v, want nil", got)
 	}
 }
+
+// TestScopeFileHint проверяет подсказку с количеством файлов для статической
+// проверки: для двух изменённых файлов — "2 files", для scopeAll подсказки нет.
+func TestScopeFileHint(t *testing.T) {
+	tmp := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+	} {
+		if err := gitRun(tmp, args...); err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+	}
+	writeFile(t, filepath.Join(tmp, "a.go"), "package a\n")
+	writeFile(t, filepath.Join(tmp, "b.go"), "package b\n")
+	writeFile(t, filepath.Join(tmp, "c.go"), "package c\n")
+	if err := gitRun(tmp, "add", "."); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+	if err := gitRun(tmp, "commit", "-qm", "init"); err != nil {
+		t.Fatalf("git commit: %v", err)
+	}
+	// Изменяем два файла из трёх.
+	writeFile(t, filepath.Join(tmp, "a.go"), "package a\n\n// change\n")
+	writeFile(t, filepath.Join(tmp, "b.go"), "package b\n\n// change\n")
+
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldDir) }()
+
+	if got := scopeFileHint(scopeChanged); got != "2 files" {
+		t.Errorf("scopeFileHint(scopeChanged) = %q, want %q", got, "2 files")
+	}
+	if got := scopeFileHint(scopeAll); got != "" {
+		t.Errorf("scopeFileHint(scopeAll) = %q, want empty", got)
+	}
+}
