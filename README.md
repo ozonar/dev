@@ -99,6 +99,11 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Configuration is read from `release.yml` in the current directory; if missing or invalid, an editor opens with a filled template (same behavior as `dev self-config`)
   - Per-release optional settings: `release_prefix` (default `release-`) and `release_time_format` (default `2006-01-02_15-04-05`)
 
+- **`prod virus [user@ip_addr]`** – Copy the prod executable to a remote server via SCP and install the production configuration there:
+  - `/etc/prod-command` config files (e.g. `deps.conf`; the `reports` history is not copied) — installed via `sudo` for non-root users
+  - LLM config (`~/dev-config/main.conf` or `/etc/dev-command/main.conf`) so `prod llm` works right away
+  - Supports `user@host` or just `ip` formats (SSH key auth only)
+
 ## Installation
 
 ### From GitHub
@@ -142,6 +147,7 @@ prod                    # production server health report
 prod release            # prepare a new release and switch to it
 prod release prepare    # move build artifacts to releases/release-<datetime>
 prod release switch -l 5  # switch the current release symlink
+prod virus user@host    # copy prod to remote server
 ```
 
 ## Configuration

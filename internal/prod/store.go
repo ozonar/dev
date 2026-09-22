@@ -9,8 +9,11 @@ import (
 	"time"
 )
 
+// CommandDir — системный каталог конфигурации и отчётов prod.
+const CommandDir = "/etc/prod-command"
+
 // reportsDir — каталог для хранения отчётов.
-const reportsDir = "/etc/prod-command/reports"
+const reportsDir = CommandDir + "/reports"
 
 // ReportPath возвращает путь для сохранения отчёта по времени.
 func ReportPath(t time.Time) string {

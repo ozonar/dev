@@ -9,7 +9,7 @@ import (
 )
 
 // externalDepsPath — путь к файлу со списком внешних зависимостей.
-const externalDepsPath = "/etc/prod-command/deps.conf"
+const externalDepsPath = CommandDir + "/deps.conf"
 
 // externalDep описывает одну внешнюю зависимость.
 type externalDep struct {

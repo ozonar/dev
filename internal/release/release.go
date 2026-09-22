@@ -215,6 +215,16 @@ func SwitchRelease(cfg *Release, releaseName string) error {
 	return os.Symlink(target, link)
 }
 
+// CurrentRelease возвращает имя релиза, на который сейчас указывает симлинк
+// current_release_folder, и флаг наличия корректной ссылки.
+func CurrentRelease(cfg *Release) (string, bool) {
+	target, err := os.Readlink(cfg.CurrentReleaseLink)
+	if err != nil {
+		return "", false
+	}
+	return filepath.Base(target), true
+}
+
 // SelectIndex выводит prompt и читает номер выбора в диапазоне [1..count].
 // Пустой ввод означает выбор первого элемента (индекс 0).
 func SelectIndex(in io.Reader, out io.Writer, prompt string, count int) (int, error) {

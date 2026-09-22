@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	userConfigPath = "~/dev-config/main.conf"
-	etcConfigPath  = "/etc/dev-command/main.conf"
+	UserConfigPath = "~/dev-config/main.conf"
+	EtcConfigPath  = "/etc/dev-command/main.conf"
 )
 
 // Config хранит параметры подключения к LLM
@@ -35,33 +35,33 @@ func resolvePath(path string) string {
 	return path
 }
 
-// configPaths возвращает пути к конфигу в порядке приоритета:
+// ConfigPaths возвращает пути к конфигу в порядке приоритета:
 // 1. ~/dev-config/main.conf
 // 2. /etc/dev-command/main.conf
-func configPaths() []string {
+func ConfigPaths() []string {
 	return []string{
-		resolvePath(userConfigPath),
-		etcConfigPath,
+		resolvePath(UserConfigPath),
+		EtcConfigPath,
 	}
 }
 
 // resolveConfigPath находит первый существующий конфиг или возвращает
 // путь с наивысшим приоритетом, если ни одного нет.
 func resolveConfigPath() string {
-	for _, p := range configPaths() {
+	for _, p := range ConfigPaths() {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
 	}
 	// Если ни одного нет — возвращаем пользовательский путь
-	return configPaths()[0]
+	return ConfigPaths()[0]
 }
 
 // LoadConfig загружает конфиг из файла.
 // Ищет сначала ~/dev-config/main.conf, затем /etc/dev-command/main.conf.
 func LoadConfig() (*Config, error) {
 	var lastErr error
-	for _, p := range configPaths() {
+	for _, p := range ConfigPaths() {
 		data, err := os.ReadFile(p)
 		if err != nil {
 			lastErr = err
@@ -105,7 +105,7 @@ func LoadConfig() (*Config, error) {
 // EditConfig открывает конфиг на редактирование, создавая при необходимости.
 // Создаёт/редактирует ~/dev-config/main.conf (пользовательский путь).
 func EditConfig() error {
-	path := configPaths()[0]
+	path := ConfigPaths()[0]
 
 	// Создаём папку если нет
 	dir := filepath.Dir(path)

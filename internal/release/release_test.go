@@ -272,6 +272,33 @@ func TestSwitchReleaseRefusesDir(t *testing.T) {
 	}
 }
 
+// TestCurrentRelease проверяет определение текущего релиза по симлинку.
+func TestCurrentRelease(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("создание симлинков на Windows требует привилегий")
+	}
+	base := t.TempDir()
+	releases := filepath.Join(base, "releases")
+	relDir := filepath.Join(releases, "release-2026-09-22_10-00-00")
+	if err := os.MkdirAll(relDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "current")
+	cfg := &Release{ReleasesFolder: releases, CurrentReleaseLink: link}
+
+	// Симлинка ещё нет — текущего релиза нет.
+	if name, ok := CurrentRelease(cfg); ok {
+		t.Fatalf("неожиданный текущий релиз до переключения: %s", name)
+	}
+	if err := SwitchRelease(cfg, "release-2026-09-22_10-00-00"); err != nil {
+		t.Fatalf("SwitchRelease вернула ошибку: %v", err)
+	}
+	name, ok := CurrentRelease(cfg)
+	if !ok || name != "release-2026-09-22_10-00-00" {
+		t.Fatalf("ожидался текущий релиз release-2026-09-22_10-00-00, получен %q ok=%v", name, ok)
+	}
+}
+
 // TestSelectIndexDefault проверяет выбор первого элемента по умолчанию.
 func TestSelectIndexDefault(t *testing.T) {
 	var out bytes.Buffer

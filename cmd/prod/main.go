@@ -13,6 +13,7 @@ import (
 	"dev/internal/colors"
 	"dev/internal/prod"
 	"dev/internal/release"
+	"dev/internal/virus"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -137,6 +138,21 @@ var releaseSwitchCmd = &cobra.Command{
 	},
 }
 
+var virusCmd = &cobra.Command{
+	Use:   "virus [user@ip_addr]",
+	Short: "Copy itself to remote server",
+	Long: `Copy the prod executable to a remote server via SCP and install the
+production configuration there: /etc/prod-command (config files, e.g. deps.conf;
+the reports history is not copied) and the LLM config, so reports, cascade
+analysis and 'prod llm' work right away.
+
+Format: user@ip or just ip (SSH key auth only, password is not supported).`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runVirus(args[0])
+	},
+}
+
 func main() {
 	statCmd.Flags().BoolVarP(&statAll, "all", "a", false, "Show full report with all categories")
 	releaseCmd.PersistentFlags().IntVarP(&releaseLines, "lines", "l", 5, "Number of recent releases to show")
@@ -147,11 +163,23 @@ func main() {
 	releaseCmd.AddCommand(releasePrepareCmd)
 	releaseCmd.AddCommand(releaseSwitchCmd)
 	rootCmd.AddCommand(releaseCmd)
+	rootCmd.AddCommand(virusCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// runVirus выполняет команду virus: копирует бинарник и прод-конфиги
+// на удалённый сервер.
+func runVirus(path string) {
+	fmt.Println(colors.Cyan("Copying to remote server " + path + "..."))
+	if err := virus.ProdVirus(path); err != nil {
+		fmt.Println(colors.Red("Virus command failed: " + err.Error()))
+		return
+	}
+	fmt.Println(colors.Green("Copy successful."))
 }
 
 // collectAndSave собирает отчёт (с учётом предыдущего снапшота) и сохраняет.
@@ -334,6 +362,8 @@ func runReleaseSwitch(args []string) {
 	}
 	recent := infos[:limit]
 
+	// Текущий (связанный симлинком) релиз помечаем зелёным.
+	current, hasCurrent := release.CurrentRelease(rel)
 	// Сегодняшние релизы подсвечиваем белым задним фоном.
 	todayStyle := color.New(color.BgWhite, color.FgBlack)
 	fmt.Println(colors.Cyan("Recent releases (" + name + "):"))
@@ -341,6 +371,9 @@ func runReleaseSwitch(args []string) {
 		label := r.Name
 		if r.IsToday {
 			label = todayStyle.Sprint(label)
+		}
+		if hasCurrent && r.Name == current {
+			label += " " + colors.Green("(current)")
 		}
 		fmt.Printf("  %d. %s\n", i+1, label)
 	}
