@@ -40,54 +40,67 @@ func buildReviewPrompt(text string) string {
 // queryReviewText отправляет текстовый запрос к LLM и возвращает ответ текстом.
 // В отличие от queryLLM (который ждёт JSON-массив команд), эта функция
 // принимает произвольный текстовый ответ.
+// Неудачи ответа (непарсируемое тело, API-ошибка, пустой ответ) обрабатываются
+// авторетраем, чтобы временные ошибки прокси не обрывали ревью.
 func queryReviewText(cfg *Config, history []HistoryEntry) (string, error) {
-	messages := make([]chatMessage, len(history))
-	for i, entry := range history {
-		messages[i] = chatMessage(entry)
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		messages := make([]chatMessage, len(history))
+		for i, entry := range history {
+			messages[i] = chatMessage(entry)
+		}
+
+		reqBody := chatRequest{
+			Model:       cfg.Model,
+			Messages:    messages,
+			Temperature: 0.2,
+		}
+
+		jsonData, err := json.Marshal(reqBody)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal request: %w", err)
+		}
+
+		curlCmd := exec.Command("curl", "-s",
+			"-k",
+			"-X", "POST",
+			cfg.Endpoint,
+			"-H", "Content-Type: application/json",
+			"-H", "Authorization: Bearer "+cfg.Token,
+			"-d", string(jsonData),
+		)
+
+		var stdout, stderr bytes.Buffer
+		curlCmd.Stdout = &stdout
+		curlCmd.Stderr = &stderr
+
+		if err := curlCmd.Run(); err != nil {
+			return "", fmt.Errorf("curl failed: %w\nStderr: %s", err, stderr.String())
+		}
+
+		var resp chatResponse
+		if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
+			lastErr = fmt.Errorf("unparsable response: %w\nBody: %s", err, stdout.String())
+			color.Red("LLM returned unparsable response (attempt %d/3)", attempt+1)
+			continue
+		}
+
+		if len(resp.Error) > 0 {
+			lastErr = fmt.Errorf("API error: %s", strings.TrimSpace(string(resp.Error)))
+			color.Red("LLM API error (attempt %d/3)", attempt+1)
+			continue
+		}
+
+		if len(resp.Choices) == 0 {
+			lastErr = fmt.Errorf("empty response from API")
+			color.Red("LLM returned empty response (attempt %d/3)", attempt+1)
+			continue
+		}
+
+		return strings.TrimSpace(resp.Choices[0].Message.Content), nil
 	}
 
-	reqBody := chatRequest{
-		Model:       cfg.Model,
-		Messages:    messages,
-		Temperature: 0.2,
-	}
-
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	curlCmd := exec.Command("curl", "-s",
-		"-k",
-		"-X", "POST",
-		cfg.Endpoint,
-		"-H", "Content-Type: application/json",
-		"-H", "Authorization: Bearer "+cfg.Token,
-		"-d", string(jsonData),
-	)
-
-	var stdout, stderr bytes.Buffer
-	curlCmd.Stdout = &stdout
-	curlCmd.Stderr = &stderr
-
-	if err := curlCmd.Run(); err != nil {
-		return "", fmt.Errorf("curl failed: %w\nStderr: %s", err, stderr.String())
-	}
-
-	var resp chatResponse
-	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w\nBody: %s", err, stdout.String())
-	}
-
-	if resp.Error != nil {
-		return "", fmt.Errorf("API error: %s", resp.Error.Message)
-	}
-
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("empty response from API")
-	}
-
-	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
+	return "", fmt.Errorf("LLM request failed after 3 attempts: %w", lastErr)
 }
 
 // renderMarkdown применяет базовое markdown-форматирование к строке:

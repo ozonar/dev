@@ -1,9 +1,56 @@
 package ai
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
+
+// TestChatResponse_ErrorAsString проверяет, что ответ API с полем error в виде
+// строки (так отвечают прокси, например OpenRouter) парсится без ошибки и не
+// роняет последующую обработку ответа.
+func TestChatResponse_ErrorAsString(t *testing.T) {
+	body := `{"error":"Proxy error: Failure when receiving data from the peer"}`
+	var resp chatResponse
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		t.Fatalf("unmarshal must not fail on string error: %v", err)
+	}
+	if len(resp.Error) == 0 {
+		t.Errorf("expected non-empty raw error field")
+	}
+	if len(resp.Choices) != 0 {
+		t.Errorf("expected no choices, got %d", len(resp.Choices))
+	}
+}
+
+// TestChatResponse_ErrorAsObject проверяет парсинг классического объекта ошибки
+// вида {"error":{"message":"..."}}.
+func TestChatResponse_ErrorAsObject(t *testing.T) {
+	body := `{"error":{"message":"Invalid API key"}}`
+	var resp chatResponse
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		t.Fatalf("unmarshal must not fail on object error: %v", err)
+	}
+	if len(resp.Error) == 0 {
+		t.Errorf("expected non-empty raw error field")
+	}
+}
+
+// TestChatResponse_NormalBody проверяет, что обычный успешный ответ парсится
+// так же, как раньше, и поле error остаётся пустым.
+func TestChatResponse_NormalBody(t *testing.T) {
+	body := `{"choices":[{"message":{"content":"[{\"command\":\"ls\"}]"}}]}`
+	var resp chatResponse
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		t.Fatalf("unmarshal of normal body failed: %v", err)
+	}
+	if len(resp.Error) != 0 {
+		t.Errorf("expected no error, got %s", string(resp.Error))
+	}
+	if len(resp.Choices) != 1 || resp.Choices[0].Message.Content == "" {
+		t.Errorf("expected one choice with content")
+	}
+}
 
 // TestRunShellCommand_Success проверяет, что shell-команда с "!" выполняется
 // и её результат добавляется в историю диалога.

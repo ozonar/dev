@@ -57,9 +57,7 @@ type chatResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
+	Error json.RawMessage `json:"error,omitempty"`
 }
 
 // RunAI основная функция для dev ai
@@ -451,8 +449,9 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 }
 
 // queryLLM отправляет запрос к OpenAI-совместимому API.
-// При ошибке парсинга JSON автоматически повторяет запрос, сообщая LLM о проблеме.
+// Любая неудача ответа обрабатывается существующим механизмом авторетрая
 func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
+	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		// Преобразуем историю в формат chatMessage
 		messages := make([]chatMessage, len(history))
@@ -492,15 +491,23 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 		// Парсим ответ
 		var resp chatResponse
 		if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
-			return nil, fmt.Errorf("failed to parse response: %w\nBody: %s", err, stdout.String())
+			lastErr = fmt.Errorf("unparsable response: %w\nBody: %s", err, stdout.String())
+			color.Red("LLM returned unparsable response (attempt %d/3)", attempt+1)
+			continue
 		}
 
-		if resp.Error != nil {
-			return nil, fmt.Errorf("API error: %s", resp.Error.Message)
+		// API-ошибка. Поле error бывает строкой или объектом; здесь нам важен
+		// сам факт ошибки, а не формат — повторяем запрос, такие ошибки часто временные.
+		if len(resp.Error) > 0 {
+			lastErr = fmt.Errorf("API error: %s", strings.TrimSpace(string(resp.Error)))
+			color.Red("LLM API error (attempt %d/3)", attempt+1)
+			continue
 		}
 
 		if len(resp.Choices) == 0 {
-			return nil, fmt.Errorf("empty response from API")
+			lastErr = fmt.Errorf("empty response from API")
+			color.Red("LLM returned empty response (attempt %d/3)", attempt+1)
+			continue
 		}
 
 		rawContent := resp.Choices[0].Message.Content
@@ -525,7 +532,7 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 		return commands, nil
 	}
 
-	return nil, fmt.Errorf("LLM could not return valid JSON after 3 attempts")
+	return nil, fmt.Errorf("LLM request failed after 3 attempts: %w", lastErr)
 }
 
 // extractJSON извлекает JSON из markdown-блока если есть

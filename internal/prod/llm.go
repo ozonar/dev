@@ -28,9 +28,7 @@ type chatResponseLLM struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
+	Error json.RawMessage `json:"error,omitempty"`
 }
 
 // LLMOptions — параметры запроса к LLM.
@@ -86,8 +84,8 @@ func GenerateLLMReport(opts LLMOptions, rep *Report) (string, error) {
 	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
 		return "", fmt.Errorf("parse response: %w\nBody: %s", err, stdout.String())
 	}
-	if resp.Error != nil {
-		return "", fmt.Errorf("API error: %s", resp.Error.Message)
+	if len(resp.Error) > 0 {
+		return "", fmt.Errorf("API error: %s", strings.TrimSpace(string(resp.Error)))
 	}
 	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("empty response from API")
