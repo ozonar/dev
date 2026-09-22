@@ -126,7 +126,7 @@ func buildScope(kind scopeKind) Scope {
 		files := diffWithBranch("develop")
 		return makeScope(kind, "diff with develop", files, diffBranchText("develop", files))
 	default:
-		files := projectFiles()
+		files := existingFiles(projectFiles())
 		return Scope{
 			kind:  scopeAll,
 			Name:  "all code",
@@ -137,16 +137,32 @@ func buildScope(kind scopeKind) Scope {
 }
 
 // makeScope собирает Scope из файлов и текста изменений, вычисляя
-// уникальные директории изменённых файлов.
+// уникальные директории изменённых файлов. Удалённые из рабочей копии
+// файлы (git diff возвращает их при удалении) исключаются из списка Files:
+// проверять их линтерами нельзя, а текст изменений (changes) приходит уже
+// сформированным с учётом удалений и остаётся нетронутым.
 func makeScope(kind scopeKind, name string, files []string, changes string) Scope {
+	existing := existingFiles(files)
 	return Scope{
 		kind:        kind,
 		Name:        name,
-		Files:       files,
-		Dirs:        uniqueDirs(files),
+		Files:       existing,
+		Dirs:        uniqueDirs(existing),
 		Changes:     changes,
-		FileChanges: readScopeFiles(files),
+		FileChanges: readScopeFiles(existing),
 	}
+}
+
+// existingFiles оставляет только файлы, которые реально существуют на диске
+// (и не являются директориями). Остальные отбрасываются.
+func existingFiles(files []string) []string {
+	var result []string
+	for _, f := range files {
+		if info, err := os.Stat(f); err == nil && !info.IsDir() {
+			result = append(result, f)
+		}
+	}
+	return result
 }
 
 // uniqueDirs возвращает отсортированный список уникальных директорий

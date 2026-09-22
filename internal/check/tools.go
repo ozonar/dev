@@ -2,10 +2,70 @@ package check
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
+	"strings"
 
 	"dev/internal/toolchain"
 )
+
+// extToLanguage сопоставляет расширение файла с языком, под который
+// в dev review существуют проверки. Расширения, для которых проверок нет
+// (например .css, .md), в карту не попадают — такие файлы игнорируются.
+var extToLanguage = map[string]string{
+	".go":  "go",
+	".php": "php",
+	".js":  "javascript",
+	".jsx": "javascript",
+	".mjs": "javascript",
+	".cjs": "javascript",
+	".ts":  "javascript",
+	".tsx": "javascript",
+	".py":  "python",
+}
+
+// languageOrder — фиксированный порядок запуска проверок по языкам,
+// чтобы вывод был стабильным независимо от порядка файлов в scope.
+var languageOrder = []string{"go", "php", "javascript", "python"}
+
+// languagesInFiles возвращает языки, представленные в списке файлов,
+// в фиксированном порядке (languageOrder). Язык попадает в результат,
+// если среди файлов есть хотя бы один с известным расширением.
+// Неизвестные расширения (например .css) отбрасываются.
+func languagesInFiles(files []string) []string {
+	present := make(map[string]bool)
+	for _, f := range files {
+		if lang, ok := extToLanguage[strings.ToLower(filepath.Ext(f))]; ok {
+			present[lang] = true
+		}
+	}
+	var langs []string
+	for _, lang := range languageOrder {
+		if present[lang] {
+			langs = append(langs, lang)
+		}
+	}
+	return langs
+}
+
+// codeExtensionsFor возвращает расширения кода языка, файлы которых реально
+// передаются линтерам этого языка. Это единый источник правды для целей
+// проверки: языковая карта extToLanguage отвечает только за определение
+// языков по расширениям, а цели для линтеров берутся отсюда.
+func codeExtensionsFor(language string) []string {
+	switch language {
+	case "go":
+		return []string{".go"}
+	case "php":
+		return []string{".php"}
+	case "javascript":
+		return []string{".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
+	case "python":
+		return []string{".py"}
+	default:
+		return nil
+	}
+}
 
 // programsFor возвращает список линтеров/анализаторов, которые реально
 // запускаются в рамках dev check для данного языка. Каждый линтер несёт

@@ -16,7 +16,10 @@ func TestBuildArgs_Golangci(t *testing.T) {
 	prog := goLinter(toolchain.NewGo(""))
 
 	// Весь код в dry-run.
-	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
+	args, ok := buildArgs(prog, Scope{Name: "all", kind: scopeAll}, ModeDryRun)
+	if !ok {
+		t.Fatal("golangci must run for the all-code scope")
+	}
 	if got := strings.Join(args, " "); got != "run ./..." {
 		t.Errorf("golangci dry-run all args = %q, want %q", got, "run ./...")
 	}
@@ -32,22 +35,28 @@ func TestBuildArgs_Golangci(t *testing.T) {
 	emptyDir := filepath.Join(t.TempDir(), "nogo")
 
 	scope := Scope{Name: "changed", Dirs: []string{emptyDir, withGo}}
-	args = buildArgs(prog, scope, ModeDryRun)
+	args, ok = buildArgs(prog, scope, ModeDryRun)
+	if !ok {
+		t.Fatal("golangci must run when a Go dir exists")
+	}
 	if got, want := strings.Join(args, " "), "run "+withGo; got != want {
 		t.Errorf("golangci dry-run dirs args = %q, want %q", got, want)
 	}
 
 	// Fix-режим.
-	args = buildArgs(prog, scope, ModeFix)
+	args, ok = buildArgs(prog, scope, ModeFix)
+	if !ok {
+		t.Fatal("golangci must run in fix mode when a Go dir exists")
+	}
 	if got, want := strings.Join(args, " "), "run --fix "+withGo; got != want {
 		t.Errorf("golangci fix args = %q, want %q", got, want)
 	}
 
-	// Если после фильтрации директорий не осталось — fallback на ./....
+	// Если после фильтрации директорий не осталось и объём не полный —
+	// программу запускать не нужно (пункт 5: остановка вместо проверки всего).
 	scopeEmpty := Scope{Name: "changed", Dirs: []string{emptyDir}}
-	args = buildArgs(prog, scopeEmpty, ModeDryRun)
-	if got := strings.Join(args, " "); got != "run ./..." {
-		t.Errorf("golangci empty dirs args = %q, want %q", got, "run ./...")
+	if _, ok := buildArgs(prog, scopeEmpty, ModeDryRun); ok {
+		t.Error("golangci must not run when there are no Go dirs in the changed scope")
 	}
 }
 
@@ -55,15 +64,27 @@ func TestBuildArgs_Golangci(t *testing.T) {
 func TestBuildArgs_Phpstan(t *testing.T) {
 	prog := phpStanLinter(toolchain.NewPhp(""))
 
-	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
+	args, ok := buildArgs(prog, Scope{Name: "all", kind: scopeAll}, ModeDryRun)
+	if !ok {
+		t.Fatal("phpstan must run for the all-code scope")
+	}
 	if got := strings.Join(args, " "); got != "analyse --memory-limit=1G --level=5 ." {
 		t.Errorf("phpstan dry-run all args = %q, want %q", got, "analyse --memory-limit=1G --level=5 .")
 	}
 
 	scope := Scope{Name: "changed", Files: []string{"src/a.php"}}
-	args = buildArgs(prog, scope, ModeFix)
+	args, ok = buildArgs(prog, scope, ModeFix)
+	if !ok {
+		t.Fatal("phpstan must run when PHP files exist")
+	}
 	if got := strings.Join(args, " "); got != "analyse --memory-limit=1G --level=5 src/a.php" {
 		t.Errorf("phpstan fix args = %q, want %q", got, "analyse --memory-limit=1G --level=5 src/a.php")
+	}
+
+	// Нет PHP-файлов в scope — программу не запускаем (пункт 5).
+	noPHP := Scope{Name: "changed", Files: []string{"readme.md"}}
+	if _, ok := buildArgs(prog, noPHP, ModeDryRun); ok {
+		t.Error("phpstan must not run without PHP files in the changed scope")
 	}
 }
 
@@ -75,7 +96,10 @@ func TestBuildArgs_PhpCsFixer(t *testing.T) {
 	configArg := "--config=" + cfg
 
 	// Dry-run добавляет флаг --dry-run и конфиг. Кэш всегда отключён.
-	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
+	args, ok := buildArgs(prog, Scope{Name: "all", kind: scopeAll}, ModeDryRun)
+	if !ok {
+		t.Fatal("php-cs-fixer must run for the all-code scope")
+	}
 	want := "fix --using-cache=no --dry-run " + configArg + " ."
 	if got := strings.Join(args, " "); got != want {
 		t.Errorf("php-cs-fixer dry-run all args = %q, want %q", got, want)
@@ -83,7 +107,10 @@ func TestBuildArgs_PhpCsFixer(t *testing.T) {
 
 	// Fix-режим убирает --dry-run, но сохраняет конфиг и пути файлов.
 	scope := Scope{Name: "changed", Files: []string{"src/a.php"}}
-	args = buildArgs(prog, scope, ModeFix)
+	args, ok = buildArgs(prog, scope, ModeFix)
+	if !ok {
+		t.Fatal("php-cs-fixer must run when PHP files exist")
+	}
 	want = "fix --using-cache=no " + configArg + " src/a.php"
 	if got := strings.Join(args, " "); got != want {
 		t.Errorf("php-cs-fixer fix args = %q, want %q", got, want)
@@ -179,22 +206,37 @@ func TestBuildArgs_Biome(t *testing.T) {
 	prog := biomeLinter()
 
 	// Dry-run всех файлов: biome check .
-	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
+	args, ok := buildArgs(prog, Scope{Name: "all", kind: scopeAll}, ModeDryRun)
+	if !ok {
+		t.Fatal("biome must run for the all-code scope")
+	}
 	if got := strings.Join(args, " "); got != "check ." {
 		t.Errorf("biome dry-run all args = %q, want %q", got, "check .")
 	}
 
 	// Fix-режим добавляет --write.
-	args = buildArgs(prog, Scope{Name: "all"}, ModeFix)
+	args, ok = buildArgs(prog, Scope{Name: "all", kind: scopeAll}, ModeFix)
+	if !ok {
+		t.Fatal("biome must run in fix mode for the all-code scope")
+	}
 	if got := strings.Join(args, " "); got != "check --write ." {
 		t.Errorf("biome fix all args = %q, want %q", got, "check --write .")
 	}
 
 	// Dry-run с явными файлами.
 	scope := Scope{Name: "changed", Files: []string{"src/a.ts", "src/b.js"}}
-	args = buildArgs(prog, scope, ModeDryRun)
+	args, ok = buildArgs(prog, scope, ModeDryRun)
+	if !ok {
+		t.Fatal("biome must run when JS/TS files exist")
+	}
 	if got := strings.Join(args, " "); got != "check src/a.ts src/b.js" {
 		t.Errorf("biome dry-run files args = %q, want %q", got, "check src/a.ts src/b.js")
+	}
+
+	// Без JS/TS-файлов программу не запускаем (пункт 5).
+	noJS := Scope{Name: "changed", Files: []string{"main.py"}}
+	if _, ok := buildArgs(prog, noJS, ModeDryRun); ok {
+		t.Error("biome must not run without JS/TS files in the changed scope")
 	}
 }
 
@@ -203,22 +245,37 @@ func TestBuildArgs_Ruff(t *testing.T) {
 	prog := ruffLinter()
 
 	// Dry-run всех файлов: ruff check .
-	args := buildArgs(prog, Scope{Name: "all"}, ModeDryRun)
+	args, ok := buildArgs(prog, Scope{Name: "all", kind: scopeAll}, ModeDryRun)
+	if !ok {
+		t.Fatal("ruff must run for the all-code scope")
+	}
 	if got := strings.Join(args, " "); got != "check ." {
 		t.Errorf("ruff dry-run all args = %q, want %q", got, "check .")
 	}
 
 	// Fix-режим добавляет --fix.
-	args = buildArgs(prog, Scope{Name: "all"}, ModeFix)
+	args, ok = buildArgs(prog, Scope{Name: "all", kind: scopeAll}, ModeFix)
+	if !ok {
+		t.Fatal("ruff must run in fix mode for the all-code scope")
+	}
 	if got := strings.Join(args, " "); got != "check --fix ." {
 		t.Errorf("ruff fix all args = %q, want %q", got, "check --fix .")
 	}
 
 	// Dry-run с явными файлами.
 	scope := Scope{Name: "changed", Files: []string{"src/a.py", "src/b.py"}}
-	args = buildArgs(prog, scope, ModeDryRun)
+	args, ok = buildArgs(prog, scope, ModeDryRun)
+	if !ok {
+		t.Fatal("ruff must run when Python files exist")
+	}
 	if got := strings.Join(args, " "); got != "check src/a.py src/b.py" {
 		t.Errorf("ruff dry-run files args = %q, want %q", got, "check src/a.py src/b.py")
+	}
+
+	// Без .py-файлов программу не запускаем (пункт 5).
+	noPy := Scope{Name: "changed", Files: []string{"src/a.go"}}
+	if _, ok := buildArgs(prog, noPy, ModeDryRun); ok {
+		t.Error("ruff must not run without Python files in the changed scope")
 	}
 }
 
@@ -556,5 +613,152 @@ func TestBuildScope_AllCodeExcludesVendor(t *testing.T) {
 		if !found {
 			t.Errorf("scope.Dirs не содержит %q: %v", want, scope.Dirs)
 		}
+	}
+}
+
+// TestLanguagesInFiles проверяет определение языков по расширениям файлов:
+// index.ts -> javascript, script.php -> php, а style.css исключается (для него
+// проверок нет). Порядок языков фиксированный.
+func TestLanguagesInFiles(t *testing.T) {
+	got := languagesInFiles([]string{"index.ts", "script.php", "style.css"})
+	want := []string{"php", "javascript"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("languagesInFiles = %v, want %v", got, want)
+	}
+
+	// Только неподдерживаемые расширения — пусто.
+	if got := languagesInFiles([]string{"style.css", "README.md"}); len(got) != 0 {
+		t.Errorf("languagesInFiles(css/md) = %v, want empty", got)
+	}
+
+	// Пустой список — пусто.
+	if got := languagesInFiles(nil); len(got) != 0 {
+		t.Errorf("languagesInFiles(nil) = %v, want empty", got)
+	}
+
+	// Мультиязычный набор: go, python.
+	got = languagesInFiles([]string{"a.py", "b.go", "c.php"})
+	want = []string{"go", "php", "python"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("languagesInFiles multi = %v, want %v", got, want)
+	}
+}
+
+// TestExistingFiles проверяет, что existingFiles оставляет только файлы,
+// существующие на диске (удалённые из git отбрасываются).
+func TestExistingFiles(t *testing.T) {
+	tmp := t.TempDir()
+	alive := filepath.Join(tmp, "alive.go")
+	if err := os.WriteFile(alive, []byte("package pkg\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	missing := filepath.Join(tmp, "missing.go")
+
+	got := existingFiles([]string{alive, missing})
+	if !reflect.DeepEqual(got, []string{alive}) {
+		t.Errorf("existingFiles = %v, want [%s]", got, alive)
+	}
+}
+
+// TestBuildScope_DeletedFilesFiltered проверяет, что удалённый из рабочей
+// копии файл не попадает в scope.Files (линтеры не пытаются его проверять),
+// но текст изменений всё равно содержит diff этого файла.
+func TestBuildScope_DeletedFilesFiltered(t *testing.T) {
+	tmp := t.TempDir()
+
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+	} {
+		if err := gitRun(tmp, args...); err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+	}
+
+	writeFile(t, filepath.Join(tmp, "main.go"), "package main\nfunc main() {}\n")
+	writeFile(t, filepath.Join(tmp, "old.go"), "package main\n")
+	if err := gitRun(tmp, "add", "."); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+	if err := gitRun(tmp, "commit", "-qm", "init"); err != nil {
+		t.Fatalf("git commit: %v", err)
+	}
+
+	// Удаляем old.go из рабочей копии и меняем main.go.
+	if err := os.Remove(filepath.Join(tmp, "old.go")); err != nil {
+		t.Fatalf("remove old.go: %v", err)
+	}
+	writeFile(t, filepath.Join(tmp, "main.go"), "package main\n\nfunc main() { println(\"hi\") }\n")
+
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldDir) }()
+
+	scope := buildScope(scopeChanged)
+
+	for _, f := range scope.Files {
+		if f == "old.go" {
+			t.Errorf("удалённый файл не должен попадать в scope.Files: %v", scope.Files)
+		}
+	}
+	if len(scope.Files) == 0 {
+		t.Fatal("scope.Files пуст, ожидался main.go")
+	}
+	// Дифф удалённого файла сохраняется в тексте изменений.
+	if !strings.Contains(scope.Changes, "old.go") {
+		t.Errorf("diff удалённого файла должен остаться в тексте изменений:\n%s", scope.Changes)
+	}
+}
+
+// TestPromptNpmScript проверяет выбор npm-скрипта: при одном скрипте он
+// возвращается сразу, при нескольких — предпочитается typecheck, иначе
+// первый по алфавиту. Ввод из stdin при прогоне тестов равен EOF, поэтому
+// выбирается вариант по умолчанию без блокировки.
+func TestPromptNpmScript(t *testing.T) {
+	// Один скрипт — возвращается он.
+	if got := promptNpmScript(map[string]string{"build": "tsc"}); got != "build" {
+		t.Errorf("promptNpmScript(one) = %q, want build", got)
+	}
+
+	// Несколько скриптов — предпочитаем typecheck.
+	got := promptNpmScript(map[string]string{"build": "tsc", "typecheck": "tsc --noEmit", "lint": "eslint"})
+	if got != "typecheck" {
+		t.Errorf("promptNpmScript(multi) = %q, want typecheck", got)
+	}
+
+	// Нет typecheck — первый по алфавиту.
+	got = promptNpmScript(map[string]string{"lint": "eslint", "build": "tsc"})
+	if got != "build" {
+		t.Errorf("promptNpmScript(no typecheck) = %q, want build", got)
+	}
+}
+
+// TestCodeExtensionsFor проверяет единый источник кодовых расширений:
+// extToLanguage отвечает за определение языков, а цели для линтеров
+// берутся только из codeExtensionsFor.
+func TestCodeExtensionsFor(t *testing.T) {
+	got := codeExtensionsFor("javascript")
+	want := []string{".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("codeExtensionsFor(javascript) = %v, want %v", got, want)
+	}
+
+	if got := codeExtensionsFor("go"); !reflect.DeepEqual(got, []string{".go"}) {
+		t.Errorf("codeExtensionsFor(go) = %v", got)
+	}
+	if got := codeExtensionsFor("php"); !reflect.DeepEqual(got, []string{".php"}) {
+		t.Errorf("codeExtensionsFor(php) = %v", got)
+	}
+	if got := codeExtensionsFor("python"); !reflect.DeepEqual(got, []string{".py"}) {
+		t.Errorf("codeExtensionsFor(python) = %v", got)
+	}
+	if got := codeExtensionsFor("ruby"); got != nil {
+		t.Errorf("codeExtensionsFor(ruby) = %v, want nil", got)
 	}
 }

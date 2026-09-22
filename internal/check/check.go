@@ -1,7 +1,7 @@
 package check
 
 import (
-	"fmt"
+	"strings"
 
 	"dev/internal/detector"
 	"dev/internal/toolchain"
@@ -20,19 +20,10 @@ type Options struct {
 }
 
 // Run выполняет статическую проверку кода анализаторами.
+// Выбор проверок строится по расширениям файлов выбранного объёма,
+// а не по типу проекта: для каждого языка, представленного в scope,
+// запускаются его линтеры и языко-специфичные проверки (php -l, npm run).
 func Run(info *detector.ProjectInfo, opts Options) error {
-	if info.Language == "" || info.Language == "unknown" {
-		return fmt.Errorf("unsupported project language: %q", info.Language)
-	}
-
-	color.Green("Project: %s (%s)", info.Language, info.Framework)
-
-	// Скачиваем линтеры и их вендоры (Require), если ещё не скачаны.
-	manager, programs, err := ensurePrograms(info.Language, info.LanguageVersion)
-	if err != nil {
-		return fmt.Errorf("failed to prepare tools: %v", err)
-	}
-
 	// Определяем объём проверки.
 	scope, err := resolveScope(opts)
 	if err != nil {
@@ -51,16 +42,68 @@ func Run(info *detector.ProjectInfo, opts Options) error {
 	}
 	color.Cyan("Mode: %s\n", modeLabel)
 
-	// Запускаем линтеры
+	// Языки определяем по расширениям файлов выбранного объёма.
+	langs := languagesInFiles(scope.Files)
+
+	// Fallback для полной проверки вне git-репозитория: файлов из git нет,
+	// но язык проекта известен — проверяем весь код этого языка.
+	if len(langs) == 0 && scope.kind == scopeAll && info.Language != "" && info.Language != "unknown" {
+		langs = []string{info.Language}
+	}
+
+	if len(langs) == 0 {
+		color.Yellow("No files with supported extensions found in scope. Nothing to check.")
+		return nil
+	}
+
+	color.Green("Detected languages from files: %s", strings.Join(langs, ", "))
+
+	for _, lang := range langs {
+		// Версия из детектора применяется только к языку проекта, чтобы
+		// в мультиязычном проекте не подставлять версию чужого языка.
+		version := ""
+		if info.Language == lang {
+			version = info.LanguageVersion
+		}
+		if err := runLanguage(lang, version, scope, opts.Mode); err != nil {
+			color.Red("Checks for %s failed: %v", lang, err)
+		}
+	}
+
+	return nil
+}
+
+// runLanguage запускает все проверки одного языка: гарантирует наличие
+// линтеров (и их вендоров), прогоняет их по файлам scope и выполняет
+// языко-специфичные проверки (php -l, npm run typecheck).
+func runLanguage(language, version string, scope Scope, mode Mode) error {
+	manager, programs, err := ensurePrograms(language, version)
+	if err != nil {
+		return err
+	}
+
+	color.Green("Language: %s", language)
+
 	for _, prog := range programs {
 		if _, isRuntime := prog.(toolchain.Runtime); isRuntime {
 			continue
 		}
+		args, ok := buildArgs(prog, scope, mode)
+		if !ok {
+			color.Yellow("No files for %s in scope. Skipping.", prog.Name())
+			continue
+		}
 		printProgramHeader(prog)
-		args := buildArgs(prog, scope, opts.Mode)
 		if err := runProgram(manager, prog, args); err != nil {
 			color.Red("%s finished with error: %v", prog.Name(), err)
 		}
+	}
+
+	switch language {
+	case "php":
+		runPhpLint(manager, programs, scope)
+	case "javascript":
+		runNpmCheck(scope)
 	}
 
 	return nil
