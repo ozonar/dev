@@ -92,6 +92,13 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Subcommands: `dev check fix` (auto-fix issues), `dev check ai` (AI review, planned)
   - Non-interactive flags: `--all`, `--commit=N`, `--branch=master|develop`, `--code`
 
+- **`prod release`** – Production release management (prepare + switch):
+  - `prod release prepare [name]` – move build artifacts from `builds_folder` into a new `releases_folder/release-<datetime>` archive folder; interactive release name selection (default: first) when omitted
+  - `prod release switch [name]` – list the most recent releases (newest first, today's releases highlighted with a white background) and switch the `current_release_folder` symlink to the selected one; `-l/--lines` controls how many releases are shown (default: 5)
+  - `prod release` – run both steps in order: prepare a new release, then switch to it
+  - Configuration is read from `release.yml` in the current directory; if missing or invalid, an editor opens with a filled template (same behavior as `dev self-config`)
+  - Per-release optional settings: `release_prefix` (default `release-`) and `release_time_format` (default `2006-01-02_15-04-05`)
+
 ## Installation
 
 ### From GitHub
@@ -130,6 +137,11 @@ dev ai "install npm"    # ask AI to generate commands
 dev self-config         # configure AI settings
 dev check               # run static code analysis (dry-run)
 dev check fix           # run analysis and auto-fix issues
+
+prod                    # production server health report
+prod release            # prepare a new release and switch to it
+prod release prepare    # move build artifacts to releases/release-<datetime>
+prod release switch -l 5  # switch the current release symlink
 ```
 
 ## Configuration
@@ -181,9 +193,12 @@ dev/
 │   ├── migrate/status.go    # Migration status & lock analysis
 │   ├── port/                # Port checking (fuser, ss, lsof, nmap)
 │   ├── prepare/             # Environment preparation
+│   ├── prod/                # Production server health diagnostics
+│   ├── release/             # Release management (release.yml, symlinks)
 │   ├── run/                 # Project runner
 │   ├── version/             # Version information
 │   └── virus/               # Remote copy via SCP
+├── cmd/prod/main.go         # prod CLI entry point (health + release)
 ├── go.mod
 └── README.md
 ```

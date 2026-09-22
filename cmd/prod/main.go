@@ -4,13 +4,17 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"dev/internal/ai"
 	"dev/internal/colors"
 	"dev/internal/prod"
+	"dev/internal/release"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -90,12 +94,59 @@ var llmCmd = &cobra.Command{
 	},
 }
 
+// releaseLines — количество последних релизов для показа в команде switch.
+var releaseLines int
+
+var releaseCmd = &cobra.Command{
+	Use:     "release",
+	Aliases: []string{"deploy"},
+	Short:   "Prepare and switch production releases",
+	Long: `Prepares a new release folder from build artifacts and switches the
+active release via a symlink. Configuration is read from release.yml in the
+current directory; if missing, an editor opens with a filled template.
+
+Commands:
+  prepare [name]   move build artifacts to releases/release-<datetime>
+  switch [name]    switch the current release symlink
+  release          prepare then switch (both steps in order)
+
+Examples:
+  prod release prepare backend
+  prod release switch -l 5
+  prod release`,
+	Run: func(cmd *cobra.Command, args []string) {
+		runReleaseBoth()
+	},
+}
+
+var releasePrepareCmd = &cobra.Command{
+	Use:   "prepare [name]",
+	Short: "Move build artifacts into a new release folder",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runReleasePrepare(args)
+	},
+}
+
+var releaseSwitchCmd = &cobra.Command{
+	Use:   "switch [name]",
+	Short: "Switch the current release symlink",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		runReleaseSwitch(args)
+	},
+}
+
 func main() {
 	statCmd.Flags().BoolVarP(&statAll, "all", "a", false, "Show full report with all categories")
+	releaseCmd.PersistentFlags().IntVarP(&releaseLines, "lines", "l", 5, "Number of recent releases to show")
 	rootCmd.AddCommand(statCmd)
 	rootCmd.AddCommand(detailCmd)
 	rootCmd.AddCommand(cascadeCmd)
 	rootCmd.AddCommand(llmCmd)
+	releaseCmd.AddCommand(releasePrepareCmd)
+	releaseCmd.AddCommand(releaseSwitchCmd)
+	rootCmd.AddCommand(releaseCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -192,4 +243,146 @@ func runCategory(name string) {
 	}
 	fmt.Println()
 	prod.RenderCategory(cat)
+}
+
+// argOrEmpty возвращает первый позиционный аргумент или пустую строку.
+func argOrEmpty(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return ""
+}
+
+// selectReleaseName определяет имя релиза из аргумента либо интерактивно:
+// выводит список всех релизов конфига и просит выбрать номер (по умолчанию 1).
+func selectReleaseName(cfg *release.Config, arg string) (string, error) {
+	if arg != "" {
+		if cfg.Releases[arg] == nil {
+			return "", fmt.Errorf("unknown release %q", arg)
+		}
+		return arg, nil
+	}
+	names := make([]string, 0, len(cfg.Releases))
+	for n := range cfg.Releases {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	fmt.Println(colors.Cyan("Available releases:"))
+	for i, n := range names {
+		fmt.Printf("  %d. %s\n", i+1, n)
+	}
+	idx, err := release.SelectIndex(os.Stdin, os.Stdout, "Select release", len(names))
+	if err != nil {
+		return "", err
+	}
+	return names[idx], nil
+}
+
+// runReleasePrepare выполняет команду prod release prepare [name]:
+// переносит содержимое builds_folder в releases_folder/release-<datetime>.
+func runReleasePrepare(args []string) {
+	cfg, err := release.EnsureConfig(".")
+	if err != nil {
+		fmt.Println(colors.Red("release config error: " + err.Error()))
+		return
+	}
+	name, err := selectReleaseName(cfg, argOrEmpty(args))
+	if err != nil {
+		fmt.Println(colors.Red(err.Error()))
+		return
+	}
+	created, err := release.Prepare(cfg.Releases[name], time.Now())
+	if err != nil {
+		fmt.Println(colors.Red("prepare failed: " + err.Error()))
+		return
+	}
+	fmt.Println(colors.Green("Release prepared: " + name + " -> " + created))
+}
+
+// runReleaseSwitch выполняет команду prod release switch [name]: показывает
+// список последних релизов (сегодняшние подсвечены белым фоном) и переключает
+// симлинк current_release_folder на выбранный.
+func runReleaseSwitch(args []string) {
+	cfg, err := release.EnsureConfig(".")
+	if err != nil {
+		fmt.Println(colors.Red("release config error: " + err.Error()))
+		return
+	}
+	name, err := selectReleaseName(cfg, argOrEmpty(args))
+	if err != nil {
+		fmt.Println(colors.Red(err.Error()))
+		return
+	}
+	rel := cfg.Releases[name]
+
+	infos, err := release.ListReleases(rel)
+	if err != nil {
+		fmt.Println(colors.Red(err.Error()))
+		return
+	}
+	if len(infos) == 0 {
+		fmt.Println(colors.Yellow("No releases found in " + rel.ReleasesFolder))
+		return
+	}
+
+	limit := releaseLines
+	if limit <= 0 {
+		limit = 5
+	}
+	if limit > len(infos) {
+		limit = len(infos)
+	}
+	recent := infos[:limit]
+
+	// Сегодняшние релизы подсвечиваем белым задним фоном.
+	todayStyle := color.New(color.BgWhite, color.FgBlack)
+	fmt.Println(colors.Cyan("Recent releases (" + name + "):"))
+	for i, r := range recent {
+		label := r.Name
+		if r.IsToday {
+			label = todayStyle.Sprint(label)
+		}
+		fmt.Printf("  %d. %s\n", i+1, label)
+	}
+
+	idx, err := release.SelectIndex(os.Stdin, os.Stdout, "Select release", len(recent))
+	if err != nil {
+		fmt.Println(colors.Red(err.Error()))
+		return
+	}
+	target := recent[idx].Name
+	if err := release.SwitchRelease(rel, target); err != nil {
+		fmt.Println(colors.Red("switch failed: " + err.Error()))
+		return
+	}
+	fmt.Println(colors.Green("Switched " + rel.CurrentReleaseLink + " -> " + filepath.Join(rel.ReleasesFolder, target)))
+}
+
+// runReleaseBoth выполняет обе операции по порядку: prepare затем switch
+// на только что созданный релиз.
+func runReleaseBoth() {
+	cfg, err := release.EnsureConfig(".")
+	if err != nil {
+		fmt.Println(colors.Red("release config error: " + err.Error()))
+		return
+	}
+	name, err := selectReleaseName(cfg, "")
+	if err != nil {
+		fmt.Println(colors.Red(err.Error()))
+		return
+	}
+	rel := cfg.Releases[name]
+
+	created, err := release.Prepare(rel, time.Now())
+	if err != nil {
+		fmt.Println(colors.Red("prepare failed: " + err.Error()))
+		return
+	}
+	fmt.Println(colors.Green("Release prepared: " + created))
+
+	if err := release.SwitchRelease(rel, created); err != nil {
+		fmt.Println(colors.Red("switch failed: " + err.Error()))
+		return
+	}
+	fmt.Println(colors.Green("Switched " + rel.CurrentReleaseLink + " -> " + filepath.Join(rel.ReleasesFolder, created)))
 }
