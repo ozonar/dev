@@ -47,6 +47,15 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Node.js: runs `npm run build`
   - Other languages: no‑op (informs that building is not required)
 
+- **`dev unit [args]`** – Run unit tests with the appropriate runner for the detected language/framework:
+  - Go: `go test ./...`
+  - PHP: `vendor/bin/phpunit` (falls back to the `composer test` script)
+  - JS/Node: `npm test` / `yarn test` / `pnpm test` (detected from lock files)
+  - Python: `pytest` (if configured or installed), otherwise `manage.py test` (Django) or `unittest discover`
+  - Ruby: `bin/rails test` / `bundle exec rspec` / `bundle exec rake test`
+  - Extra arguments are passed through to the test runner, e.g. `dev unit ./internal/...`
+  - Supports the same language flags as other commands (`--go`, `--php`, `--js`, `--python`, `--version`)
+
 - **`dev migrate`** – Run database migrations for the detected framework/language.
 
 - **`dev migrate status`** – Show migration status with lock analysis:
@@ -136,6 +145,8 @@ dev install             # install dev to system
 dev self-update         # update dev to latest version
 dev virus user@host     # copy dev to remote server
 dev build               # build project
+dev unit                # run unit tests
+dev unit ./internal/... # run unit tests for specific packages
 dev migrate             # run database migrations
 dev migrate status      # show migration status
 dev migrate new         # create a new migration
@@ -169,6 +180,29 @@ LLM_MODEL=gpt-4o
 ```
 
 Use `dev self-config` to open the config file for editing.
+
+### Custom Commands
+
+Unknown `dev <name>` commands are matched against custom commands defined in:
+
+- `~/dev-command/custom.yml` — global commands (edit with `dev self-command`)
+- `.custom` in the directory where `dev` is invoked — project-local commands; local commands override global ones with the same name
+
+Command format:
+
+```yaml
+commands:
+  deploy:
+    subcommands:
+      - git pull
+      - dev migrate
+    # path restricts the command: it runs only when the current directory
+    # is inside the given path (absolute, "~", or relative to the launch dir).
+    # Empty value means the command is available everywhere.
+    path: /home/user/myproject
+```
+
+Available variables in subcommands: `$(current_dir)`, `$(language)`, `$(framework)`.
 
 ### Project Detection
 
@@ -208,6 +242,7 @@ dev/
 │   ├── prod/                # Production server health diagnostics
 │   ├── release/             # Release management (release.yml, symlinks)
 │   ├── run/                 # Project runner
+│   ├── unit/                # Unit test running
 │   ├── update/              # Self-update logic (dev/prod)
 │   ├── version/             # Version information
 │   └── virus/               # Remote copy via SCP

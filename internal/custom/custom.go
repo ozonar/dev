@@ -1,10 +1,15 @@
 // Package custom реализует пользовательские команды, хранящиеся в
-// конфигурационном файле ~/dev-command/custom.yml.
+// глобальном конфигурационном файле ~/dev-command/custom.yml и в локальном
+// файле .custom директории запуска команды dev (локальные команды имеют
+// приоритет при совпадении имён).
 //
-// Незнакомая команда dev <name> сверяется со списком команд из конфига и,
+// Незнакомая команда dev <name> сверяется со списком команд из конфигов и,
 // если найдена, последовательно выполняет её подкоманды с подстановкой
 // переменных $(current_dir), $(language), $(framework). При падении любой
 // подкоманды выполнение останавливается.
+//
+// Каждая команда может быть ограничена путём через поле path: она выполняется
+// только когда текущая директория находится внутри указанного пути.
 package custom
 
 import (
@@ -22,6 +27,10 @@ import (
 // configPath — путь к файлу пользовательских команд (относительно home).
 const configPath = "~/dev-command/custom.yml"
 
+// localFileName — имя файла локальных пользовательских команд в директории
+// запуска команды dev.
+const localFileName = ".custom"
+
 // Context содержит параметры, пробрасываемые в пользовательскую команду:
 // текущий путь, язык и фреймворк проекта.
 type Context struct {
@@ -31,8 +40,14 @@ type Context struct {
 }
 
 // Command описывает одну пользовательскую команду — список подкоманд.
+// Path ограничивает доступность команды: она выполняется только когда текущая
+// директория находится внутри указанного пути (пустая строка — без ограничений).
 type Command struct {
 	Subcommands []string `yaml:"subcommands"`
+	// Path — путь, внутри которого команда доступна. Абсолютный путь либо "~"
+	// резолвятся как есть; относительный путь считается относительно текущей
+	// директории запуска. Пустое значение — команда доступна везде.
+	Path string `yaml:"path"`
 }
 
 // Config — корневая структура конфигурационного файла custom.yml.
@@ -57,10 +72,21 @@ func ConfigFilePath() string {
 	return resolvePath(configPath)
 }
 
-// Load читает конфигурационный файл custom.yml.
+// Load читает глобальный конфигурационный файл custom.yml (~/dev-command).
 // Если файла нет — возвращает пустой конфиг без ошибки.
 func Load() (*Config, error) {
-	path := ConfigFilePath()
+	return loadFile(ConfigFilePath())
+}
+
+// LoadLocal читает локальный файл кастомных команд (.custom) из директории
+// запуска команды dev. Если файла нет — возвращает пустой конфиг без ошибки.
+func LoadLocal(cwd string) (*Config, error) {
+	return loadFile(filepath.Join(cwd, localFileName))
+}
+
+// loadFile читает и разбирает YAML-конфиг кастомных команд из указанного файла.
+// Отсутствие файла не является ошибкой — возвращается пустой конфиг.
+func loadFile(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -79,10 +105,48 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
+// LoadAll загружает глобальный конфиг и локальный .custom из директории
+// запуска, объединяя их. При совпадении имён команда из локального файла
+// имеет приоритет — она специфична для конкретного проекта.
+func LoadAll(cwd string) (*Config, error) {
+	global, err := Load()
+	if err != nil {
+		return nil, err
+	}
+	local, err := LoadLocal(cwd)
+	if err != nil {
+		return nil, err
+	}
+	for name, cmd := range local.Commands {
+		global.Commands[name] = cmd
+	}
+	return global, nil
+}
+
+// LocalFilePath возвращает путь к локальному файлу кастомных команд (.custom)
+// внутри указанной директории запуска.
+func LocalFilePath(cwd string) string {
+	return filepath.Join(cwd, localFileName)
+}
+
 // Names возвращает отсортированный список имён пользовательских команд.
 func (c *Config) Names() []string {
 	names := make([]string, 0, len(c.Commands))
 	for n := range c.Commands {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// NamesFor возвращает отсортированный список имён команд, доступных в заданном
+// контексте (с учётом ограничений по пути).
+func (c *Config) NamesFor(ctx Context) []string {
+	names := make([]string, 0, len(c.Commands))
+	for n, cmd := range c.Commands {
+		if !cmd.allowedByPath(ctx.Dir) {
+			continue
+		}
 		names = append(names, n)
 	}
 	sort.Strings(names)
@@ -95,13 +159,44 @@ func (c *Config) Has(name string) bool {
 	return ok
 }
 
+// allowedByPath проверяет, проходит ли команда ограничение по пути Path.
+// Пустое значение Path означает доступность в любом месте. Относительные пути
+// интерпретируются относительно текущей директории запуска (dir).
+func (c Command) allowedByPath(dir string) bool {
+	if c.Path == "" {
+		return true
+	}
+
+	target := resolvePath(c.Path)
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(dir, target)
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return false
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+
+	rel, err := filepath.Rel(absTarget, absDir)
+	if err != nil {
+		return false
+	}
+	// Текущая директория внутри целевой, если относительный путь не выходит
+	// за пределы цели (".." либо ".."+разделитель).
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
 // RunCommand выполняет пользовательскую команду по имени.
-// Возвращает (false, nil), если команда с таким именем не найдена.
+// Возвращает (false, nil), если команда с таким именем не найдена либо её
+// ограничение по пути не допускает запуск из текущей директории.
 // Подкоманды выполняются последовательно; при падении любой из них
 // выполнение прерывается и возвращается ошибка.
 func (c *Config) RunCommand(name string, ctx Context) (bool, error) {
 	cmd, ok := c.Commands[name]
-	if !ok {
+	if !ok || !cmd.allowedByPath(ctx.Dir) {
 		return false, nil
 	}
 
@@ -146,11 +241,20 @@ func Edit() error {
 	// Создаём файл с шаблоном, если он не существует.
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		defaultCfg := `# dev custom commands
+#
+# Глобальные команды хранятся здесь (~/dev-command/custom.yml).
+# Локальные команды проекта можно положить в файл .custom в корне проекта —
+# они будут доступны только при запуске dev из этого каталога и переопределяют
+# глобальные команды с теми же именами.
+#
+# Доступные переменные: $(current_dir), $(language), $(framework).
+# Поле path ограничивает команду: она выполняется только когда текущая
+# директория находится внутри указанного пути (пусто — без ограничений).
 
 commands:
-  example:
-    subcommands:
-      - echo "Hello from $(current_dir) [$(language)/$(framework)]"
+		example:
+		  subcommands:
+		    - echo "Hello from $(current_dir) [$(language)/$(framework)]"
 `
 		if err := os.WriteFile(path, []byte(defaultCfg), 0644); err != nil {
 			return fmt.Errorf("failed to create default config: %w", err)

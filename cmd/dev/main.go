@@ -23,6 +23,7 @@ import (
 	"dev/internal/port"
 	"dev/internal/prepare"
 	"dev/internal/run"
+	"dev/internal/unit"
 	"dev/internal/update"
 	"dev/internal/version"
 	"dev/internal/virus"
@@ -95,6 +96,7 @@ func init() {
 	addLanguageFlags(runCmd, false)
 	addLanguageFlags(buildCmd, false)
 	addLanguageFlags(debugCmd, false)
+	addLanguageFlags(unitCmd, false)
 	buildCmd.Flags().StringVarP(&buildOutput, "output", "o", "", "Output file name for Go build (default: auto-derived from main path)")
 	debugCmd.Flags().IntVarP(&debugPort, "port", "p", 0, "Port for the PHP debug server (default: 8000)")
 }
@@ -248,6 +250,49 @@ var buildCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		runBuild()
 	},
+}
+
+var unitCmd = &cobra.Command{
+	Use:   "unit [args]",
+	Short: "Run unit tests",
+	Long: `Run unit tests for the detected language and framework.
+
+The appropriate test runner is chosen automatically:
+  - Go:        go test ./...
+  - PHP:       vendor/bin/phpunit (or composer "test" script)
+  - JS/Node:   npm test / yarn test / pnpm test
+  - Python:    pytest / manage.py test / unittest discover
+  - Ruby:      bin/rails test / bundle exec rspec / bundle exec rake test
+
+Extra arguments are passed to the test runner, for example:
+  dev unit ./internal/...
+  dev unit --filter SomeTest`,
+	Args: cobra.ArbitraryArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		runUnit(args)
+	},
+}
+
+// runUnit запускает юнит-тесты проекта.
+// Дополнительные аргументы пробрасываются в выбранный тестовый раннер.
+func runUnit(args []string) {
+	cwd, _ := os.Getwd()
+	info, err := detectProject(cwd)
+	if err != nil {
+		color.Red("Error detecting project: %v", err)
+		return
+	}
+
+	color.Green("Running unit tests: %s (%s)", info.Framework, info.Language)
+	opts := unit.Options{
+		Framework: info.Framework,
+		Language:  info.Language,
+		Version:   info.LanguageVersion,
+		Args:      args,
+	}
+	if err := unit.Run(opts); err != nil {
+		color.Red("Unit tests failed: %v", err)
+	}
 }
 
 // buildOutput — имя выходного файла
@@ -910,8 +955,9 @@ func applyCheckScopeFlags(opts *check.Options) {
 
 // runRoot обрабатывает вызовы корневой команды.
 // Без аргументов выполняется анализ проекта. Незнакомая команда сверяется
-// с пользовательскими командами из ~/dev-command/custom.yml и, если найдена,
-// запускается с пробросом параметров: текущий путь, язык и фреймворк.
+// с пользовательскими командами из ~/dev-command/custom.yml и локального
+// файла .custom директории запуска и, если найдена, запускается с пробросом
+// параметров: текущий путь, язык и фреймворк.
 func runRoot(args []string) {
 	if len(args) == 0 {
 		runAnalyze()
@@ -929,7 +975,7 @@ func runRoot(args []string) {
 		framework = info.Framework
 	}
 
-	cfg, err := custom.Load()
+	cfg, err := custom.LoadAll(cwd)
 	if err != nil {
 		color.Red("Failed to load custom commands: %v", err)
 		os.Exit(1)
@@ -945,7 +991,7 @@ func runRoot(args []string) {
 	}
 	if !found {
 		color.Red("Unknown command %q for \"dev\"", name)
-		if names := cfg.Names(); len(names) > 0 {
+		if names := cfg.NamesFor(ctx); len(names) > 0 {
 			color.Yellow("Available custom commands: %s", strings.Join(names, ", "))
 		}
 		fmt.Fprintln(os.Stderr, "Run 'dev --help' for usage.")
@@ -963,6 +1009,7 @@ func main() {
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(virusCmd)
 	rootCmd.AddCommand(buildCmd)
+	rootCmd.AddCommand(unitCmd)
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(dbCmd)
