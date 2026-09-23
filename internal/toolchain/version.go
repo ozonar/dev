@@ -44,3 +44,51 @@ func parseMajorMinor(v string) [2]int {
 	}
 	return res
 }
+
+// compareFull сравнивает полные версии (major.minor.patch) по числовым
+// компонентам. Возвращает 1, если a > b; -1 если a < b; 0 если равны.
+// Используется для выбора самой свежей патч-версии среди списка кандидатов.
+func compareFull(a, b string) int {
+	ai := parseFull(a)
+	bi := parseFull(b)
+	for i := 0; i < 3; i++ {
+		if ai[i] > bi[i] {
+			return 1
+		}
+		if ai[i] < bi[i] {
+			return -1
+		}
+	}
+	return 0
+}
+
+// parseFull разбирает полную версию на три числа (major, minor, patch).
+// Отсутствующие компоненты считаются нулевыми.
+func parseFull(v string) [3]int {
+	parts := strings.Split(v, ".")
+	var res [3]int
+	idx := 0
+	for _, part := range parts {
+		n, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil {
+			continue
+		}
+		if idx >= 3 {
+			break
+		}
+		res[idx] = n
+		idx++
+	}
+	return res
+}
+
+// sortFullVersionsDesc сортирует полные версии (major.minor.patch)
+// от новейшей к старейшей (in-place).
+func sortFullVersionsDesc(versions []string) []string {
+	for i := 1; i < len(versions); i++ {
+		for j := i; j > 0 && compareFull(versions[j], versions[j-1]) > 0; j-- {
+			versions[j], versions[j-1] = versions[j-1], versions[j]
+		}
+	}
+	return versions
+}

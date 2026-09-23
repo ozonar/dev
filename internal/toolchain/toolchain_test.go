@@ -34,8 +34,8 @@ func TestPhpProgramNoNetwork(t *testing.T) {
 	if p.Version() != "8.3" {
 		t.Errorf("Version() = %q, want 8.3", p.Version())
 	}
-	if p.Binary() != "usr/bin/php8.3" {
-		t.Errorf("Binary() = %q, want usr/bin/php8.3", p.Binary())
+	if want := CurrentDelivery().PhpBinaryName("8.3"); p.Binary() != want {
+		t.Errorf("Binary() = %q, want %q", p.Binary(), want)
 	}
 	if p.URL() != "" || p.Archive() != "" {
 		t.Errorf("URL/Archive должны быть пустыми до резолюции, got URL=%q Archive=%q", p.URL(), p.Archive())
@@ -87,7 +87,7 @@ func TestProgramDir(t *testing.T) {
 func TestBinaryPath(t *testing.T) {
 	m := newTestManager(t)
 	p := PhpProgram("8.3")
-	want := filepath.Join(m.dir, "php", "8.3", "usr/bin/php8.3")
+	want := filepath.Join(m.dir, "php", "8.3", CurrentDelivery().PhpBinaryName("8.3"))
 	if got := m.BinaryPath(p); got != want {
 		t.Errorf("BinaryPath = %q, want %q", got, want)
 	}
@@ -112,7 +112,7 @@ func TestCommandPlaceholders(t *testing.T) {
 	phpstan := NewProgram("phpstan", "1.12.0", "phpstan.phar", "", "", "{php} {phpstan}", php)
 	name, args := m.Command(phpstan, []string{"analyse", "."})
 	wantName := filepath.Join(m.dir, "phpstan", "1.12.0", "phpstan.phar")
-	wantPhp := filepath.Join(m.dir, "php", "8.3", "usr/bin/php8.3")
+	wantPhp := filepath.Join(m.dir, "php", "8.3", CurrentDelivery().PhpBinaryName("8.3"))
 	if name != wantPhp {
 		t.Errorf("command name = %q, want %q", name, wantPhp)
 	}

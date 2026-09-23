@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest ]
+        os: [ ubuntu-latest, windows-latest, macos-13, macos-14 ]
         include:
           - os: ubuntu-latest
             goos: linux
@@ -25,6 +25,17 @@ jobs:
             goarch: amd64
             artifact_name: dev-windows-amd64.exe
             output_name: dev.exe
+          # macos-13 — Intel (x86_64), macos-14 — Apple Silicon (arm64).
+          - os: macos-13
+            goos: darwin
+            goarch: amd64
+            artifact_name: dev-darwin-amd64
+            output_name: dev
+          - os: macos-14
+            goos: darwin
+            goarch: arm64
+            artifact_name: dev-darwin-arm64
+            output_name: dev
 
     steps:
       - name: Checkout code
@@ -84,6 +95,19 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      # Кросс-проверка компиляции под macOS без выделенных раннеров:
+      # ловит поломки платформенных адаптеров в обычных PR.
+      - name: Cross-build check (darwin)
+        run: |
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./cmd/dev
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/dev
+
+      # Vet компилирует тестовые файлы, поэтому проверяет и darwin-тесты.
+      - name: Cross-vet tests (darwin)
+        run: |
+          GOOS=darwin GOARCH=amd64 go vet ./internal/toolchain/... ./internal/check/...
+          GOOS=darwin GOARCH=arm64 go vet ./internal/toolchain/... ./internal/check/...
+
   release:
     needs: [ build, test ]
     if: github.event_name == 'release'
@@ -117,4 +141,24 @@ jobs:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: artifacts/dev-windows-amd64.exe/dev.exe
           asset_name: dev-windows-amd64.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS Intel executable
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: artifacts/dev-darwin-amd64/dev
+          asset_name: dev-darwin-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS Apple Silicon executable
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: artifacts/dev-darwin-arm64/dev
+          asset_name: dev-darwin-arm64
           asset_content_type: application/octet-stream

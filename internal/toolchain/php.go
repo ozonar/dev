@@ -4,17 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"runtime"
 	"strings"
 	"time"
 )
 
 // phpReleasesURL — URL JSON-индекса релизов PHP.
 const phpReleasesURL = "https://www.php.net/releases/?json"
-
-// phpBuilderReleasesURL — базовый URL релизов собранных бинарей PHP.
-const phpBuilderReleasesURL = "https://github.com/shivammathur/php-builder/releases/download"
 
 // phpRelease описывает данные о релизе PHP по одной major-версии
 // из JSON-индекса php.net.
@@ -23,28 +18,19 @@ type phpRelease struct {
 	SupportedVersions []string `json:"supported_versions"`
 }
 
-// distroPrefixes — маппинг комбинаций ID/VERSION_ID из /etc/os-release
-// на префикс имени артефакта php-builder (например "ubuntu24.04").
-var distroPrefixes = map[string]string{
-	"ubuntu22.04": "ubuntu22.04",
-	"ubuntu24.04": "ubuntu24.04",
-	"ubuntu26.04": "ubuntu26.04",
-	"debian11":    "debian11",
-	"debian12":    "debian12",
-	"debian13":    "debian13",
-}
-
 // Php — рантайм PHP.
 type Php struct {
 	runtimeBase
 }
 
 // NewPhp возвращает php-рантайм требуемой версии без обращения к сети.
+// Имя бинаря внутри архива зависит от платформы — его определяет адаптер
+// доставки (см. Delivery.PhpBinaryName).
 func NewPhp(version string) Runtime {
 	return &Php{runtimeBase{
 		name:        "php",
 		fullCommand: "{php}",
-		binary:      "usr/bin/php" + version,
+		binary:      CurrentDelivery().PhpBinaryName(version),
 		systemBin:   "php",
 		systemVer:   "php -r 'echo PHP_MAJOR_VERSION.\".\".PHP_MINOR_VERSION;'",
 		version:     version,
@@ -70,27 +56,16 @@ func (p *Php) markSystem(path string) {
 	p.isSystem = true
 }
 
-// resolveDownload определяет конкретный URL скачивания php для требуемой версии.
-// Обращается к php.net (определение актуальной версии) и к php-builder
-// (формирование URL). Возвращает фактическую версию, URL и тип архива.
+// resolveDownload определяет конкретный URL скачивания php для требуемой
+// версии. Выбор источника (php-builder на Linux, static-php-cli на macOS)
+// делегируется адаптеру доставки — здесь нет ветвлений по платформе.
+// Возвращает фактическую версию, URL и тип архива.
 func (p *Php) resolveDownload() (resolved, url, archive string, err error) {
 	majorMinor, err := resolvePhpVersion(p.version)
 	if err != nil {
 		return "", "", "", err
 	}
-
-	distro, err := detectDistro()
-	if err != nil {
-		return "", "", "", err
-	}
-
-	archSuffix := ""
-	if runtime.GOARCH == "arm64" {
-		archSuffix = "_arm64"
-	}
-
-	url = fmt.Sprintf("%s/%s/php_%s+%s%s.tar.xz", phpBuilderReleasesURL, majorMinor, majorMinor, distro, archSuffix)
-	return majorMinor, url, "tar.xz", nil
+	return CurrentDelivery().PhpSource().resolve(majorMinor)
 }
 
 // resolvePhpVersion определяет major.minor версию PHP по требованию проекта.
@@ -152,37 +127,6 @@ func sortVersionsDesc(versions []string) []string {
 		}
 	}
 	return versions
-}
-
-// detectDistro определяет дистрибутив (префикс артефакта php-builder),
-// читая /etc/os-release. Например: ubuntu 24.04 -> "ubuntu24.04",
-// debian 12 -> "debian12".
-func detectDistro() (string, error) {
-	data, err := os.ReadFile("/etc/os-release")
-	if err != nil {
-		return "", fmt.Errorf("failed to read /etc/os-release: %v", err)
-	}
-
-	var id, versionID string
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(line, "ID="):
-			id = strings.Trim(strings.TrimPrefix(line, "ID="), `"`)
-		case strings.HasPrefix(line, "VERSION_ID="):
-			versionID = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), `"`)
-		}
-	}
-
-	if id == "" || versionID == "" {
-		return "", fmt.Errorf("could not determine OS distribution from /etc/os-release")
-	}
-
-	key := id + versionID
-	if prefix, ok := distroPrefixes[key]; ok {
-		return prefix, nil
-	}
-	return "", fmt.Errorf("unsupported distribution %s %s", id, versionID)
 }
 
 // Satisfies определяет, что installed минорно старше или равен required,

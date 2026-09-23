@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -305,32 +306,38 @@ func buildActions(framework, language string) []Action {
 	}
 
 	// 7. sudo chown -R www-data:www-data (для storage/, var/, runtime/)
-	chownDirs := findChownDirs(framework)
-	if len(chownDirs) > 0 {
-		alreadyOwned := true
-		for _, dir := range chownDirs {
-			if !isOwnedByWwwData(dir) {
-				alreadyOwned = false
-				break
-			}
-		}
-		actions = append(actions, Action{
-			Name:        fmt.Sprintf("sudo chown -R www-data:www-data %s/", strings.Join(chownDirs, "/")),
-			Description: fmt.Sprintf("Set www-data ownership on %s", strings.Join(chownDirs, ", ")),
-			Status:      boolToStatus(alreadyOwned),
-			Run: func() error {
-				for _, dir := range chownDirs {
-					cmd := exec.Command("sudo", "chown", "-R", "www-data:www-data", dir)
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					if err := cmd.Run(); err != nil {
-						return fmt.Errorf("chown %s failed: %v", dir, err)
-					}
-					fmt.Printf("  Changed owner of %s/ to www-data:www-data\n", dir)
+	// Пользователь www-data существует только на Linux, поэтому на других
+	// платформах (например macOS) действие не предлагается.
+	if supportsWwwData() {
+		chownDirs := findChownDirs(framework)
+		if len(chownDirs) == 0 {
+			// Действие не предлагается, если директорий для chown нет.
+		} else {
+			alreadyOwned := true
+			for _, dir := range chownDirs {
+				if !isOwnedByWwwData(dir) {
+					alreadyOwned = false
+					break
 				}
-				return nil
-			},
-		})
+			}
+			actions = append(actions, Action{
+				Name:        fmt.Sprintf("sudo chown -R www-data:www-data %s/", strings.Join(chownDirs, "/")),
+				Description: fmt.Sprintf("Set www-data ownership on %s", strings.Join(chownDirs, ", ")),
+				Status:      boolToStatus(alreadyOwned),
+				Run: func() error {
+					for _, dir := range chownDirs {
+						cmd := exec.Command("sudo", "chown", "-R", "www-data:www-data", dir)
+						cmd.Stdout = os.Stdout
+						cmd.Stderr = os.Stderr
+						if err := cmd.Run(); err != nil {
+							return fmt.Errorf("chown %s failed: %v", dir, err)
+						}
+						fmt.Printf("  Changed owner of %s/ to www-data:www-data\n", dir)
+					}
+					return nil
+				},
+			})
+		}
 	}
 
 	// 8. php artisan storage:link (Laravel)
@@ -817,6 +824,13 @@ func findChownDirs(framework string) []string {
 		}
 		return dirs
 	}
+}
+
+// supportsWwwData сообщает, что на текущей платформе существует системный
+// пользователь www-data (только Linux). На macOS/BSD действия chown
+// для www-data не выполняются.
+func supportsWwwData() bool {
+	return runtime.GOOS == "linux"
 }
 
 // isOwnedByWwwData проверяет, принадлежит ли директория www-data:www-data

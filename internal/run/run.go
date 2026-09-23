@@ -210,8 +210,7 @@ func runAndHandlePortError(name string, args []string, portNum int) error {
 		if err := port.KillProcessOnPort(portNum); err != nil {
 			color.Yellow("  %v", err)
 		}
-		fuserCmd := exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", portNum))
-		fuserCmd.Run()
+		killByFuser(portNum)
 
 		color.Green("Process on port %d killed. Restarting...", portNum)
 
@@ -249,12 +248,21 @@ func ensurePortFree(portNum int) error {
 	if err := port.KillProcessOnPort(portNum); err != nil {
 		color.Yellow("  %v", err)
 	}
-	// Дополнительно пробуем через fuser для надёжности
-	fuserCmd := exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", portNum))
-	fuserCmd.Run()
+	// Дополнительно пробуем через fuser для надёжности (если он установлен)
+	killByFuser(portNum)
 
 	color.Green("Process on port %d killed.", portNum)
 	return nil
+}
+
+// killByFuser завершает процесс на порту через fuser, если он установлен.
+// На macOS fuser отсутствует, поэтому вызов безопасно пропускается —
+// основное убийство процесса выполняется через lsof (port.KillProcessOnPort).
+func killByFuser(portNum int) {
+	if _, err := exec.LookPath("fuser"); err != nil {
+		return
+	}
+	_ = exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", portNum)).Run()
 }
 
 // isPortInUseError проверяет, содержит ли ошибка сообщение о занятом порте

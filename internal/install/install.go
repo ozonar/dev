@@ -12,8 +12,10 @@ import (
 
 // checkPathDirs возвращает список директорий для выбора установки.
 // Возвращает:
-// - первый системный кандидат (/usr/local/bin, /usr/bin, /bin), который есть в PATH
-// - первый пользовательский кандидат (~/.local/bin, ~/bin), который есть в PATH
+//   - первый системный кандидат (/opt/homebrew/bin, /usr/local/bin, /usr/bin, /bin),
+//     который есть в PATH. /opt/homebrew/bin — каталог Homebrew на Apple Silicon.
+//   - первый пользовательский кандидат (~/.local/bin, ~/bin), который есть в PATH
+//
 // Если ни одного кандидата нет в PATH, возвращает все уникальные директории из PATH.
 func checkPathDirs() ([]string, error) {
 	home, err := os.UserHomeDir()
@@ -21,7 +23,7 @@ func checkPathDirs() ([]string, error) {
 		home = ""
 	}
 
-	systemCandidates := []string{"/usr/local/bin", "/usr/bin", "/bin"}
+	systemCandidates := []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"}
 	userCandidates := []string{
 		filepath.Join(home, ".local", "bin"),
 		filepath.Join(home, "bin"),
@@ -168,7 +170,10 @@ func Install(sourceFile string) error {
 
 	// Убиваем процесс, использующий целевой файл (если такой есть).
 	// Вывод fuser не показываем, чтобы не засорять консоль после промпта выбора.
-	_ = exec.Command("fuser", "-k", targetPath).Run()
+	// На macOS fuser отсутствует — вызов безопасно пропускается.
+	if _, err := exec.LookPath("fuser"); err == nil {
+		_ = exec.Command("fuser", "-k", targetPath).Run()
+	}
 
 	// Копируем файл
 	srcFile, err := os.Open(srcPath)
