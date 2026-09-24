@@ -24,12 +24,12 @@ type Options struct {
 // Выбор проверок строится по расширениям файлов выбранного объёма,
 // а не по типу проекта: для каждого языка, представленного в scope,
 // запускаются его линтеры и языко-специфичные проверки (php -l, npm run).
-func Run(info *detector.ProjectInfo, opts Options) error {
+// Ошибки отдельных линтеров выводятся в консоль и не прерывают остальные
+// проверки; возвращаемое значение отсутствует, так как неудачу линтера
+// пользователь видит в выводе.
+func Run(info *detector.ProjectInfo, opts Options) {
 	// Определяем объём проверки.
-	scope, err := resolveScope(opts)
-	if err != nil {
-		return err
-	}
+	scope := resolveScope(opts)
 
 	if len(scope.Files) > 0 {
 		i18n.Yellow("Scope: %s (%d files)", scope.Name, len(scope.Files))
@@ -54,7 +54,7 @@ func Run(info *detector.ProjectInfo, opts Options) error {
 
 	if len(langs) == 0 {
 		i18n.Yellow("No files with supported extensions found in scope. Nothing to check.")
-		return nil
+		return
 	}
 
 	i18n.Green("Detected languages from files: %s", strings.Join(langs, ", "))
@@ -66,21 +66,18 @@ func Run(info *detector.ProjectInfo, opts Options) error {
 		if info.Language == lang {
 			version = info.LanguageVersion
 		}
-		if err := runLanguage(lang, version, scope, opts.Mode); err != nil {
-			i18n.Red("Checks for %s failed: %v", lang, err)
-		}
+		runLanguage(lang, version, scope, opts.Mode)
 	}
-
-	return nil
 }
 
 // runLanguage запускает все проверки одного языка: гарантирует наличие
 // линтеров (и их вендоров), прогоняет их по файлам scope и выполняет
 // языко-специфичные проверки (php -l, npm run typecheck).
-func runLanguage(language, version string, scope Scope, mode Mode) error {
+func runLanguage(language, version string, scope Scope, mode Mode) {
 	manager, programs, err := ensurePrograms(language, version)
 	if err != nil {
-		return err
+		i18n.Red("Could not prepare %s linters: %v", language, err)
+		return
 	}
 
 	i18n.Green("Language: %s", language)
@@ -103,17 +100,15 @@ func runLanguage(language, version string, scope Scope, mode Mode) error {
 	if language == "php" {
 		runPhpLint(manager, programs, scope)
 	}
-
-	return nil
 }
 
 // resolveScope определяет объём проверки на основе опций.
-func resolveScope(opts Options) (Scope, error) {
+func resolveScope(opts Options) Scope {
 	if opts.Scope != nil {
-		return *opts.Scope, nil
+		return *opts.Scope
 	}
 	if opts.Interactive {
-		return promptScope(), nil
+		return promptScope()
 	}
-	return ScopeDefault(), nil
+	return ScopeDefault()
 }

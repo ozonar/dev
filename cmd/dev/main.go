@@ -820,7 +820,13 @@ Use 'dev self-config' to set up your API endpoint, token, and model.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		text := strings.Join(args, " ")
-		if err := ai.RunAI(text); err != nil {
+		cwd, _ := os.Getwd()
+		info, err := detectProject(cwd)
+		if err != nil {
+			i18n.Red("Error detecting project: %v", err)
+			return
+		}
+		if err := ai.RunAI(info, text); err != nil {
 			i18n.Red("Error: %v", err)
 		}
 	},
@@ -904,9 +910,7 @@ func runCheck(opts check.Options) {
 		return
 	}
 
-	if err := check.Run(info, opts); err != nil {
-		i18n.Red("Check failed: %v", err)
-	}
+	check.Run(info, opts)
 }
 
 // runCheckAI запускает AI-код-ревью изменённого кода.

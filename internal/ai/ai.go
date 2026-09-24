@@ -2,7 +2,6 @@ package ai
 
 import (
 	"bufio"
-	"bytes"
 	"dev/internal/detector"
 	"dev/internal/i18n"
 	"encoding/json"
@@ -40,44 +39,31 @@ type HistoryEntry struct {
 	Content string `json:"content"`
 }
 
-// chatMessage для запроса к OpenAI-compatible API
+// chatMessage — сообщение в запросе к OpenAI-совместимому API.
 type chatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-type chatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	Temperature float64       `json:"temperature"`
-}
-
-type chatResponse struct {
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
-	Error json.RawMessage `json:"error,omitempty"`
-}
-
-// RunAI основная функция для dev ai
-func RunAI(text string) error {
+// RunAI запускает диалог с AI для генерации и выполнения команд.
+// info — результат анализа проекта: контекст собирается из него напрямую,
+// без повторного вызова CLI-команды dev analyze.
+func RunAI(info *detector.ProjectInfo, text string) error {
 	cfg, err := LoadConfig()
 	if err != nil {
 		i18n.Red("Config error: %v", err)
 		if err := InteractiveEditConfig(); err != nil {
 			return err
 		}
-		// Пробуем снова после редактирования
+		// Пробуем снова после редактирования.
 		cfg, err = LoadConfig()
 		if err != nil {
 			return fmt.Errorf(i18n.T("config still invalid after edit: %w"), err)
 		}
 	}
 
-	// Собираем контекст проекта
-	contextInfo := buildContext()
+	// Собираем контекст проекта из данных детектора.
+	contextInfo := buildContext(info)
 
 	history := []HistoryEntry{
 		{Role: "system", Content: buildSystemPrompt(contextInfo)},
@@ -138,8 +124,9 @@ func buildSystemPrompt(contextInfo string) string {
 5. Учитывай язык и фреймворк проекта`, contextInfo)
 }
 
-// buildContext собирает информацию о проекте
-func buildContext() string {
+// buildContext собирает информацию о проекте из данных детектора —
+// аналог вывода dev analyze, но без запуска подпроцесса.
+func buildContext(info *detector.ProjectInfo) string {
 	cwd, _ := os.Getwd()
 	var sb strings.Builder
 
@@ -159,24 +146,36 @@ func buildContext() string {
 		}
 	}
 
-	// Добавляем данные о подключениях к БД проекта
-	info, err := detector.DetectProject(cwd)
-	if err == nil && len(info.Databases) > 0 {
-		sb.WriteString("\nДанные о подключенях к БД:\n")
+	sb.WriteString("\nРезультат dev analyze:\n")
+	langLabel := info.Language
+	if info.LanguageVersion != "" {
+		langLabel = info.Language + " " + info.LanguageVersion
+	}
+	sb.WriteString(fmt.Sprintf("Язык: %s\n", langLabel))
+	sb.WriteString(fmt.Sprintf("Фреймворк: %s\n", info.Framework))
+	if info.HasEnv {
+		sb.WriteString(".env: присутствует\n")
+	} else {
+		sb.WriteString(".env: отсутствует\n")
+	}
+	if info.HasVendor {
+		sb.WriteString("Вендорные зависимости: установлены\n")
+	} else {
+		sb.WriteString("Вендорные зависимости: не установлены\n")
+	}
+	if len(info.DockerServices) > 0 {
+		sb.WriteString("Docker-сервисы: " + strings.Join(info.DockerServices, ", ") + "\n")
+	}
+	if len(info.MakeCommands) > 0 {
+		sb.WriteString("Make-команды: " + strings.Join(info.MakeCommands, ", ") + "\n")
+	}
+	if len(info.Databases) > 0 {
+		sb.WriteString("Базы данных:\n")
 		for _, db := range info.Databases {
 			if db.URL != "" {
 				sb.WriteString(fmt.Sprintf("  %s\n", db.URL))
 			}
 		}
-	}
-
-	// Пытаемся выполнить dev analyze
-	sb.WriteString("\nРезультат dev analyze:\n")
-	analyzeOut, err := exec.Command("dev", "analyze").Output()
-	if err == nil {
-		sb.WriteString(string(analyzeOut))
-	} else {
-		sb.WriteString("(не удалось выполнить dev analyze)\n")
 	}
 
 	return sb.String()
@@ -458,80 +457,30 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 	return nil
 }
 
-// queryLLM отправляет запрос к OpenAI-совместимому API.
-// Любая неудача ответа обрабатывается существующим механизмом авторетрая
+// queryLLM отправляет запрос к OpenAI-совместимому API через общий клиент
+// и разбирает ответ в список команд. Сетевые/API-ошибки ретраит клиент;
+// здесь повторяются только попытки с невалидным JSON: ответ добавляется
+// в историю с просьбой вернуть корректный JSON.
 func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
+	client := NewClient(cfg)
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		// Ограничиваем историю лимитами: каждое сообщение — MaxMessageLines строк,
 		// суммарный объём — MaxRequestChars символов.
 		history = prepareHistoryForSend(history)
 
-		// Преобразуем историю в формат chatMessage
-		messages := make([]chatMessage, len(history))
-		for i, entry := range history {
-			messages[i] = chatMessage(entry)
-		}
-
-		reqBody := chatRequest{
-			Model:       cfg.Model,
-			Messages:    messages,
-			Temperature: 0.1,
-		}
-
-		jsonData, err := json.Marshal(reqBody)
+		rawContent, err := client.Chat(history, 0.1)
 		if err != nil {
-			return nil, fmt.Errorf(i18n.T("failed to marshal request: %w"), err)
+			return nil, err
 		}
 
-		// Выполняем curl-запрос
-		curlCmd := exec.Command("curl", "-s",
-			"-k",
-			"-X", "POST",
-			cfg.Endpoint,
-			"-H", "Content-Type: application/json",
-			"-H", "Authorization: Bearer "+cfg.Token,
-			"-d", string(jsonData),
-		)
-
-		var stdout, stderr bytes.Buffer
-		curlCmd.Stdout = &stdout
-		curlCmd.Stderr = &stderr
-
-		if err := curlCmd.Run(); err != nil {
-			return nil, fmt.Errorf(i18n.T("curl failed: %w\nStderr: %s"), err, stderr.String())
-		}
-
-		// Парсим ответ
-		var resp chatResponse
-		if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
-			lastErr = fmt.Errorf(i18n.T("unparsable response: %w\nBody: %s"), err, stdout.String())
-			i18n.Red("LLM returned unparsable response (attempt %d/3)", attempt+1)
-			continue
-		}
-
-		// API-ошибка. Поле error бывает строкой или объектом; здесь нам важен
-		// сам факт ошибки, а не формат — повторяем запрос, такие ошибки часто временные.
-		if len(resp.Error) > 0 {
-			lastErr = fmt.Errorf(i18n.T("API error: %s"), strings.TrimSpace(string(resp.Error)))
-			i18n.Red("LLM API error (attempt %d/3)", attempt+1)
-			continue
-		}
-
-		if len(resp.Choices) == 0 {
-			lastErr = fmt.Errorf(i18n.T("empty response from API"))
-			i18n.Red("LLM returned empty response (attempt %d/3)", attempt+1)
-			continue
-		}
-
-		rawContent := resp.Choices[0].Message.Content
 		content := extractJSON(rawContent)
 
-		// Парсим команды
+		// Парсим команды.
 		var commands []CommandAction
 		if err := json.Unmarshal([]byte(content), &commands); err != nil {
 			i18n.Red("LLM returned invalid JSON (attempt %d/3)", attempt+1)
-			// Добавляем в историю ответ LLM и просьбу исправиться
+			// Добавляем в историю ответ LLM и просьбу исправиться.
 			history = append(history, HistoryEntry{
 				Role:    "assistant",
 				Content: rawContent,
@@ -540,6 +489,7 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 				Role:    "user",
 				Content: "Этот ответ содержит невалидный JSON. Верни ТОЛЬКО валидный JSON-массив в формате [{\"command\": \"...\", \"description\": \"...\", \"type\": \"...\"}] без каких-либо пояснений.",
 			})
+			lastErr = err
 			continue
 		}
 

@@ -1,10 +1,7 @@
 package ai
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"dev/internal/i18n"
@@ -39,74 +36,13 @@ func buildReviewPrompt(text string) string {
 %s`, text)
 }
 
-// queryReviewText отправляет текстовый запрос к LLM и возвращает ответ текстом.
-// В отличие от queryLLM (который ждёт JSON-массив команд), эта функция
-// принимает произвольный текстовый ответ.
-// Неудачи ответа (непарсируемое тело, API-ошибка, пустой ответ) обрабатываются
-// авторетраем, чтобы временные ошибки прокси не обрывали ревью.
+// queryReviewText отправляет текстовый запрос к LLM через общий клиент
+// и возвращает ответ текстом. В отличие от queryLLM (который ждёт
+// JSON-массив команд), здесь принимается произвольный текстовый ответ.
+// Авторетрай на временные ошибки выполняет клиент.
 func queryReviewText(cfg *Config, history []HistoryEntry) (string, error) {
-	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		// Ограничиваем историю лимитами: каждое сообщение — MaxMessageLines строк,
-		// суммарный объём — MaxRequestChars символов.
-		history = prepareHistoryForSend(history)
-
-		messages := make([]chatMessage, len(history))
-		for i, entry := range history {
-			messages[i] = chatMessage(entry)
-		}
-
-		reqBody := chatRequest{
-			Model:       cfg.Model,
-			Messages:    messages,
-			Temperature: 0.2,
-		}
-
-		jsonData, err := json.Marshal(reqBody)
-		if err != nil {
-			return "", fmt.Errorf(i18n.T("failed to marshal request: %w"), err)
-		}
-
-		curlCmd := exec.Command("curl", "-s",
-			"-k",
-			"-X", "POST",
-			cfg.Endpoint,
-			"-H", "Content-Type: application/json",
-			"-H", "Authorization: Bearer "+cfg.Token,
-			"-d", string(jsonData),
-		)
-
-		var stdout, stderr bytes.Buffer
-		curlCmd.Stdout = &stdout
-		curlCmd.Stderr = &stderr
-
-		if err := curlCmd.Run(); err != nil {
-			return "", fmt.Errorf(i18n.T("curl failed: %w\nStderr: %s"), err, stderr.String())
-		}
-
-		var resp chatResponse
-		if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
-			lastErr = fmt.Errorf(i18n.T("unparsable response: %w\nBody: %s"), err, stdout.String())
-			i18n.Red("LLM returned unparsable response (attempt %d/3)", attempt+1)
-			continue
-		}
-
-		if len(resp.Error) > 0 {
-			lastErr = fmt.Errorf(i18n.T("API error: %s"), strings.TrimSpace(string(resp.Error)))
-			i18n.Red("LLM API error (attempt %d/3)", attempt+1)
-			continue
-		}
-
-		if len(resp.Choices) == 0 {
-			lastErr = fmt.Errorf(i18n.T("empty response from API"))
-			i18n.Red("LLM returned empty response (attempt %d/3)", attempt+1)
-			continue
-		}
-
-		return strings.TrimSpace(resp.Choices[0].Message.Content), nil
-	}
-
-	return "", fmt.Errorf(i18n.T("LLM request failed after 3 attempts: %w"), lastErr)
+	history = prepareHistoryForSend(history)
+	return NewClient(cfg).Chat(history, 0.2)
 }
 
 // renderMarkdown применяет базовое markdown-форматирование к строке:
