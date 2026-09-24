@@ -13,7 +13,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-13, macos-14 ]
         include:
           - os: ubuntu-latest
             goos: linux
@@ -25,13 +24,12 @@ jobs:
             goarch: amd64
             artifact_name: dev-windows-amd64.exe
             output_name: dev.exe
-          # macos-13 — Intel (x86_64), macos-14 — Apple Silicon (arm64).
-          - os: macos-13
+          - os: macos-latest
             goos: darwin
             goarch: amd64
             artifact_name: dev-darwin-amd64
             output_name: dev
-          - os: macos-14
+          - os: macos-latest
             goos: darwin
             goarch: arm64
             artifact_name: dev-darwin-arm64
