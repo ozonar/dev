@@ -312,9 +312,7 @@ func buildActions(framework, language string) []Action {
 	// платформах (например macOS) действие не предлагается.
 	if supportsWwwData() {
 		chownDirs := findChownDirs(framework)
-		if len(chownDirs) == 0 {
-			// Действие не предлагается, если директорий для chown нет.
-		} else {
+		if len(chownDirs) > 0 {
 			alreadyOwned := true
 			for _, dir := range chownDirs {
 				if !isOwnedByWwwData(dir) {

@@ -114,13 +114,13 @@ func TestPrepareHistory_Empty(t *testing.T) {
 func TestClampToChars_Utf8(t *testing.T) {
 	s := "Привет мир"
 
-	if got := clampToChars(s, 6); got != "Привет" {
-		t.Errorf("clampToChars(6) = %q, want %q", got, "Привет")
+	if got := ClampToChars(s, 6); got != "Привет" {
+		t.Errorf("ClampToChars(6) = %q, want %q", got, "Привет")
 	}
-	if got := clampToChars(s, 0); got != "" {
-		t.Errorf("clampToChars(0) = %q, want empty", got)
+	if got := ClampToChars(s, 0); got != "" {
+		t.Errorf("ClampToChars(0) = %q, want empty", got)
 	}
-	if got := clampToChars(s, 100); got != s {
-		t.Errorf("clampToChars(100) = %q, want %q", got, s)
+	if got := ClampToChars(s, 100); got != s {
+		t.Errorf("ClampToChars(100) = %q, want %q", got, s)
 	}
 }

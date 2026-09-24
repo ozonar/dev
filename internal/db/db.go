@@ -19,7 +19,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// ColumnInfo describes a table column
+// ColumnInfo описывает колонку таблицы.
 type ColumnInfo struct {
 	Name     string
 	Type     string
@@ -27,7 +27,7 @@ type ColumnInfo struct {
 	Key      string
 }
 
-// Run starts interactive database exploration
+// Run запускает интерактивный обзор базы данных.
 func Run() error {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
@@ -283,7 +283,7 @@ func connectDB(dbInfo detector.DatabaseInfo) (*sql.DB, error) {
 	return db, nil
 }
 
-// listTables returns list of tables in the database
+// listTables возвращает список таблиц в базе данных.
 func listTables(db *sql.DB, dbType string) ([]string, error) {
 	var query string
 	switch dbType {
@@ -315,7 +315,8 @@ func listTables(db *sql.DB, dbType string) ([]string, error) {
 	return tables, nil
 }
 
-// getTableRowCount returns estimated number of rows in a table (fast, may be -1)
+// getTableRowCount возвращает оценочное число строк в таблице
+// (быстрый способ, может вернуть -1).
 func getTableRowCount(db *sql.DB, dbType, tableName string) (int, error) {
 	var query string
 	switch dbType {
@@ -337,7 +338,7 @@ func getTableRowCount(db *sql.DB, dbType, tableName string) (int, error) {
 	return count, nil
 }
 
-// getExactRowCount returns exact number of rows in a table via COUNT(*)
+// getExactRowCount возвращает точное число строк в таблице через COUNT(*).
 func getExactRowCount(db *sql.DB, dbType, tableName string) (int, error) {
 	var query string
 	switch dbType {
@@ -359,7 +360,7 @@ func getExactRowCount(db *sql.DB, dbType, tableName string) (int, error) {
 	return count, nil
 }
 
-// describeTable returns information about table columns
+// describeTable возвращает информацию о колонках таблицы.
 func describeTable(db *sql.DB, dbType, tableName string) ([]ColumnInfo, error) {
 	var query string
 	switch dbType {
@@ -428,7 +429,7 @@ func describeTable(db *sql.DB, dbType, tableName string) ([]ColumnInfo, error) {
 	return columns, nil
 }
 
-// getPrimaryKey returns the primary key column name for a PostgreSQL table
+// getPrimaryKey возвращает имя колонки первичного ключа для таблицы PostgreSQL.
 func getPrimaryKey(db *sql.DB, tableName string) (string, error) {
 	query := `
 		SELECT kcu.column_name
@@ -474,7 +475,7 @@ func getColumnNames(db *sql.DB, tableName string) ([]string, error) {
 	return cols, nil
 }
 
-// getLastRows returns last N rows of a table
+// getLastRows возвращает последние N строк таблицы.
 func getLastRows(db *sql.DB, dbType, tableName string, limit int) ([]map[string]any, error) {
 	var query string
 	var args []any

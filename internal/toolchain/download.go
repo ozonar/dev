@@ -93,22 +93,9 @@ func (m *Manager) download(ex Executable) error {
 	return nil
 }
 
-// extractTarGzAll распаковывает tar.gz архив в директорию dest,
+// extractTarAll распаковывает tar-архив из reader в директорию dest,
 // сохраняя структуру. Защищает от выхода за пределы dest (path traversal).
-func extractTarGzAll(src, dest string) error {
-	f, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return err
-	}
-	defer gz.Close()
-
-	tr := tar.NewReader(gz)
+func extractTarAll(tr *tar.Reader, dest string) error {
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -141,8 +128,24 @@ func extractTarGzAll(src, dest string) error {
 	return nil
 }
 
-// extractTarXZAll распаковывает tar.xz архив в директорию dest,
-// сохраняя структуру. Защищает от выхода за пределы dest (path traversal).
+// extractTarGzAll распаковывает tar.gz архив в директорию dest.
+func extractTarGzAll(src, dest string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+
+	return extractTarAll(tar.NewReader(gz), dest)
+}
+
+// extractTarXZAll распаковывает tar.xz архив в директорию dest.
 func extractTarXZAll(src, dest string) error {
 	f, err := os.Open(src)
 	if err != nil {
@@ -154,37 +157,7 @@ func extractTarXZAll(src, dest string) error {
 	if err != nil {
 		return err
 	}
-
-	tr := tar.NewReader(xr)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		target := safeJoin(dest, hdr.Name)
-		if target == "" {
-			continue
-		}
-
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return err
-			}
-			if err := writeFromReader(tr, target, os.FileMode(hdr.Mode)); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return extractTarAll(tar.NewReader(xr), dest)
 }
 
 // extractZipAll распаковывает zip архив в директорию dest,

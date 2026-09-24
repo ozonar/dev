@@ -64,7 +64,7 @@ func prepareHistoryForSend(history []HistoryEntry) []HistoryEntry {
 	// Если system-сообщение само превышает лимит — обрезаем его, сохраняя
 	// начало, где находятся инструкции.
 	if len(first.Content) > MaxRequestChars {
-		first.Content = clampToChars(first.Content, MaxRequestChars)
+		first.Content = ClampToChars(first.Content, MaxRequestChars)
 	}
 
 	budget := MaxRequestChars - len(first.Content)
@@ -74,7 +74,7 @@ func prepareHistoryForSend(history []HistoryEntry) []HistoryEntry {
 	}
 
 	if len(last.Content) > budget {
-		last.Content = clampToChars(last.Content, budget)
+		last.Content = ClampToChars(last.Content, budget)
 	}
 	budget -= len(last.Content)
 
@@ -94,9 +94,9 @@ func prepareHistoryForSend(history []HistoryEntry) []HistoryEntry {
 	return result
 }
 
-// clampToChars обрезает строку до max символов (рун), не разрывая
+// ClampToChars обрезает строку до max символов (рун), не разрывая
 // многобайтовые символы UTF-8.
-func clampToChars(s string, max int) string {
+func ClampToChars(s string, max int) string {
 	if max <= 0 {
 		return ""
 	}

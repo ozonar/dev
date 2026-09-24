@@ -32,10 +32,11 @@ func RunAI(info *detector.ProjectInfo, opts Options, instruction string) error {
 		return nil
 	}
 
-	// Ограничиваем размер отправляемого кода общим лимитом символов на ревью
-	if len(text) > ai.MaxReviewTotalChars {
+	// Ограничиваем размер отправляемого кода общим лимитом символов на ревью.
+	// Обрезаем по рунам, чтобы не разорвать многобайтовый символ UTF-8.
+	if len([]rune(text)) > ai.MaxReviewTotalChars {
 		i18n.Yellow("Code exceeds %d characters, truncating.", ai.MaxReviewTotalChars)
-		text = text[:ai.MaxReviewTotalChars]
+		text = ai.ClampToChars(text, ai.MaxReviewTotalChars)
 	}
 
 	if _, err := ai.RunCodeReview(text, instruction); err != nil {

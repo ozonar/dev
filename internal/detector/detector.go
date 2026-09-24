@@ -34,38 +34,29 @@ type ProjectInfo struct {
 	HasVendor       bool
 	DockerServices  []string
 	MakeCommands    []string
-	DevCommands     []string
-	CacheDirs       []string
-	LogFiles        []string
 	Databases       []DatabaseInfo
 }
 
 func DetectProject(root string) (*ProjectInfo, error) {
 	info := &ProjectInfo{}
 
-	// Detect language/framework
+	// Определяем язык и фреймворк проекта.
 	lang, framework := detectLangFramework(root)
 	info.Language = lang
 	info.Framework = framework
 	info.LanguageVersion = detectLanguageVersion(root, lang)
 
-	// Check .env
+	// Проверяем наличие .env.
 	info.HasEnv = common.FileExists(filepath.Join(root, ".env"))
 
-	// Check vendor/composer/node_modules etc
+	// Проверяем наличие вендорных зависимостей (vendor, node_modules и т.п.).
 	info.HasVendor = checkVendor(root, framework)
 
-	// Docker services
+	// Сервисы из docker-compose.
 	info.DockerServices = findDockerServices(root)
 
-	// Make commands
+	// Команды из Makefile.
 	info.MakeCommands = parseMakefile(root)
-
-	// Dev commands (from package.json, composer.json, etc)
-	info.DevCommands = findDevCommands(root, framework)
-
-	// Cache directories
-	info.CacheDirs = findCacheDirs(root, framework)
 
 	// Публичная директория
 	info.PublicDir = detectPublicDir(root, framework)
@@ -123,9 +114,9 @@ func detectPublicDir(root, framework string) string {
 }
 
 func detectLangFramework(root string) (string, string) {
-	// Check for composer.json -> PHP
+	// composer.json -> PHP.
 	if common.FileExists(filepath.Join(root, "composer.json")) {
-		// Try to detect framework
+		// Пытаемся определить фреймворк по маркерным файлам.
 		if common.FileExists(filepath.Join(root, "artisan")) {
 			return "php", "laravel"
 		}
@@ -140,26 +131,23 @@ func detectLangFramework(root string) (string, string) {
 		}
 		return "php", "generic"
 	}
-	// Check for go.mod -> Go
+	// go.mod -> Go.
 	if common.FileExists(filepath.Join(root, "go.mod")) {
 		return "go", "go"
 	}
-	// Check for package.json -> Node.js
+	// package.json -> Node.js.
 	if common.FileExists(filepath.Join(root, "package.json")) {
-		// Check for React, Vue, Angular etc via dependencies
 		return "javascript", "node"
 	}
-	// Check for Gemfile -> Ruby (Rails)
+	// Gemfile -> Ruby (Rails).
 	if common.FileExists(filepath.Join(root, "Gemfile")) {
-		// Check for Rails
 		if common.FileExists(filepath.Join(root, "config/application.rb")) || common.FileExists(filepath.Join(root, "config.ru")) {
 			return "ruby", "rails"
 		}
 		return "ruby", "generic"
 	}
-	// Check for requirements.txt or pyproject.toml -> Python
+	// requirements.txt или pyproject.toml -> Python.
 	if common.FileExists(filepath.Join(root, "requirements.txt")) || common.FileExists(filepath.Join(root, "pyproject.toml")) {
-		// Check for Django
 		if common.FileExists(filepath.Join(root, "manage.py")) {
 			return "python", "django"
 		}
@@ -438,14 +426,14 @@ func parseMakefile(root string) []string {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, ".PHONY:") {
-			// Extract phony targets
+			// Извлекаем phony-цели.
 			parts := strings.Split(trimmed, ":")
 			if len(parts) > 1 {
 				targets := strings.Fields(parts[1])
 				commands = append(commands, targets...)
 			}
 		}
-		// Match target definitions (word:)
+		// Обрабатываем определения целей вида "имя:".
 		if len(trimmed) > 0 && !strings.HasPrefix(trimmed, "#") && strings.Contains(trimmed, ":") && !strings.Contains(trimmed, "=") {
 			target := strings.Split(trimmed, ":")[0]
 			if !strings.Contains(target, " ") && target != "" {
@@ -456,31 +444,9 @@ func parseMakefile(root string) []string {
 	return common.Unique(commands)
 }
 
-func findDevCommands(root, framework string) []string {
-	// For now, return empty
-	return nil
-}
-
-func findCacheDirs(root, framework string) []string {
-	var dirs []string
-	switch framework {
-	case "laravel", "symfony":
-		dirs = append(dirs, filepath.Join(root, "var/cache"))
-		dirs = append(dirs, filepath.Join(root, "storage/framework/cache"))
-	case "go":
-		dirs = append(dirs, filepath.Join(root, "**/*.test"))
-	case "node":
-		dirs = append(dirs, filepath.Join(root, "node_modules/.cache"))
-	case "python":
-		dirs = append(dirs, filepath.Join(root, "__pycache__"))
-		dirs = append(dirs, filepath.Join(root, "*.pyc"))
-	}
-	return dirs
-}
-
-// extractURL находит первую подстроку, соответствующую шаблону URL БД в строке
+// extractURL находит первую подстроку, соответствующую шаблону URL БД в строке.
 func extractURL(line string) (string, string) {
-	// Регулярное выражение для поиска URL БД
+	// Регулярное выражение для поиска URL БД.
 	re := regexp.MustCompile(`(postgresql|mysql|mongodb|redis)://[^\s'"` + "`" + `]+`)
 	matches := re.FindStringSubmatch(line)
 	if matches == nil {
@@ -489,11 +455,11 @@ func extractURL(line string) (string, string) {
 	return matches[0], matches[1] // полный URL и тип
 }
 
-// detectDatabases ищет строки подключения к БД в .env файлах и других конфигурациях
+// detectDatabases ищет строки подключения к БД в .env файлах и других конфигурациях.
 func detectDatabases(root string) []DatabaseInfo {
 	var databases []DatabaseInfo
 
-	// Проверяем .env файл
+	// Проверяем .env файл.
 	envPath := filepath.Join(root, ".env")
 	if common.FileExists(envPath) {
 		data, err := os.ReadFile(envPath)
@@ -504,7 +470,7 @@ func detectDatabases(root string) []DatabaseInfo {
 				if strings.HasPrefix(line, "#") || line == "" {
 					continue
 				}
-				// Пытаемся извлечь URL БД из строки
+				// Пытаемся извлечь URL БД из строки.
 				url, dbType := extractURL(line)
 				if url != "" {
 					db := parseConnectionString(url, dbType)
@@ -516,31 +482,26 @@ func detectDatabases(root string) []DatabaseInfo {
 		}
 	}
 
-	// TODO: также можно проверить docker-compose.yml на наличие сервисов БД
-
 	return databases
 }
 
-// parseConnectionString парсит строку подключения и определяет местоположение
+// parseConnectionString парсит строку подключения и определяет местоположение.
 func parseConnectionString(url, dbType string) *DatabaseInfo {
-	// Упрощённый парсинг URL
-	// Пример: postgresql://user:pass@localhost:5432/dbname
+	// Упрощённый парсинг URL: postgresql://user:pass@localhost:5432/dbname
 	re := regexp.MustCompile(`^([a-z]+)://(?:([^:@]+)(?::([^@]+))?@)?([^:/]+)(?::(\d+))?(?:/([^?]+))?`)
 	matches := re.FindStringSubmatch(url)
 	if matches == nil {
 		return nil
 	}
-	// matches[1] - тип (должен совпадать с dbType)
-	// matches[4] - хост
-	// matches[5] - порт
-	// matches[6] - база данных
+	// matches[1] — тип (должен совпадать с dbType),
+	// matches[4] — хост, matches[5] — порт, matches[6] — база данных.
 	host := matches[4]
 	if host == "" {
 		host = "localhost"
 	}
 	port := matches[5]
 	if port == "" {
-		// порты по умолчанию
+		// Порты по умолчанию.
 		switch dbType {
 		case "postgresql":
 			port = "5432"
@@ -554,7 +515,7 @@ func parseConnectionString(url, dbType string) *DatabaseInfo {
 	}
 	database := matches[6]
 
-	// Определяем местоположение
+	// Определяем местоположение.
 	location := LocationRemote
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		location = LocationLocal

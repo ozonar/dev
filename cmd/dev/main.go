@@ -478,10 +478,6 @@ func runAnalyze() {
 		i18n.Printf("Make commands:   %s\n", yellow(i18n.T("none")))
 	}
 
-	if len(info.DevCommands) > 0 {
-		i18n.Printf("Dev commands:    %s\n", cyan(strings.Join(info.DevCommands, ", ")))
-	}
-
 	// Databases
 	if len(info.Databases) > 0 {
 		var dbStrs []string

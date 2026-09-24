@@ -297,7 +297,7 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 
 			cmd := commands[idx-1]
 
-			// Special "SEND_ANALYSIS" command — send analysis results to LLM
+			// Специальная команда SEND_ANALYSIS — отправляем результаты анализа в LLM.
 			if cmd.Command == "SEND_ANALYSIS" {
 				fmt.Println()
 				i18n.Cyan("=== Sending analysis results to LLM ===")
@@ -321,7 +321,7 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 				continue
 			}
 
-			// Special "Fix error" command — send to LLM
+			// Специальная команда FIX_ERROR — отправляем ошибку в LLM.
 			if cmd.Command == "FIX_ERROR" {
 				fmt.Println()
 				i18n.Cyan("=== Sending error to LLM for fix ===")
@@ -344,7 +344,7 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 				continue
 			}
 
-			// Execute the selected command
+			// Выполняем выбранную команду.
 			fmt.Println()
 			i18n.Cyan("=== Executing: %s ===", cmd.Command)
 			if cmd.Description != "" {
