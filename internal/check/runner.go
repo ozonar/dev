@@ -1,14 +1,10 @@
 package check
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 
 	"dev/internal/i18n"
@@ -161,84 +157,6 @@ func runPhpLint(manager *toolchain.Manager, programs []toolchain.Executable, sco
 			i18n.Red("php -l %s finished with error: %v", f, err)
 		}
 	}
-}
-
-// runNpmCheck запускает npm-скрипт (по умолчанию typecheck) для проверки
-// JavaScript/TypeScript-файлов. Если скриптов в package.json несколько —
-// пользователю предлагается выбрать нужный (аналогично выбору main-файла
-// в Go при запуске проекта).
-func runNpmCheck(scope Scope) {
-	if len(scope.FilesWithExt(codeExtensionsFor("javascript")...)) == 0 {
-		i18n.Yellow("No JS/TS files in scope. Skipping npm run.")
-		return
-	}
-
-	if _, err := exec.LookPath("npm"); err != nil {
-		i18n.Yellow("npm not found in PATH. Skipping npm run.")
-		return
-	}
-
-	data, err := os.ReadFile("package.json")
-	if err != nil {
-		i18n.Yellow("package.json not found. Skipping npm run.")
-		return
-	}
-	var pkg struct {
-		Scripts map[string]string `json:"scripts"`
-	}
-	if err := json.Unmarshal(data, &pkg); err != nil || len(pkg.Scripts) == 0 {
-		i18n.Yellow("No scripts found in package.json. Skipping npm run.")
-		return
-	}
-
-	script := promptNpmScript(pkg.Scripts)
-
-	fmt.Println()
-	i18n.Cyan("=== npm run %s ===", script)
-	cmd := exec.Command("npm", "run", script)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		i18n.Red("npm run %s finished with error: %v", script, err)
-	}
-}
-
-// promptNpmScript спрашивает у пользователя, какой скрипт package.json
-// запустить, если их несколько. При пустом вводе выбирается typecheck,
-// если он есть, иначе первый скрипт в алфавитном порядке.
-func promptNpmScript(scripts map[string]string) string {
-	names := make([]string, 0, len(scripts))
-	for name := range scripts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	// По умолчанию предпочитаем typecheck — он точечно проверяет типы.
-	defaultIdx := 0
-	for i, name := range names {
-		if name == "typecheck" {
-			defaultIdx = i
-			break
-		}
-	}
-
-	if len(names) > 1 {
-		fmt.Println()
-		i18n.Printf("Select npm script to run:\n")
-		for i, name := range names {
-			fmt.Printf("  %d) %s\n", i+1, name)
-		}
-		i18n.Printf("Select number to run [%d]: ", defaultIdx+1)
-		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-		if input != "" {
-			if n, err := strconv.Atoi(input); err == nil && n >= 1 && n <= len(names) {
-				defaultIdx = n - 1
-			}
-		}
-	}
-	return names[defaultIdx]
 }
 
 // goDirArgs возвращает директории, пригодные для golangci-lint:

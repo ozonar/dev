@@ -716,29 +716,6 @@ func TestBuildScope_DeletedFilesFiltered(t *testing.T) {
 	}
 }
 
-// TestPromptNpmScript проверяет выбор npm-скрипта: при одном скрипте он
-// возвращается сразу, при нескольких — предпочитается typecheck, иначе
-// первый по алфавиту. Ввод из stdin при прогоне тестов равен EOF, поэтому
-// выбирается вариант по умолчанию без блокировки.
-func TestPromptNpmScript(t *testing.T) {
-	// Один скрипт — возвращается он.
-	if got := promptNpmScript(map[string]string{"build": "tsc"}); got != "build" {
-		t.Errorf("promptNpmScript(one) = %q, want build", got)
-	}
-
-	// Несколько скриптов — предпочитаем typecheck.
-	got := promptNpmScript(map[string]string{"build": "tsc", "typecheck": "tsc --noEmit", "lint": "eslint"})
-	if got != "typecheck" {
-		t.Errorf("promptNpmScript(multi) = %q, want typecheck", got)
-	}
-
-	// Нет typecheck — первый по алфавиту.
-	got = promptNpmScript(map[string]string{"lint": "eslint", "build": "tsc"})
-	if got != "build" {
-		t.Errorf("promptNpmScript(no typecheck) = %q, want build", got)
-	}
-}
-
 // TestCodeExtensionsFor проверяет единый источник кодовых расширений:
 // extToLanguage отвечает за определение языков, а цели для линтеров
 // берутся только из codeExtensionsFor.

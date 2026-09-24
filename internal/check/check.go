@@ -100,11 +100,8 @@ func runLanguage(language, version string, scope Scope, mode Mode) error {
 		}
 	}
 
-	switch language {
-	case "php":
+	if language == "php" {
 		runPhpLint(manager, programs, scope)
-	case "javascript":
-		runNpmCheck(scope)
 	}
 
 	return nil

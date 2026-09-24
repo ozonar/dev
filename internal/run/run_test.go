@@ -1,11 +1,13 @@
 package run
 
 import (
-	"dev/internal/common"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dev/internal/common"
 )
 
 // withFakeBinary добавляет во временную директорию фейковый исполняемый
@@ -238,5 +240,66 @@ func TestIsBinaryAvailable(t *testing.T) {
 	// Известные системные бинарники должны быть доступны (например, sh)
 	if !isBinaryAvailable("sh") {
 		t.Error("isBinaryAvailable(\"sh\") должно возвращать true")
+	}
+}
+
+// writePackageJSON создаёт package.json с указанными скриптами в текущей
+// директории (используется тестами выбора npm-скрипта).
+func writePackageJSON(t *testing.T, scripts map[string]string) {
+	t.Helper()
+	data := map[string]any{"scripts": scripts}
+	b, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("package.json", b, 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestChooseNpmScript проверяет выбор npm-скрипта из package.json:
+// при одном скрипте он возвращается сразу, при нескольких — предпочитается
+// dev, иначе первый по алфавиту. Ввод из stdin при прогоне тестов равен EOF,
+// поэтому выбирается вариант по умолчанию без блокировки.
+func TestChooseNpmScript(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Один скрипт — возвращается он.
+	writePackageJSON(t, map[string]string{"build": "tsc"})
+	if got, err := chooseNpmScript("package.json"); err != nil || got != "build" {
+		t.Errorf("chooseNpmScript(one) = %q, %v; want build, nil", got, err)
+	}
+
+	// Несколько скриптов — предпочитаем dev.
+	writePackageJSON(t, map[string]string{"build": "tsc", "dev": "vite", "lint": "eslint"})
+	if got, err := chooseNpmScript("package.json"); err != nil || got != "dev" {
+		t.Errorf("chooseNpmScript(multi) = %q, %v; want dev, nil", got, err)
+	}
+
+	// Нет dev — первый по алфавиту.
+	writePackageJSON(t, map[string]string{"lint": "eslint", "build": "tsc"})
+	if got, err := chooseNpmScript("package.json"); err != nil || got != "build" {
+		t.Errorf("chooseNpmScript(no dev) = %q, %v; want build, nil", got, err)
+	}
+
+	// Пустые скрипты — ошибка.
+	writePackageJSON(t, map[string]string{})
+	if _, err := chooseNpmScript("package.json"); err == nil {
+		t.Error("chooseNpmScript(empty scripts) должен вернуть ошибку")
+	}
+
+	// Отсутствует package.json — ошибка.
+	if _, err := chooseNpmScript("nope.json"); err == nil {
+		t.Error("chooseNpmScript(no file) должен вернуть ошибку")
 	}
 }

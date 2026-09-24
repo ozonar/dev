@@ -2,10 +2,12 @@ package run
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -112,14 +114,16 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	case "node":
-		// Check for package.json scripts
-		if _, err := os.Stat("package.json"); err == nil {
-			cmd := exec.Command(runtimePath, "run", "dev")
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			return cmd.Run()
+		// Выбираем npm-скрипт: при нескольких вариантах в package.json
+		// пользователю предлагается выбрать нужный (по умолчанию dev).
+		script, err := chooseNpmScript("package.json")
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf(i18n.T("package.json not found"))
+		cmd := exec.Command(runtimePath, "run", script)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
 	case "python":
 		// Try to run Django or Flask
 		if _, err := os.Stat("manage.py"); err == nil {
@@ -142,6 +146,56 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 		}
 		return fmt.Errorf(i18n.T("unsupported framework: %s"), framework)
 	}
+}
+
+// chooseNpmScript читает package.json и возвращает имя npm-скрипта для запуска
+// проекта. Если скриптов несколько — показывает нумерованный список и
+// спрашивает пользователя; по умолчанию выбирается dev, если он есть,
+// иначе первый скрипт в алфавитном порядке.
+func chooseNpmScript(pkgPath string) (string, error) {
+	data, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return "", fmt.Errorf(i18n.T("package.json not found"))
+	}
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil || len(pkg.Scripts) == 0 {
+		return "", fmt.Errorf(i18n.T("No npm scripts found in package.json"))
+	}
+
+	names := make([]string, 0, len(pkg.Scripts))
+	for name := range pkg.Scripts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	// По умолчанию предпочитаем dev — он запускает dev-сервер проекта.
+	defaultIdx := 0
+	for i, name := range names {
+		if name == "dev" {
+			defaultIdx = i
+			break
+		}
+	}
+
+	if len(names) > 1 {
+		fmt.Println()
+		i18n.Printf("Select npm script to run:\n")
+		for i, name := range names {
+			fmt.Printf("  %d) %s\n", i+1, name)
+		}
+		i18n.Printf("Select number to run [%d]: ", defaultIdx+1)
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+		if input != "" {
+			if n, err := strconv.Atoi(input); err == nil && n >= 1 && n <= len(names) {
+				defaultIdx = n - 1
+			}
+		}
+	}
+	return names[defaultIdx], nil
 }
 
 // runSymfony запускает Symfony-проект.
