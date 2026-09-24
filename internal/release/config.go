@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"dev/internal/colors"
+	"dev/internal/i18n"
 
 	"gopkg.in/yaml.v3"
 )
@@ -113,9 +114,9 @@ func EnsureConfig(dir string) (*Config, error) {
 		if writeErr := os.WriteFile(path, []byte(defaultTemplate), 0644); writeErr != nil {
 			return nil, fmt.Errorf("failed to create %s: %w", path, writeErr)
 		}
-		fmt.Println(colors.Yellow("Created " + path + " from template"))
+		fmt.Println(colors.Yellow(i18n.T("Created %s from template", path)))
 	} else {
-		fmt.Println(colors.Yellow("Invalid " + path + ": " + err.Error()))
+		fmt.Println(colors.Yellow(i18n.T("Invalid %s: %s", path, err.Error())))
 	}
 
 	if openErr := openInEditor(path); openErr != nil {
@@ -135,7 +136,7 @@ func openInEditor(path string) error {
 	parts := strings.Fields(editor)
 	args := append(parts[1:], path)
 
-	fmt.Println(colors.Cyan("Opening " + path + " in " + parts[0] + "..."))
+	fmt.Println(colors.Cyan(i18n.T("Opening %s in %s...", path, parts[0])))
 	cmd := exec.Command(parts[0], args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

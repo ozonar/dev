@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"dev/internal/common"
+	"dev/internal/i18n"
 	"dev/internal/port"
 	"dev/internal/run"
 	"dev/internal/toolchain"
@@ -45,7 +46,7 @@ func Run(opts Options) error {
 	case "php":
 		return runPHP(opts)
 	default:
-		return fmt.Errorf("debug not supported for language %q", opts.Language)
+		return fmt.Errorf(i18n.T("debug not supported for language %q"), opts.Language)
 	}
 }
 
@@ -67,10 +68,10 @@ func runGo(opts Options) error {
 		OnlyMainGo:       true,
 	})
 	if err != nil {
-		return fmt.Errorf("error finding main files: %v", err)
+		return fmt.Errorf(i18n.T("error finding main files: %v"), err)
 	}
 	if len(mainFiles) == 0 {
-		return fmt.Errorf("no Go main files found")
+		return fmt.Errorf(i18n.T("no Go main files found"))
 	}
 	target := chooseMain(mainFiles)
 
@@ -89,9 +90,9 @@ func runGo(opts Options) error {
 	dapAddr := fmt.Sprintf("localhost:%d", dapPort)
 
 	dir := debugDir(target)
-	color.Green("Starting debug server on %s ...", dapAddr)
-	color.Cyan("Waiting for the IDE to attach.")
-	fmt.Printf("In your IDE configure an attach debugger (e.g. VS Code launch.json):\n")
+	i18n.Green("Starting debug server on %s ...", dapAddr)
+	i18n.Cyan("Waiting for the IDE to attach.")
+	i18n.Printf("In your IDE configure an attach debugger (e.g. VS Code launch.json):\n")
 	fmt.Printf("  {\"name\":\"attach\",\"type\":\"go\",\"request\":\"attach\",\"mode\":\"remote\",\"port\":%d,\"host\":\"127.0.0.1\"}\n", dapPort)
 
 	// Headless Delve: сервер ожидает подключения клиента (IDE), а запуск
@@ -113,16 +114,16 @@ func chooseMain(mainFiles []string) string {
 	if len(mainFiles) == 1 {
 		return mainFiles[0]
 	}
-	fmt.Println("Multiple main files found:")
+	i18n.Printf("Multiple main files found:\n")
 	for i, f := range mainFiles {
 		fmt.Printf("  %d) %s\n", i+1, f)
 	}
-	fmt.Printf("Select number to debug [1]: ")
+	i18n.Printf("Select number to debug [1]: ")
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 	if input == "" {
-		fmt.Printf("Debugging %s\n", mainFiles[0])
+		i18n.Printf("Debugging %s\n", mainFiles[0])
 		return mainFiles[0]
 	}
 	idx, err := strconv.Atoi(input)
@@ -177,23 +178,23 @@ func ensureDebugPortFree(portNum int) error {
 		return nil
 	}
 
-	color.Yellow("Port %d is already in use.", portNum)
+	i18n.Yellow("Port %d is already in use.", portNum)
 	if info != "" {
 		fmt.Println(info)
 	}
-	fmt.Print("Kill the process using port " + strconv.Itoa(portNum) + "? [Y/n]: ")
+	i18n.Printf("Kill the process using port %d? [Y/n]: ", portNum)
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 	if strings.EqualFold(input, "n") || strings.EqualFold(input, "no") {
-		return fmt.Errorf("port %d is already in use", portNum)
+		return fmt.Errorf(i18n.T("port %d is already in use"), portNum)
 	}
 
 	if err := port.KillProcessOnPort(portNum); err != nil {
 		color.Yellow("  %v", err)
 	}
 
-	color.Green("Process on port %d killed.", portNum)
+	i18n.Green("Process on port %d killed.", portNum)
 	return nil
 }
 
@@ -202,24 +203,24 @@ func ensureDebugPortFree(portNum int) error {
 // go install github.com/go-delve/delve/cmd/dlv@latest.
 func installDlv(goPath string) (string, error) {
 	if p, err := exec.LookPath("dlv"); err == nil {
-		color.Cyan("Using local Delve: %s", p)
+		i18n.Cyan("Using local Delve: %s", p)
 		return p, nil
 	}
 
-	color.Yellow("Installing Delve via go install...")
+	i18n.Yellow("Installing Delve via go install...")
 	install := exec.Command(goPath, "install", "github.com/go-delve/delve/cmd/dlv@latest")
 	install.Env = append(os.Environ(), "GOTOOLCHAIN=local")
 	install.Stdout = os.Stdout
 	install.Stderr = os.Stderr
 	if err := install.Run(); err != nil {
-		return "", fmt.Errorf("failed to install Delve: %v", err)
+		return "", fmt.Errorf(i18n.T("failed to install Delve: %v"), err)
 	}
 
 	bin, err := findDlvBinary(goPath)
 	if err != nil {
 		return "", err
 	}
-	color.Green("Delve installed at: %s", bin)
+	i18n.Green("Delve installed at: %s", bin)
 	return bin, nil
 }
 
@@ -245,7 +246,7 @@ func findDlvBinary(goPath string) (string, error) {
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("dlv binary not found after installation (tried %v)", candidates)
+	return "", fmt.Errorf(i18n.T("dlv binary not found after installation (tried %v)"), candidates)
 }
 
 // runPHP запускает PHP-сервер сообразно фреймворку проекта. Xdebug используется
@@ -260,9 +261,9 @@ func runPHP(opts Options) error {
 	}
 
 	if !phpHasXdebug(phpPath) {
-		return fmt.Errorf("Xdebug is not loaded in local PHP (%s). Enable/install Xdebug to debug.", phpPath)
+		return fmt.Errorf(i18n.T("Xdebug is not loaded in local PHP (%s). Enable/install Xdebug to debug."), phpPath)
 	}
-	color.Green("Xdebug detected in local PHP.")
+	i18n.Green("Xdebug detected in local PHP.")
 
 	// Передаём параметры отладки Xdebug напрямую в команду php (-d ...):
 	// start_with_request=yes обязателен для CLI/встроенного сервера, иначе
@@ -274,7 +275,7 @@ func runPHP(opts Options) error {
 		"-dxdebug.client_port=9003",
 	}
 	os.Setenv("XDEBUG_MODE", "debug")
-	color.Cyan("Xdebug debug mode enabled. Start 'Listening for PHP Debug Connections' in your IDE (port 9003), then open the site.")
+	i18n.Cyan("Xdebug debug mode enabled. Start 'Listening for PHP Debug Connections' in your IDE (port 9003), then open the site.")
 
 	return run.RunProjectWithOptions(opts.Framework, "php", run.RunOptions{
 		Port:         opts.Port,

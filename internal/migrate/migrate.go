@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
+	"dev/internal/i18n"
 )
 
 // RunMigrations запускает миграции в зависимости от фреймворка
@@ -29,7 +29,7 @@ func RunMigrations(framework, language string) error {
 	case "yii":
 		return runYiiMigrations()
 	default:
-		return fmt.Errorf("migrations for framework %s are not supported", framework)
+		return fmt.Errorf(i18n.T("migrations for framework %s are not supported"), framework)
 	}
 }
 
@@ -55,13 +55,13 @@ func CreateNewMigration(framework, language, name string) error {
 	case "yii":
 		return createYiiMigration(name)
 	default:
-		return fmt.Errorf("creating migrations for framework %s is not supported", framework)
+		return fmt.Errorf(i18n.T("creating migrations for framework %s is not supported"), framework)
 	}
 }
 
 // runLaravelMigrations запускает миграции Laravel
 func runLaravelMigrations() error {
-	color.Cyan("Running Laravel migrations...")
+	i18n.Cyan("Running Laravel migrations...")
 	cmd := exec.Command("php", "artisan", "migrate")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -70,7 +70,7 @@ func runLaravelMigrations() error {
 
 // runRailsMigrations запускает миграции Rails
 func runRailsMigrations() error {
-	color.Cyan("Running Rails migrations...")
+	i18n.Cyan("Running Rails migrations...")
 	cmd := exec.Command("rails", "db:migrate")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -79,7 +79,7 @@ func runRailsMigrations() error {
 
 // runDjangoMigrations запускает миграции Django
 func runDjangoMigrations() error {
-	color.Cyan("Running Django migrations...")
+	i18n.Cyan("Running Django migrations...")
 	cmd := exec.Command("python", "manage.py", "migrate")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -88,7 +88,7 @@ func runDjangoMigrations() error {
 
 // runSymfonyMigrations запускает миграции Symfony
 func runSymfonyMigrations() error {
-	color.Cyan("Running Symfony migrations...")
+	i18n.Cyan("Running Symfony migrations...")
 	cmd := exec.Command("php", "bin/console", "doctrine:migrations:migrate")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -97,7 +97,7 @@ func runSymfonyMigrations() error {
 
 // runYiiMigrations запускает миграции Yii
 func runYiiMigrations() error {
-	color.Cyan("Running Yii migrations...")
+	i18n.Cyan("Running Yii migrations...")
 	cmd := exec.Command("php", "yii", "migrate")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -106,10 +106,10 @@ func runYiiMigrations() error {
 
 // runGoMigrateMigrations запускает миграции с использованием go-migrate
 func runGoMigrateMigrations() error {
-	color.Cyan("Running go migrations...")
+	i18n.Cyan("Running go migrations...")
 	// Проверяем наличие утилиты migrate
 	if _, err := exec.LookPath("migrate"); err != nil {
-		return fmt.Errorf("migrate utility not found. Install: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest")
+		return fmt.Errorf(i18n.T("migrate utility not found. Install: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"))
 	}
 
 	// Ищем файлы миграций в стандартных директориях
@@ -123,14 +123,14 @@ func runGoMigrateMigrations() error {
 	}
 
 	if migrationDir == "" {
-		return fmt.Errorf("migration directory not found. Check for migrations, db/migrations or internal/migrations folder")
+		return fmt.Errorf(i18n.T("migration directory not found. Check for migrations, db/migrations or internal/migrations folder"))
 	}
 
 	// Получаем DSN из переменных окружения
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		dsn = "postgres://localhost:5432/db?sslmode=disable"
-		color.Yellow("Using default DSN: %s. Set DATABASE_URL environment variable to change.", dsn)
+		i18n.Yellow("Using default DSN: %s. Set DATABASE_URL environment variable to change.", dsn)
 	}
 
 	cmd := exec.Command("migrate", "-path", migrationDir, "-database", dsn, "up")
@@ -141,7 +141,7 @@ func runGoMigrateMigrations() error {
 
 // runNodeMigrations запускает миграции для Node.js проектов
 func runNodeMigrations() error {
-	color.Cyan("Running Node.js migrations...")
+	i18n.Cyan("Running Node.js migrations...")
 
 	// Пытаемся определить скрипт миграций
 	scripts := []string{"migrate", "db:migrate", "knex:migrate", "typeorm:migration:run"}
@@ -167,12 +167,12 @@ func runNodeMigrations() error {
 		return cmd.Run()
 	}
 
-	return fmt.Errorf("could not find migration tool (knex, typeorm) or script in package.json")
+	return fmt.Errorf(i18n.T("could not find migration tool (knex, typeorm) or script in package.json"))
 }
 
 // createLaravelMigration создает новую миграцию Laravel
 func createLaravelMigration(name string) error {
-	color.Cyan("Creating Laravel migration: %s", name)
+	i18n.Cyan("Creating Laravel migration: %s", name)
 	cmd := exec.Command("php", "artisan", "make:migration", name)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -181,7 +181,7 @@ func createLaravelMigration(name string) error {
 
 // createRailsMigration создает новую миграцию Rails
 func createRailsMigration(name string) error {
-	color.Cyan("Creating Rails migration: %s", name)
+	i18n.Cyan("Creating Rails migration: %s", name)
 	cmd := exec.Command("rails", "generate", "migration", name)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -190,7 +190,7 @@ func createRailsMigration(name string) error {
 
 // createDjangoMigration создает новую миграцию Django
 func createDjangoMigration(name string) error {
-	color.Cyan("Creating Django migration: %s", name)
+	i18n.Cyan("Creating Django migration: %s", name)
 	cmd := exec.Command("python", "manage.py", "makemigrations", name)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -199,7 +199,7 @@ func createDjangoMigration(name string) error {
 
 // createSymfonyMigration создает новую миграцию Symfony
 func createSymfonyMigration(name string) error {
-	color.Cyan("Creating Symfony migration")
+	i18n.Cyan("Creating Symfony migration")
 	// Symfony использует doctrine:migrations:generate для создания миграции
 	cmd := exec.Command("php", "bin/console", "doctrine:migrations:generate")
 	cmd.Stdout = os.Stdout
@@ -209,7 +209,7 @@ func createSymfonyMigration(name string) error {
 
 // createYiiMigration создает новую миграцию Yii
 func createYiiMigration(name string) error {
-	color.Cyan("Creating Yii migration: %s", name)
+	i18n.Cyan("Creating Yii migration: %s", name)
 	cmd := exec.Command("php", "yii", "migrate/create", name)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -218,7 +218,7 @@ func createYiiMigration(name string) error {
 
 // createGoMigrateMigration создает новую миграцию go-migrate
 func createGoMigrateMigration(name string) error {
-	color.Cyan("Creating go-migrate migration: %s", name)
+	i18n.Cyan("Creating go-migrate migration: %s", name)
 
 	// Генерируем имя файла с timestamp
 	timestamp := time.Now().Format("20060102150405")
@@ -238,14 +238,14 @@ func createGoMigrateMigration(name string) error {
 		// Создаем директорию migrations если её нет
 		migrationDir = "migrations"
 		if err := os.MkdirAll(migrationDir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %v", migrationDir, err)
+			return fmt.Errorf(i18n.T("failed to create directory %s: %v"), migrationDir, err)
 		}
 	}
 
 	fullPath := filepath.Join(migrationDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
-		return fmt.Errorf("failed to create migration file: %v", err)
+		return fmt.Errorf(i18n.T("failed to create migration file: %v"), err)
 	}
 	defer file.Close()
 
@@ -266,7 +266,7 @@ SELECT 'Migration %s applied successfully' as result;
 		strings.ToLower(strings.ReplaceAll(name, " ", "_")), name)
 
 	if _, err := file.WriteString(content); err != nil {
-		return fmt.Errorf("failed to write to migration file: %v", err)
+		return fmt.Errorf(i18n.T("failed to write to migration file: %v"), err)
 	}
 
 	// Создаем соответствующий down файл
@@ -274,7 +274,7 @@ SELECT 'Migration %s applied successfully' as result;
 	downFilepath := filepath.Join(migrationDir, downFilename)
 	downFile, err := os.Create(downFilepath)
 	if err != nil {
-		return fmt.Errorf("failed to create down migration file: %v", err)
+		return fmt.Errorf(i18n.T("failed to create down migration file: %v"), err)
 	}
 	defer downFile.Close()
 
@@ -291,19 +291,19 @@ SELECT 'Migration %s reverted successfully' as result;
 		strings.ToLower(strings.ReplaceAll(name, " ", "_")), name)
 
 	if _, err := downFile.WriteString(downContent); err != nil {
-		return fmt.Errorf("failed to write to down migration file: %v", err)
+		return fmt.Errorf(i18n.T("failed to write to down migration file: %v"), err)
 	}
 
-	color.Green("Migration files created:")
-	color.Green("  %s", fullPath)
-	color.Green("  %s", downFilepath)
+	i18n.Green("Migration files created:")
+	i18n.Green("  %s", fullPath)
+	i18n.Green("  %s", downFilepath)
 
 	return nil
 }
 
 // createNodeMigration создает новую миграцию для Node.js
 func createNodeMigration(name string) error {
-	color.Cyan("Creating Node.js migration: %s", name)
+	i18n.Cyan("Creating Node.js migration: %s", name)
 
 	// Пытаемся использовать knex
 	if _, err := exec.LookPath("knex"); err == nil {
@@ -327,13 +327,13 @@ func createNodeMigration(name string) error {
 	migrationDir := "migrations"
 
 	if err := os.MkdirAll(migrationDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %s: %v", migrationDir, err)
+		return fmt.Errorf(i18n.T("failed to create directory %s: %v"), migrationDir, err)
 	}
 
 	fullPath := filepath.Join(migrationDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
-		return fmt.Errorf("failed to create migration file: %v", err)
+		return fmt.Errorf(i18n.T("failed to create migration file: %v"), err)
 	}
 	defer file.Close()
 
@@ -360,9 +360,9 @@ exports.down = function(knex) {
 		strings.ToLower(strings.ReplaceAll(name, " ", "_")))
 
 	if _, err := file.WriteString(content); err != nil {
-		return fmt.Errorf("failed to write to migration file: %v", err)
+		return fmt.Errorf(i18n.T("failed to write to migration file: %v"), err)
 	}
 
-	color.Green("Migration file created: %s", fullPath)
+	i18n.Green("Migration file created: %s", fullPath)
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"dev/internal/detector"
+	"dev/internal/i18n"
 
 	"github.com/fatih/color"
 	_ "github.com/go-sql-driver/mysql"
@@ -92,7 +93,7 @@ func RunMigrationStatus() error {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
 	if err != nil {
-		return fmt.Errorf("error detecting project: %v", err)
+		return fmt.Errorf(i18n.T("error detecting project: %v"), err)
 	}
 
 	// Находим базу данных (PostgreSQL или MySQL)
@@ -105,7 +106,7 @@ func RunMigrationStatus() error {
 	}
 
 	if dbInfo == nil {
-		return fmt.Errorf("no PostgreSQL or MySQL database found in project configuration")
+		return fmt.Errorf(i18n.T("no PostgreSQL or MySQL database found in project configuration"))
 	}
 
 	status := &MigrationStatus{}
@@ -147,8 +148,8 @@ func findPHPMigrationProcess(status *MigrationStatus) {
 		if err != nil || len(output) == 0 {
 			status.Status = "IDLE"
 			status.Phase = "IDLE"
-			status.Diagnosis = "No active migration process found."
-			status.Action = "Run migration to start the process."
+			status.Diagnosis = i18n.T("No active migration process found.")
+			status.Action = i18n.T("Run migration to start the process.")
 			return
 		}
 	}
@@ -787,20 +788,20 @@ func generateDiagnosis(status *MigrationStatus) {
 	switch status.Status {
 	case "RUNNING":
 		if status.Phase == "SQL EXECUTION" {
-			status.Diagnosis = "Migration is actively executing SQL."
+			status.Diagnosis = i18n.T("Migration is actively executing SQL.")
 			if status.DB.State == "active" {
-				status.Diagnosis += "\nDatabase backend is processing the query."
+				status.Diagnosis += "\n" + i18n.T("Database backend is processing the query.")
 			}
-			status.Action = "Wait for the migration to complete."
+			status.Action = i18n.T("Wait for the migration to complete.")
 		} else {
-			status.Diagnosis = "Migration PHP process is running."
-			status.Action = "Monitor the process."
+			status.Diagnosis = i18n.T("Migration PHP process is running.")
+			status.Action = i18n.T("Monitor the process.")
 		}
 
 	case "WAITING_LOCK":
-		status.Diagnosis = "Migration is waiting for a database lock."
+		status.Diagnosis = i18n.T("Migration is waiting for a database lock.")
 		if len(status.Locks.Chain) > 0 {
-			status.Diagnosis += "\n\nBlocking chain detected:"
+			status.Diagnosis += "\n\n" + i18n.T("Blocking chain detected:")
 			for i, link := range status.Locks.Chain {
 				status.Diagnosis += fmt.Sprintf("\n  PID %d", link.PID)
 				if i < len(status.Locks.Chain)-1 {
@@ -808,28 +809,28 @@ func generateDiagnosis(status *MigrationStatus) {
 				}
 			}
 		}
-		status.Action = "Inspect the blocking transaction before terminating it."
+		status.Action = i18n.T("Inspect the blocking transaction before terminating it.")
 
 	case "WAITING_IO":
-		status.Diagnosis = "Migration is waiting for I/O operations."
+		status.Diagnosis = i18n.T("Migration is waiting for I/O operations.")
 		if status.DB.WaitEvent != "" && status.DB.WaitEvent != "none" {
-			status.Diagnosis += fmt.Sprintf("\nWait event: %s", status.DB.WaitEvent)
+			status.Diagnosis += fmt.Sprintf("\n"+i18n.T("Wait event: %s"), status.DB.WaitEvent)
 		}
-		status.Action = "Check disk I/O and system resources."
+		status.Action = i18n.T("Check disk I/O and system resources.")
 
 	case "IDLE":
-		status.Diagnosis = "No active migration process found."
-		status.Action = "Run migration to start the process."
+		status.Diagnosis = i18n.T("No active migration process found.")
+		status.Action = i18n.T("Run migration to start the process.")
 
 	default:
-		status.Diagnosis = "Migration status is unknown."
-		status.Action = "Investigate manually."
+		status.Diagnosis = i18n.T("Migration status is unknown.")
+		status.Action = i18n.T("Investigate manually.")
 	}
 
 	// Дополнительные проверки
 	if status.PHP.Exists && !status.DB.Exists {
-		status.Diagnosis = "Migration process exists, but no active database query was found.\n\nPossible causes:\n- PHP is waiting outside database\n- Doctrine is processing data\n- Connection is idle in transaction\n- Process is deadlocked internally"
-		status.Action = "Inspect PHP process state with strace or gdb."
+		status.Diagnosis = i18n.T("Migration process exists, but no active database query was found.\n\nPossible causes:\n- PHP is waiting outside database\n- Doctrine is processing data\n- Connection is idle in transaction\n- Process is deadlocked internally")
+		status.Action = i18n.T("Inspect PHP process state with strace or gdb.")
 	}
 }
 
@@ -850,27 +851,27 @@ func printMigrationStatus(status *MigrationStatus, dbInfo *detector.DatabaseInfo
 
 	// Заголовок
 	fmt.Println()
-	color.Cyan("Migration status")
+	i18n.Cyan("Migration status")
 	fmt.Println(strings.Repeat("─", 62))
 
-	// Блок: Database backup info
+	// Блок: информация о подключении к БД
 	fmt.Println()
-	color.Cyan("Database backup info")
-	fmt.Printf("  Connection: %s %s\n", cyan(dbTypeDisplay), cyan(getDBVersion(dbInfo)))
+	i18n.Cyan("Database backup info")
+	i18n.Printf("  Connection: %s %s\n", cyan(dbTypeDisplay), cyan(getDBVersion(dbInfo)))
 	if status.Doctrine.Current != "" {
-		fmt.Printf("  Migration:  %s\n", yellow(status.Doctrine.Current))
+		i18n.Printf("  Migration:  %s\n", yellow(status.Doctrine.Current))
 	}
-	fmt.Printf("  Command:    %s\n", white("doctrine:migrations:migrate"))
+	i18n.Printf("  Command:    %s\n", white("doctrine:migrations:migrate"))
 	if status.PHP.Started != "" {
-		fmt.Printf("  Started:    %s\n", yellow(status.PHP.Started))
+		i18n.Printf("  Started:    %s\n", yellow(status.PHP.Started))
 	}
 	if status.Duration != "" {
-		fmt.Printf("  Duration:   %s\n", yellow(status.Duration))
+		i18n.Printf("  Duration:   %s\n", yellow(status.Duration))
 	}
 
 	// Статус
 	fmt.Println()
-	color.Cyan("Status")
+	i18n.Cyan("Status")
 	var statusColor func(a ...interface{}) string
 	switch status.Status {
 	case "RUNNING":
@@ -884,16 +885,16 @@ func printMigrationStatus(status *MigrationStatus, dbInfo *detector.DatabaseInfo
 	default:
 		statusColor = yellow
 	}
-	fmt.Printf("  Status:  %s\n", statusColor(status.Status))
-	fmt.Printf("  Phase:   %s\n", cyan(status.Phase))
+	i18n.Printf("  Status:  %s\n", statusColor(status.Status))
+	i18n.Printf("  Phase:   %s\n", cyan(status.Phase))
 	if status.Duration != "" {
-		fmt.Printf("  Duration: %s\n", yellow(status.Duration))
+		i18n.Printf("  Duration: %s\n", yellow(status.Duration))
 	}
 
 	// Текущий запрос
 	if status.DB.Query != "" {
 		fmt.Println()
-		color.Cyan("Current query")
+		i18n.Cyan("Current query")
 		query := formatSQLQuery(status.DB.Query)
 		fmt.Printf("  %s\n", white(query))
 	}
@@ -901,56 +902,56 @@ func printMigrationStatus(status *MigrationStatus, dbInfo *detector.DatabaseInfo
 	// Процесс миграции
 	if status.PHP.Exists {
 		fmt.Println()
-		color.Cyan("Migration process")
-		fmt.Printf("  PID:     %s\n", yellow(strconv.Itoa(status.PHP.PID)))
+		i18n.Cyan("Migration process")
+		i18n.Printf("  PID:     %s\n", yellow(strconv.Itoa(status.PHP.PID)))
 		if status.PHP.Started != "" {
-			fmt.Printf("  Started: %s\n", yellow(status.PHP.Started))
+			i18n.Printf("  Started: %s\n", yellow(status.PHP.Started))
 		}
 		if status.PHP.Runtime != "" {
-			fmt.Printf("  Runtime: %s\n", yellow(status.PHP.Runtime))
+			i18n.Printf("  Runtime: %s\n", yellow(status.PHP.Runtime))
 		}
 		if status.PHP.CPU != "" {
-			fmt.Printf("  CPU:     %s%%\n", yellow(status.PHP.CPU))
+			i18n.Printf("  CPU:     %s%%\n", yellow(status.PHP.CPU))
 		}
 		if status.PHP.Memory != "" {
-			fmt.Printf("  Memory:  %s MB\n", yellow(status.PHP.Memory))
+			i18n.Printf("  Memory:  %s MB\n", yellow(status.PHP.Memory))
 		}
 		if status.PHP.Stat != "" {
-			fmt.Printf("  STAT:    %s\n", yellow(status.PHP.Stat))
+			i18n.Printf("  STAT:    %s\n", yellow(status.PHP.Stat))
 		}
 		if status.PHP.Wchan != "" {
-			fmt.Printf("  WCHAN:   %s\n", yellow(status.PHP.Wchan))
+			i18n.Printf("  WCHAN:   %s\n", yellow(status.PHP.Wchan))
 		}
 	}
 
 	// Соединение с БД
 	if status.DB.Exists {
 		fmt.Println()
-		color.Cyan("Database process")
-		fmt.Printf("  PID:          %s\n", yellow(strconv.Itoa(status.DB.PID)))
-		fmt.Printf("  State:        %s\n", yellow(status.DB.State))
+		i18n.Cyan("Database process")
+		i18n.Printf("  PID:          %s\n", yellow(strconv.Itoa(status.DB.PID)))
+		i18n.Printf("  State:        %s\n", yellow(status.DB.State))
 		if status.DB.Transaction != "" {
-			fmt.Printf("  Transaction:  %s\n", yellow(status.DB.Transaction))
+			i18n.Printf("  Transaction:  %s\n", yellow(status.DB.Transaction))
 		}
 		if status.DB.QueryRuntime != "" {
-			fmt.Printf("  Query runtime: %s\n", yellow(status.DB.QueryRuntime))
+			i18n.Printf("  Query runtime: %s\n", yellow(status.DB.QueryRuntime))
 		}
-		fmt.Printf("  Wait event:   %s\n", yellow(status.DB.WaitEvent))
+		i18n.Printf("  Wait event:   %s\n", yellow(status.DB.WaitEvent))
 		if status.DB.User != "" {
-			fmt.Printf("  DB user:      %s\n", yellow(status.DB.User))
+			i18n.Printf("  DB user:      %s\n", yellow(status.DB.User))
 		}
 		if status.DB.Client != "" {
-			fmt.Printf("  Client:       %s\n", yellow(status.DB.Client))
+			i18n.Printf("  Client:       %s\n", yellow(status.DB.Client))
 		}
 	}
 
 	// Блокировки
 	fmt.Println()
-	color.Cyan("Locks")
+	i18n.Cyan("Locks")
 	if status.Locks.Blocked {
-		fmt.Printf("  Status: %s\n", red("BLOCKED"))
+		i18n.Printf("  Status: %s\n", red(i18n.T("BLOCKED")))
 		fmt.Println()
-		fmt.Printf("  %s\n", magenta("Blocking chain:"))
+		fmt.Printf("  %s\n", magenta(i18n.T("Blocking chain:")))
 		for i, link := range status.Locks.Chain {
 			prefix := "  └─"
 			if i < len(status.Locks.Chain)-1 {
@@ -975,35 +976,35 @@ func printMigrationStatus(status *MigrationStatus, dbInfo *detector.DatabaseInfo
 			}
 		}
 	} else {
-		fmt.Printf("  Status: %s\n", green("NOT BLOCKED"))
+		i18n.Printf("  Status: %s\n", green(i18n.T("NOT BLOCKED")))
 	}
 
-	// Doctrine migration status
+	// Статус миграций Doctrine
 	if status.Doctrine.Executed > 0 || status.Doctrine.Pending > 0 {
 		fmt.Println()
-		color.Cyan("Doctrine migrations")
-		fmt.Printf("  Executed: %s\n", green(strconv.Itoa(status.Doctrine.Executed)))
-		fmt.Printf("  Available: %s\n", cyan(strconv.Itoa(status.Doctrine.Executed+status.Doctrine.Pending)))
-		fmt.Printf("  Pending:  %s\n", yellow(strconv.Itoa(status.Doctrine.Pending)))
+		i18n.Cyan("Doctrine migrations")
+		i18n.Printf("  Executed: %s\n", green(strconv.Itoa(status.Doctrine.Executed)))
+		i18n.Printf("  Available: %s\n", cyan(strconv.Itoa(status.Doctrine.Executed+status.Doctrine.Pending)))
+		i18n.Printf("  Pending:  %s\n", yellow(strconv.Itoa(status.Doctrine.Pending)))
 		fmt.Println()
 		if status.Doctrine.Current != "" {
-			fmt.Printf("  Current:\n    %s\n", yellow(status.Doctrine.Current))
+			i18n.Printf("  Current:\n    %s\n", yellow(status.Doctrine.Current))
 		}
 		if status.Doctrine.Previous != "" {
-			fmt.Printf("  Previous:\n    %s\n", white(status.Doctrine.Previous))
+			i18n.Printf("  Previous:\n    %s\n", white(status.Doctrine.Previous))
 		}
 		if status.Doctrine.Next != "" {
-			fmt.Printf("  Next:\n    %s\n", green(status.Doctrine.Next))
+			i18n.Printf("  Next:\n    %s\n", green(status.Doctrine.Next))
 		}
 	}
 
-	// Diagnosis
+	// Диагноз
 	fmt.Println()
-	color.Cyan("Diagnosis")
+	i18n.Cyan("Diagnosis")
 	fmt.Println(strings.Repeat("─", 40))
 	fmt.Printf("  %s\n", white(status.Diagnosis))
 	fmt.Println()
-	fmt.Printf("  %s: %s\n", magenta("Action"), yellow(status.Action))
+	i18n.Printf("  %s: %s\n", magenta(i18n.T("Action")), yellow(status.Action))
 	fmt.Println()
 }
 

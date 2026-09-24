@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"dev/internal/i18n"
 )
 
 // isLocalHost проверяет, является ли хост локальным
@@ -43,7 +45,7 @@ func KillProcessOnPort(port int) error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("could not find process on port %d: %v", port, err)
+		return fmt.Errorf(i18n.T("could not find process on port %d: %v"), port, err)
 	}
 
 	pids := strings.Fields(string(output))
@@ -57,7 +59,7 @@ func KillProcessOnPort(port int) error {
 	killCmd.Stdout = os.Stdout
 	killCmd.Stderr = os.Stderr
 	if err := killCmd.Run(); err != nil {
-		return fmt.Errorf("could not kill process on port %d: %v", port, err)
+		return fmt.Errorf(i18n.T("could not kill process on port %d: %v"), port, err)
 	}
 	return nil
 }
@@ -69,7 +71,7 @@ func KillProcessOnPort(port int) error {
 func CheckPort(addr string) error {
 	host, port, err := parseAddr(addr)
 	if err != nil {
-		return fmt.Errorf("invalid address format %q: %v", addr, err)
+		return fmt.Errorf(i18n.T("invalid address format %q: %v"), addr, err)
 	}
 
 	if !isLocalHost(host) {
@@ -81,26 +83,27 @@ func CheckPort(addr string) error {
 
 	portNum, err := strconv.Atoi(port)
 	if err != nil {
-		return fmt.Errorf("invalid port %q: %v", port, err)
+		return fmt.Errorf(i18n.T("invalid port %q: %v"), port, err)
 	}
 
 	// Для локальных хостов — проверка через fuser/ss/lsof.
 	occupied, procInfo := IsPortOccupied(portNum)
 	if !occupied {
-		fmt.Printf("Port %s:%s is free\n", host, port)
+		i18n.Printf("Port %s:%s is free\n", host, port)
 		return nil
 	}
 
 	// Порт занят — показываем детали
-	fmt.Printf("Port %s:%s is in use\n", host, port)
+	i18n.Printf("Port %s:%s is in use\n", host, port)
 	if procInfo != "" {
 		fmt.Println(procInfo)
 	}
 
 	// Предлагаем выбор: убить процесс или запустить nmap (по умолчанию — убить).
-	fmt.Println("\n1. Kill the process occupying the port")
-	fmt.Println("2. Run nmap")
-	fmt.Print("Choose (default 1): ")
+	fmt.Println()
+	i18n.Printf("1. Kill the process occupying the port\n")
+	i18n.Printf("2. Run nmap\n")
+	i18n.Printf("Choose (default 1): ")
 
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
@@ -111,18 +114,18 @@ func CheckPort(addr string) error {
 		// По умолчанию и явный выбор "1" — убиваем процесс на порту
 		portNum, err := strconv.Atoi(port)
 		if err != nil {
-			return fmt.Errorf("invalid port %q: %v", port, err)
+			return fmt.Errorf(i18n.T("invalid port %q: %v"), port, err)
 		}
-		fmt.Printf("Killing process on port %s:%s...\n", host, port)
+		i18n.Printf("Killing process on port %s:%s...\n", host, port)
 		if err := KillProcessOnPort(portNum); err != nil {
-			return fmt.Errorf("failed to kill process on port %s:%s: %v", host, port, err)
+			return fmt.Errorf(i18n.T("failed to kill process on port %s:%s: %v"), host, port, err)
 		}
-		fmt.Println("Process killed")
+		i18n.Printf("Process killed\n")
 	case "2":
 		fmt.Println()
 		runNmap(host, port)
 	default:
-		fmt.Println("Invalid selection, nothing done")
+		i18n.Printf("Invalid selection, nothing done\n")
 	}
 
 	return nil
@@ -140,7 +143,7 @@ func parseAddr(addr string) (host, port string, err error) {
 
 	parts := strings.Split(addr, ":")
 	if len(parts) != 2 {
-		return "", "", fmt.Errorf("expected host:port format, got %q", addr)
+		return "", "", fmt.Errorf(i18n.T("expected host:port format, got %q"), addr)
 	}
 	host = parts[0]
 	port = parts[1]
@@ -225,7 +228,7 @@ func checkPortLsof(port string) (bool, string) {
 func runNmap(host, port string) {
 	p, err := strconv.Atoi(port)
 	if err != nil || p < 1 || p > 65535 {
-		fmt.Printf("invalid port: %s\n", port)
+		i18n.Printf("invalid port: %s\n", port)
 		return
 	}
 
@@ -233,6 +236,6 @@ func runNmap(host, port string) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("nmap: %v\n", err)
+		i18n.Printf("nmap: %v\n", err)
 	}
 }

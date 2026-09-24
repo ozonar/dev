@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"dev/internal/i18n"
 )
 
 // Scope описывает объём кода, который будет проверяться.
@@ -66,26 +68,26 @@ type scopeOption struct {
 // scopeOptions возвращает список вариантов выбора объёма проверки.
 func scopeOptions() []scopeOption {
 	return []scopeOption{
-		{scopeChanged, "Changed code"},
-		{scopeCommit1, "Changed code + 1 commit"},
-		{scopeCommit2, "Changed code + 2 commits"},
-		{scopeCommit3, "Changed code + 3 commits"},
-		{scopeAll, "All code"},
-		{scopeMaster, "Diff with master"},
-		{scopeDevelop, "Diff with develop"},
+		{scopeChanged, i18n.T("Changed code")},
+		{scopeCommit1, i18n.T("Changed code + 1 commit")},
+		{scopeCommit2, i18n.T("Changed code + 2 commits")},
+		{scopeCommit3, i18n.T("Changed code + 3 commits")},
+		{scopeAll, i18n.T("All code")},
+		{scopeMaster, i18n.T("Diff with master")},
+		{scopeDevelop, i18n.T("Diff with develop")},
 	}
 }
 
 // scopeOptionsForAI возвращает варианты объёма для AI-ревью.
 func scopeOptionsForAI() []scopeOption {
 	return []scopeOption{
-		{scopeChanged, "Changed code"},
-		{scopeFiles, "Changed files"},
-		{scopeCommit1, "Changed code + 1 commit"},
-		{scopeCommit2, "Changed code + 2 commits"},
-		{scopeCommit3, "Changed code + 3 commits"},
-		{scopeMaster, "Diff with master"},
-		{scopeDevelop, "Diff with develop"},
+		{scopeChanged, i18n.T("Changed code")},
+		{scopeFiles, i18n.T("Changed files")},
+		{scopeCommit1, i18n.T("Changed code + 1 commit")},
+		{scopeCommit2, i18n.T("Changed code + 2 commits")},
+		{scopeCommit3, i18n.T("Changed code + 3 commits")},
+		{scopeMaster, i18n.T("Diff with master")},
+		{scopeDevelop, i18n.T("Diff with develop")},
 	}
 }
 
@@ -106,30 +108,30 @@ func buildScope(kind scopeKind) Scope {
 	switch kind {
 	case scopeChanged:
 		files := changedFiles()
-		return makeScope(kind, "changed code", files, changedDiffText(files))
+		return makeScope(kind, i18n.T("changed code"), files, changedDiffText(files))
 	case scopeFiles:
 		files := changedFiles()
-		return makeScope(kind, "changed files", files, changedDiffText(files))
+		return makeScope(kind, i18n.T("changed files"), files, changedDiffText(files))
 	case scopeCommit1:
 		files := filesSinceCommit(1)
-		return makeScope(kind, "changed code + 1 commit", files, diffSinceCommitText(1, files))
+		return makeScope(kind, i18n.T("changed code + 1 commit"), files, diffSinceCommitText(1, files))
 	case scopeCommit2:
 		files := filesSinceCommit(2)
-		return makeScope(kind, "changed code + 2 commits", files, diffSinceCommitText(2, files))
+		return makeScope(kind, i18n.T("changed code + 2 commits"), files, diffSinceCommitText(2, files))
 	case scopeCommit3:
 		files := filesSinceCommit(3)
-		return makeScope(kind, "changed code + 3 commits", files, diffSinceCommitText(3, files))
+		return makeScope(kind, i18n.T("changed code + 3 commits"), files, diffSinceCommitText(3, files))
 	case scopeMaster:
 		files := diffWithBranch("master")
-		return makeScope(kind, "diff with master", files, diffBranchText("master", files))
+		return makeScope(kind, i18n.T("diff with master"), files, diffBranchText("master", files))
 	case scopeDevelop:
 		files := diffWithBranch("develop")
-		return makeScope(kind, "diff with develop", files, diffBranchText("develop", files))
+		return makeScope(kind, i18n.T("diff with develop"), files, diffBranchText("develop", files))
 	default:
 		files := existingFiles(projectFiles())
 		return Scope{
 			kind:  scopeAll,
-			Name:  "all code",
+			Name:  i18n.T("all code"),
 			Files: files,
 			Dirs:  uniqueDirs(files),
 		}
@@ -470,7 +472,8 @@ func promptScopeForAI() Scope {
 // При пустом вводе используется defaultKind. hint формирует подсказку
 // о составе объёма (количество файлов для линтеров или символов для AI).
 func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint func(scopeKind) string) Scope {
-	fmt.Println("\nSelect scope:")
+	fmt.Println()
+	i18n.Printf("Select scope:\n")
 	for i, opt := range options {
 		fmt.Printf("  %d) %s", i+1, opt.label)
 		// Для вариантов с N коммитами показываем их конкретные названия.
@@ -502,7 +505,8 @@ func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint f
 	}
 
 	var input string
-	fmt.Printf("\nSelect [%d]: ", defaultIdx+1)
+	fmt.Println()
+	i18n.Printf("Select [%d]: ", defaultIdx+1)
 	fmt.Fscanln(os.Stdin, &input)
 	input = strings.TrimSpace(input)
 
@@ -548,7 +552,7 @@ func scopeFileHint(kind scopeKind) string {
 	if n <= 0 {
 		return ""
 	}
-	return fmt.Sprintf("%d files", n)
+	return i18n.N("%d files", n)
 }
 
 // formatSize форматирует количество символов в краткий человекочитаемый вид:

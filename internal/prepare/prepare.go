@@ -16,6 +16,7 @@ import (
 
 	"dev/internal/colors"
 	"dev/internal/common"
+	"dev/internal/i18n"
 )
 
 // ActionStatus представляет статус действия
@@ -52,7 +53,7 @@ func PrepareProject(framework, language string) error {
 	actions := buildActions(framework, language)
 
 	if len(actions) == 0 {
-		fmt.Println(colors.Yellow("No actions available for this project."))
+		i18n.Yellow("No actions available for this project.")
 		return nil
 	}
 
@@ -61,7 +62,8 @@ func PrepareProject(framework, language string) error {
 	for {
 		printActions(actions)
 
-		fmt.Print("\nEnter action number to run (or 0/q to exit): ")
+		fmt.Println()
+		i18n.Printf("Enter action number to run (or 0/q to exit): ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 
@@ -71,7 +73,7 @@ func PrepareProject(framework, language string) error {
 
 		idx, err := strconv.Atoi(input)
 		if err != nil || idx < 1 || idx > len(actions) {
-			fmt.Println(colors.Red("Invalid selection. Please enter a number from the list."))
+			i18n.Red("Invalid selection. Please enter a number from the list.")
 			continue
 		}
 
@@ -88,7 +90,7 @@ func PrepareProject(framework, language string) error {
 		fmt.Println()
 	}
 
-	fmt.Println(colors.Green("Prepare completed."))
+	i18n.Green("Prepare completed.")
 	return nil
 }
 
@@ -100,7 +102,7 @@ func buildActions(framework, language string) []Action {
 	if !common.FileExists(".gitignore") {
 		actions = append(actions, Action{
 			Name:        "create .gitignore",
-			Description: "Create .gitignore file for the project",
+			Description: i18n.T("Create .gitignore file for the project"),
 			Status:      StatusPending,
 			Run: func() error {
 				return createGitignore(framework, language)
@@ -115,7 +117,7 @@ func buildActions(framework, language string) []Action {
 			hasVendor := common.FileExists("vendor")
 			actions = append(actions, Action{
 				Name:        "composer install",
-				Description: "Install PHP dependencies via Composer",
+				Description: i18n.T("Install PHP dependencies via Composer"),
 				Status:      boolToStatus(hasVendor),
 				Run: func() error {
 					cmd := exec.Command("composer", "install", "--no-interaction")
@@ -126,7 +128,7 @@ func buildActions(framework, language string) []Action {
 			})
 			actions = append(actions, Action{
 				Name:        "composer update",
-				Description: "Update PHP dependencies via Composer",
+				Description: i18n.T("Update PHP dependencies via Composer"),
 				Status:      StatusPending,
 				Run: func() error {
 					cmd := exec.Command("composer", "update", "--no-interaction")
@@ -141,7 +143,7 @@ func buildActions(framework, language string) []Action {
 			hasModules := common.FileExists("node_modules")
 			actions = append(actions, Action{
 				Name:        "npm install",
-				Description: "Install Node.js dependencies",
+				Description: i18n.T("Install Node.js dependencies"),
 				Status:      boolToStatus(hasModules),
 				Run: func() error {
 					cmd := exec.Command("npm", "install")
@@ -154,7 +156,7 @@ func buildActions(framework, language string) []Action {
 	case "go":
 		actions = append(actions, Action{
 			Name:        "go mod tidy",
-			Description: "Tidy Go module dependencies",
+			Description: i18n.T("Tidy Go module dependencies"),
 			Status:      StatusPending,
 			Run: func() error {
 				cmd := exec.Command("go", "mod", "tidy")
@@ -168,11 +170,11 @@ func buildActions(framework, language string) []Action {
 			pipCmd := findPip()
 			actions = append(actions, Action{
 				Name:        "pip install",
-				Description: "Install Python dependencies from requirements.txt",
+				Description: i18n.T("Install Python dependencies from requirements.txt"),
 				Status:      StatusPending,
 				Run: func() error {
 					if pipCmd == "" {
-						return fmt.Errorf("pip not found. Activate a virtual environment or install pip")
+						return fmt.Errorf(i18n.T("pip not found. Activate a virtual environment or install pip"))
 					}
 					cmd := exec.Command(pipCmd, "install", "-r", "requirements.txt")
 					cmd.Stdout = os.Stdout
@@ -188,7 +190,7 @@ func buildActions(framework, language string) []Action {
 		if !hasVirtualEnv() {
 			actions = append(actions, Action{
 				Name:        "python -m venv venv",
-				Description: "Create Python virtual environment",
+				Description: i18n.T("Create Python virtual environment"),
 				Status:      StatusPending,
 				Run: func() error {
 					cmd := exec.Command("python3", "-m", "venv", "venv")
@@ -205,7 +207,7 @@ func buildActions(framework, language string) []Action {
 		if hasNpmBuildScript() {
 			actions = append(actions, Action{
 				Name:        "npm run build",
-				Description: "Build frontend assets",
+				Description: i18n.T("Build frontend assets"),
 				Status:      StatusPending,
 				Run: func() error {
 					cmd := exec.Command("npm", "run", "build")
@@ -221,7 +223,7 @@ func buildActions(framework, language string) []Action {
 	if framework == "laravel" && common.FileExists("storage") {
 		actions = append(actions, Action{
 			Name:        "chmod -R 777 storage/",
-			Description: "Set writable permissions on storage directory",
+			Description: i18n.T("Set writable permissions on storage directory"),
 			Status:      boolToStatus(isChmodSet("storage", 0777)),
 			Run: func() error {
 				return chmodRecursive("storage", 0777)
@@ -233,7 +235,7 @@ func buildActions(framework, language string) []Action {
 	if framework == "symfony" && common.FileExists("var") {
 		actions = append(actions, Action{
 			Name:        "chmod -R 777 var/",
-			Description: "Set writable permissions on var directory",
+			Description: i18n.T("Set writable permissions on var directory"),
 			Status:      boolToStatus(isChmodSet("var", 0777)),
 			Run: func() error {
 				return chmodRecursive("var", 0777)
@@ -248,7 +250,7 @@ func buildActions(framework, language string) []Action {
 		if _, err := exec.LookPath("symfony"); err == nil {
 			actions = append(actions, Action{
 				Name:        "symfony server:ca:install",
-				Description: "Install Symfony local web server TLS certificate authority",
+				Description: i18n.T("Install Symfony local web server TLS certificate authority"),
 				Status:      boolToStatus(isSymfonyCAInstalled()),
 				Run: func() error {
 					cmd := exec.Command("symfony", "server:ca:install")
@@ -266,7 +268,7 @@ func buildActions(framework, language string) []Action {
 		if common.FileExists("runtime") {
 			actions = append(actions, Action{
 				Name:        "chmod -R 777 runtime/",
-				Description: "Set writable permissions on Yii2 runtime directory",
+				Description: i18n.T("Set writable permissions on Yii2 runtime directory"),
 				Status:      boolToStatus(isChmodSet("runtime", 0777)),
 				Run: func() error {
 					return chmodRecursive("runtime", 0777)
@@ -278,7 +280,7 @@ func buildActions(framework, language string) []Action {
 			if common.FileExists(dir) {
 				actions = append(actions, Action{
 					Name:        fmt.Sprintf("chmod -R 777 %s/", dir),
-					Description: fmt.Sprintf("Set writable permissions on %s", dir),
+					Description: i18n.T("Set writable permissions on %s", dir),
 					Status:      boolToStatus(isChmodSet(dir, 0777)),
 					Run: func(d string) func() error {
 						return func() error {
@@ -293,7 +295,7 @@ func buildActions(framework, language string) []Action {
 			if common.FileExists(dir) {
 				actions = append(actions, Action{
 					Name:        fmt.Sprintf("chmod -R 777 %s/", dir),
-					Description: fmt.Sprintf("Set writable permissions on %s", dir),
+					Description: i18n.T("Set writable permissions on %s", dir),
 					Status:      boolToStatus(isChmodSet(dir, 0777)),
 					Run: func(d string) func() error {
 						return func() error {
@@ -322,7 +324,7 @@ func buildActions(framework, language string) []Action {
 			}
 			actions = append(actions, Action{
 				Name:        fmt.Sprintf("sudo chown -R www-data:www-data %s/", strings.Join(chownDirs, "/")),
-				Description: fmt.Sprintf("Set www-data ownership on %s", strings.Join(chownDirs, ", ")),
+				Description: i18n.T("Set www-data ownership on %s", strings.Join(chownDirs, ", ")),
 				Status:      boolToStatus(alreadyOwned),
 				Run: func() error {
 					for _, dir := range chownDirs {
@@ -330,9 +332,9 @@ func buildActions(framework, language string) []Action {
 						cmd.Stdout = os.Stdout
 						cmd.Stderr = os.Stderr
 						if err := cmd.Run(); err != nil {
-							return fmt.Errorf("chown %s failed: %v", dir, err)
+							return fmt.Errorf(i18n.T("chown %s failed: %v"), dir, err)
 						}
-						fmt.Printf("  Changed owner of %s/ to www-data:www-data\n", dir)
+						i18n.Printf("  Changed owner of %s/ to www-data:www-data\n", dir)
 					}
 					return nil
 				},
@@ -345,7 +347,7 @@ func buildActions(framework, language string) []Action {
 		hasStorageLink := common.FileExists("public/storage")
 		actions = append(actions, Action{
 			Name:        "php artisan storage:link",
-			Description: "Create symbolic link from public/storage to storage/app/public",
+			Description: i18n.T("Create symbolic link from public/storage to storage/app/public"),
 			Status:      boolToStatus(hasStorageLink),
 			Run: func() error {
 				cmd := exec.Command("php", "artisan", "storage:link")
@@ -369,7 +371,7 @@ func buildActions(framework, language string) []Action {
 			}
 			actions = append(actions, Action{
 				Name:        "set cache folder 777",
-				Description: fmt.Sprintf("Set 777 permissions on cache directories (%s)", strings.Join(cacheDirs, ", ")),
+				Description: i18n.T("Set 777 permissions on cache directories (%s)", strings.Join(cacheDirs, ", ")),
 				Status:      boolToStatus(allSet),
 				Run: func() error {
 					return setCachePermissions(cacheDirs)
@@ -391,7 +393,7 @@ func buildActions(framework, language string) []Action {
 	if hasEnvSource {
 		actions = append(actions, Action{
 			Name:        "init .env",
-			Description: "Copy .env.dist/.env.dev/.env.example to .env",
+			Description: i18n.T("Copy .env.dist/.env.dev/.env.example to .env"),
 			Status:      boolToStatus(hasEnv),
 			Run: func() error {
 				return copyEnvFiles(envSources)
@@ -414,7 +416,7 @@ func buildActions(framework, language string) []Action {
 	if common.FileExists(".gitmodules") {
 		actions = append(actions, Action{
 			Name:        "git submodule update --init --recursive",
-			Description: "Initialize and update git submodules",
+			Description: i18n.T("Initialize and update git submodules"),
 			Status:      StatusPending,
 			Run: func() error {
 				cmd := exec.Command("git", "submodule", "update", "--init", "--recursive")
@@ -429,7 +431,7 @@ func buildActions(framework, language string) []Action {
 	if common.FileExists("docker-compose.yml") {
 		actions = append(actions, Action{
 			Name:        "docker compose up -d",
-			Description: "Start Docker Compose services in background",
+			Description: i18n.T("Start Docker Compose services in background"),
 			Status:      StatusPending,
 			Run: func() error {
 				cmd := exec.Command("docker-compose", "up", "-d")
@@ -441,23 +443,23 @@ func buildActions(framework, language string) []Action {
 		// 13. rebuild docker compose
 		actions = append(actions, Action{
 			Name:        "rebuild docker compose",
-			Description: "Rebuild and restart Docker Compose services",
+			Description: i18n.T("Rebuild and restart Docker Compose services"),
 			Status:      StatusPending,
 			Run: func() error {
-				fmt.Println("Stopping containers...")
+				i18n.Printf("Stopping containers...\n")
 				stopCmd := exec.Command("docker-compose", "down")
 				stopCmd.Stdout = os.Stdout
 				stopCmd.Stderr = os.Stderr
 				if err := stopCmd.Run(); err != nil {
-					return fmt.Errorf("docker-compose down failed: %v", err)
+					return fmt.Errorf(i18n.T("docker-compose down failed: %v"), err)
 				}
 
-				fmt.Println("Building and starting containers...")
+				i18n.Printf("Building and starting containers...\n")
 				upCmd := exec.Command("docker-compose", "up", "-d", "--build")
 				upCmd.Stdout = os.Stdout
 				upCmd.Stderr = os.Stderr
 				if err := upCmd.Run(); err != nil {
-					return fmt.Errorf("docker-compose up failed: %v", err)
+					return fmt.Errorf(i18n.T("docker-compose up failed: %v"), err)
 				}
 
 				return nil
@@ -470,7 +472,8 @@ func buildActions(framework, language string) []Action {
 
 // printActions выводит список действий
 func printActions(actions []Action) {
-	fmt.Println(colors.Cyan("\n=== Available Actions ==="))
+	fmt.Println()
+	i18n.Cyan("=== Available Actions ===")
 	for i, a := range actions {
 		statusStr := a.StatusString()
 		desc := ""
@@ -486,7 +489,7 @@ func setCachePermissions(dirs []string) error {
 	for _, dir := range dirs {
 		if _, err := os.Stat(dir); err == nil {
 			if err := os.Chmod(dir, 0777); err != nil {
-				return fmt.Errorf("failed to chmod %s: %v", dir, err)
+				return fmt.Errorf(i18n.T("failed to chmod %s: %v"), dir, err)
 			}
 			common.WalkWithExclusions(dir, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
@@ -495,7 +498,7 @@ func setCachePermissions(dirs []string) error {
 				os.Chmod(path, 0777)
 				return nil
 			}, nil)
-			fmt.Printf("  Set 777 on %s\n", dir)
+			i18n.Printf("  Set 777 on %s\n", dir)
 		}
 	}
 	return nil
@@ -547,16 +550,16 @@ func copyEnvFiles(sources []string) error {
 		if _, err := os.Stat(src); err == nil {
 			data, err := os.ReadFile(src)
 			if err != nil {
-				return fmt.Errorf("failed to read %s: %v", src, err)
+				return fmt.Errorf(i18n.T("failed to read %s: %v"), src, err)
 			}
 			if err := os.WriteFile(".env", data, 0644); err != nil {
-				return fmt.Errorf("failed to write .env: %v", err)
+				return fmt.Errorf(i18n.T("failed to write .env: %v"), err)
 			}
-			fmt.Printf("  Copied %s → .env\n", src)
+			i18n.Printf("  Copied %s → .env\n", src)
 			return nil
 		}
 	}
-	return fmt.Errorf("no .env source file found")
+	return fmt.Errorf(i18n.T("no .env source file found"))
 }
 
 // parseEnvVariables читает файл формата .env и возвращает карту переменных
@@ -643,14 +646,14 @@ func buildEnvSyncActions(target string, sources []string) []Action {
 			}
 		}
 		status := StatusDone
-		desc := fmt.Sprintf("All variables from %s are already in %s", src, target)
+		desc := i18n.T("All variables from %s are already in %s", src, target)
 		if len(missing) > 0 {
 			status = StatusPending
-			desc = fmt.Sprintf("Missing in %s: %s", target, strings.Join(missing, ", "))
+			desc = i18n.T("Missing in %s: %s", target, strings.Join(missing, ", "))
 		}
 		srcCopy := src
 		actions = append(actions, Action{
-			Name:        fmt.Sprintf("Transfer to %s from %s", target, src),
+			Name:        i18n.T("Transfer to %s from %s", target, src),
 			Description: desc,
 			Status:      status,
 			Run: func() error {
@@ -666,11 +669,11 @@ func buildEnvSyncActions(target string, sources []string) []Action {
 func mergeEnvFile(target, source string) error {
 	targetVars, err := parseEnvVariables(target)
 	if err != nil {
-		return fmt.Errorf("failed to parse %s: %v", target, err)
+		return fmt.Errorf(i18n.T("failed to parse %s: %v"), target, err)
 	}
 	srcVars, err := parseEnvVariables(source)
 	if err != nil {
-		return fmt.Errorf("failed to parse %s: %v", source, err)
+		return fmt.Errorf(i18n.T("failed to parse %s: %v"), source, err)
 	}
 	var lines []string
 	for k, v := range srcVars {
@@ -683,7 +686,7 @@ func mergeEnvFile(target, source string) error {
 	}
 	info, err := os.Stat(target)
 	if err != nil {
-		return fmt.Errorf("failed to stat %s: %v", target, err)
+		return fmt.Errorf(i18n.T("failed to stat %s: %v"), target, err)
 	}
 	f, err := os.OpenFile(target, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
@@ -1048,9 +1051,9 @@ func createGitignore(framework, language string) error {
 	content := gitignoreTemplates(framework, language)
 
 	if err := os.WriteFile(".gitignore", []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to create .gitignore: %v", err)
+		return fmt.Errorf(i18n.T("failed to create .gitignore: %v"), err)
 	}
 
-	fmt.Printf("  Created .gitignore for %s/%s\n", language, framework)
+	i18n.Printf("  Created .gitignore for %s/%s\n", language, framework)
 	return nil
 }

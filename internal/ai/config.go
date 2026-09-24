@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fatih/color"
+	"dev/internal/i18n"
 )
 
 const (
@@ -16,11 +16,14 @@ const (
 	EtcConfigPath  = "/etc/dev-command/main.conf"
 )
 
-// Config хранит параметры подключения к LLM
+// Config хранит параметры подключения к LLM и язык интерфейса.
 type Config struct {
 	Endpoint string
 	Token    string
 	Model    string
+	// Language — язык вывода приложения (ключ LANGUAGE в конфиге).
+	// Пустое значение означает автоопределение из окружения (LC_ALL/LANG).
+	Language string
 }
 
 // resolvePath заменяет ~ на home директорию
@@ -88,18 +91,50 @@ func LoadConfig() (*Config, error) {
 				cfg.Token = val
 			case "LLM_MODEL":
 				cfg.Model = val
+			case "LANGUAGE":
+				cfg.Language = val
 			}
 		}
 
 		if cfg.Endpoint == "" || cfg.Token == "" || cfg.Model == "" {
-			lastErr = fmt.Errorf("incomplete config at %s: need ENDPOINT, TOKEN, MODEL", p)
+			lastErr = fmt.Errorf(i18n.T("incomplete config at %s: need ENDPOINT, TOKEN, MODEL"), p)
 			continue
 		}
 
 		return cfg, nil
 	}
 
-	return nil, fmt.Errorf("config file not found: %w", lastErr)
+	return nil, fmt.Errorf(i18n.T("config file not found: %w"), lastErr)
+}
+
+// LanguageFromConfig возвращает язык интерфейса из конфигурации (ключ LANGUAGE).
+// Читается из первого существующего конфига без строгой валидации остальных
+// параметров, поэтому язык доступен даже при неполном конфиге. Пустая строка
+// означает автоопределение из окружения.
+func LanguageFromConfig() string {
+	for _, p := range ConfigPaths() {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			if strings.TrimSpace(parts[0]) == "LANGUAGE" {
+				return strings.TrimSpace(parts[1])
+			}
+		}
+		// Первый существующий конфиг определяет язык, даже если в нём нет
+		// ключа LANGUAGE: файлы ниже по приоритету не рассматриваются.
+		return ""
+	}
+	return ""
 }
 
 // EditConfig открывает конфиг на редактирование, создавая при необходимости.
@@ -110,12 +145,15 @@ func EditConfig() error {
 	// Создаём папку если нет
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return fmt.Errorf(i18n.T("failed to create config directory: %w"), err)
 	}
 
 	// Создаём файл с пустыми параметрами если нет
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		defaultCfg := `# dev command configuration
+
+# Output language: auto (from LC_ALL/LANG), en, ru
+LANGUAGE=auto
 
 # OpenAI-compatible API endpoint (e.g. https://3qa.ru/api/v1/chat/completions)
 LLM_ENDPOINT=
@@ -127,9 +165,9 @@ LLM_TOKEN=
 LLM_MODEL=
 `
 		if err := os.WriteFile(path, []byte(defaultCfg), 0644); err != nil {
-			return fmt.Errorf("failed to create default config: %w", err)
+			return fmt.Errorf(i18n.T("failed to create default config: %w"), err)
 		}
-		color.Yellow("Created default config at %s", path)
+		i18n.Yellow("Created default config at %s", path)
 	}
 
 	// Открываем в редакторе
@@ -138,28 +176,28 @@ LLM_MODEL=
 		editor = "nano"
 	}
 
-	color.Cyan("Opening config in %s...", editor)
+	i18n.Cyan("Opening config in %s...", editor)
 	cmd := exec.Command(editor, path)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("editor failed: %w", err)
+		return fmt.Errorf(i18n.T("editor failed: %w"), err)
 	}
 
-	color.Green("Config saved.")
+	i18n.Green("Config saved.")
 	return nil
 }
 
 // InteractiveEditConfig спрашивает пользователя и открывает редактор
 func InteractiveEditConfig() error {
 	reader := bufio.NewReader(os.Stdin)
-	color.Yellow("Config file not found or incomplete at %s", resolveConfigPath())
-	fmt.Print("Open config in editor? [Y/n]: ")
+	i18n.Yellow("Config file not found or incomplete at %s", resolveConfigPath())
+	i18n.Printf("Open config in editor? [Y/n]: ")
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(strings.ToLower(input))
 	if input == "n" || input == "no" {
-		return fmt.Errorf("config required")
+		return fmt.Errorf(i18n.T("config required"))
 	}
 	return EditConfig()
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"dev/internal/colors"
+	"dev/internal/i18n"
 )
 
 // levelColor возвращает цветную функцию для уровня.
@@ -73,7 +74,7 @@ func RenderDetail(rep *Report) {
 		sb.WriteString("\n")
 
 		if len(c.Symptoms) == 0 {
-			sb.WriteString("\tno data\n\n")
+			sb.WriteString("\t" + i18n.T("no data") + "\n\n")
 			continue
 		}
 		for _, s := range c.Symptoms {

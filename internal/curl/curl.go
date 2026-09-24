@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"dev/internal/i18n"
+
 	"github.com/fatih/color"
 )
 
@@ -25,7 +27,7 @@ func Run(rawURL, method string) error {
 	// Парсим URL для получения имени хоста (для имени файла)
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("invalid URL: %v", err)
+		return fmt.Errorf(i18n.T("invalid URL: %v"), err)
 	}
 
 	// Приводим метод к верхнему регистру
@@ -52,14 +54,14 @@ func Run(rawURL, method string) error {
 	// Создаём запрос
 	req, err := http.NewRequest(method, rawURL, nil)
 	if err != nil {
-		return fmt.Errorf("request creation failed: %v", err)
+		return fmt.Errorf(i18n.T("request creation failed: %v"), err)
 	}
 
 	// Выполняем запрос
 	start := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("request execution failed: %v", err)
+		return fmt.Errorf(i18n.T("request execution failed: %v"), err)
 	}
 	defer resp.Body.Close()
 
@@ -68,15 +70,15 @@ func Run(rawURL, method string) error {
 	// Читаем тело ответа
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("response read failed: %v", err)
+		return fmt.Errorf(i18n.T("response read failed: %v"), err)
 	}
 
 	// Выводим статус
 	statusColor := colorForStatus(resp.StatusCode)
 	statusColor.Printf("%s %s\n", method, rawURL)
-	statusColor.Printf("Status: %s\n", resp.Status)
-	fmt.Printf("Duration: %v\n", elapsed)
-	fmt.Printf("Content-Length: %d bytes\n", len(bodyBytes))
+	statusColor.Printf("%s\n", i18n.T("Status: %s", resp.Status))
+	i18n.Printf("Duration: %v\n", elapsed)
+	i18n.Printf("Content-Length: %d bytes\n", len(bodyBytes))
 	fmt.Println()
 
 	// Спрашиваем пользователя, что делать
@@ -88,7 +90,7 @@ func askUser(rawURL, host string, body []byte) error {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Print("1. Show output\n2. Save to file\nChoose [1/2]: ")
+		fmt.Print(i18n.T("1. Show output\n2. Save to file\nChoose [1/2]: "))
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 
@@ -102,7 +104,7 @@ func askUser(rawURL, host string, body []byte) error {
 			return saveToFile(host, body)
 
 		default:
-			color.Yellow("Unknown option. Use 1 or 2.")
+			i18n.Yellow("Unknown option. Use 1 or 2.")
 		}
 	}
 }
@@ -115,21 +117,21 @@ func saveToFile(host string, body []byte) error {
 	// Проверяем, существует ли файл
 	if _, err := os.Stat(filename); err == nil {
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Printf("File %s already exists. Overwrite? [y/N]: ", filename)
+		i18n.Printf("File %s already exists. Overwrite? [y/N]: ", filename)
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(strings.ToLower(input))
 		if input != "y" && input != "yes" {
-			color.Yellow("Skipped.")
+			i18n.Yellow("Skipped.")
 			return nil
 		}
 	}
 
 	if err := os.WriteFile(filename, body, 0644); err != nil {
-		return fmt.Errorf("file write failed: %v", err)
+		return fmt.Errorf(i18n.T("file write failed: %v"), err)
 	}
 
 	absPath, _ := filepath.Abs(filename)
-	color.Green("Saved to %s (%d bytes)", absPath, len(body))
+	i18n.Green("Saved to %s (%d bytes)", absPath, len(body))
 	return nil
 }
 

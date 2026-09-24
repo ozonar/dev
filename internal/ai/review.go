@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"dev/internal/i18n"
+
 	"github.com/fatih/color"
 )
 
@@ -62,7 +64,7 @@ func queryReviewText(cfg *Config, history []HistoryEntry) (string, error) {
 
 		jsonData, err := json.Marshal(reqBody)
 		if err != nil {
-			return "", fmt.Errorf("failed to marshal request: %w", err)
+			return "", fmt.Errorf(i18n.T("failed to marshal request: %w"), err)
 		}
 
 		curlCmd := exec.Command("curl", "-s",
@@ -79,32 +81,32 @@ func queryReviewText(cfg *Config, history []HistoryEntry) (string, error) {
 		curlCmd.Stderr = &stderr
 
 		if err := curlCmd.Run(); err != nil {
-			return "", fmt.Errorf("curl failed: %w\nStderr: %s", err, stderr.String())
+			return "", fmt.Errorf(i18n.T("curl failed: %w\nStderr: %s"), err, stderr.String())
 		}
 
 		var resp chatResponse
 		if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
-			lastErr = fmt.Errorf("unparsable response: %w\nBody: %s", err, stdout.String())
-			color.Red("LLM returned unparsable response (attempt %d/3)", attempt+1)
+			lastErr = fmt.Errorf(i18n.T("unparsable response: %w\nBody: %s"), err, stdout.String())
+			i18n.Red("LLM returned unparsable response (attempt %d/3)", attempt+1)
 			continue
 		}
 
 		if len(resp.Error) > 0 {
-			lastErr = fmt.Errorf("API error: %s", strings.TrimSpace(string(resp.Error)))
-			color.Red("LLM API error (attempt %d/3)", attempt+1)
+			lastErr = fmt.Errorf(i18n.T("API error: %s"), strings.TrimSpace(string(resp.Error)))
+			i18n.Red("LLM API error (attempt %d/3)", attempt+1)
 			continue
 		}
 
 		if len(resp.Choices) == 0 {
-			lastErr = fmt.Errorf("empty response from API")
-			color.Red("LLM returned empty response (attempt %d/3)", attempt+1)
+			lastErr = fmt.Errorf(i18n.T("empty response from API"))
+			i18n.Red("LLM returned empty response (attempt %d/3)", attempt+1)
 			continue
 		}
 
 		return strings.TrimSpace(resp.Choices[0].Message.Content), nil
 	}
 
-	return "", fmt.Errorf("LLM request failed after 3 attempts: %w", lastErr)
+	return "", fmt.Errorf(i18n.T("LLM request failed after 3 attempts: %w"), lastErr)
 }
 
 // renderMarkdown применяет базовое markdown-форматирование к строке:
@@ -148,13 +150,13 @@ func replaceInline(s, marker string, wrap func(string) string) string {
 func RunCodeReview(text, instruction string) (string, error) {
 	cfg, err := LoadConfig()
 	if err != nil {
-		color.Red("Config error: %v", err)
+		i18n.Red("Config error: %v", err)
 		if err := InteractiveEditConfig(); err != nil {
 			return "", err
 		}
 		cfg, err = LoadConfig()
 		if err != nil {
-			return "", fmt.Errorf("config still invalid after edit: %w", err)
+			return "", fmt.Errorf(i18n.T("config still invalid after edit: %w"), err)
 		}
 	}
 
@@ -164,13 +166,14 @@ func RunCodeReview(text, instruction string) (string, error) {
 		{Role: "user", Content: strings.TrimSpace(instruction)},
 	}
 
-	color.Cyan("Sending code to LLM for review...")
+	i18n.Cyan("Sending code to LLM for review...")
 	review, err := queryReviewText(cfg, history)
 	if err != nil {
 		return "", err
 	}
 
-	color.Green("\n=== AI Code Review ===")
+	fmt.Println()
+	i18n.Green("=== AI Code Review ===")
 	fmt.Println(renderMarkdown(review))
 	fmt.Println()
 

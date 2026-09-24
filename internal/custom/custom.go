@@ -20,6 +20,8 @@ import (
 	"sort"
 	"strings"
 
+	"dev/internal/i18n"
+
 	"github.com/fatih/color"
 	"gopkg.in/yaml.v3"
 )
@@ -210,7 +212,7 @@ func (c *Config) RunCommand(name string, ctx Context) (bool, error) {
 		sh.Stdout = os.Stdout
 		sh.Stderr = os.Stderr
 		if err := sh.Run(); err != nil {
-			return true, fmt.Errorf("command %q failed: %w", name, err)
+			return true, fmt.Errorf(i18n.T("command %q failed: %w"), name, err)
 		}
 	}
 	return true, nil
@@ -235,7 +237,7 @@ func Edit() error {
 	// Создаём папку конфигурации, если её нет.
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return fmt.Errorf(i18n.T("failed to create config directory: %w"), err)
 	}
 
 	// Создаём файл с шаблоном, если он не существует.
@@ -257,9 +259,9 @@ commands:
 		    - echo "Hello from $(current_dir) [$(language)/$(framework)]"
 `
 		if err := os.WriteFile(path, []byte(defaultCfg), 0644); err != nil {
-			return fmt.Errorf("failed to create default config: %w", err)
+			return fmt.Errorf(i18n.T("failed to create default config: %w"), err)
 		}
-		color.Yellow("Created default config at %s", path)
+		i18n.Yellow("Created default config at %s", path)
 	}
 
 	// Открываем в редакторе.
@@ -268,15 +270,15 @@ commands:
 		editor = "nano"
 	}
 
-	color.Cyan("Opening config in %s...", editor)
+	i18n.Cyan("Opening config in %s...", editor)
 	cmd := exec.Command(editor, path)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("editor failed: %w", err)
+		return fmt.Errorf(i18n.T("editor failed: %w"), err)
 	}
 
-	color.Green("Config saved.")
+	i18n.Green("Config saved.")
 	return nil
 }

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
+	"dev/internal/i18n"
 )
 
 const (
@@ -43,7 +43,7 @@ func SelfUpdate(name string) error {
 	// Определяем домашнюю директорию
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("could not get home directory: %v", err)
+		return fmt.Errorf(i18n.T("could not get home directory: %v"), err)
 	}
 
 	// Скачиваем под именем {name} (или {name}.exe на windows)
@@ -53,50 +53,50 @@ func SelfUpdate(name string) error {
 	}
 	tmpPath := filepath.Join(home, tmpName)
 
-	color.Cyan("Downloading %s ...", downloadURL)
+	i18n.Cyan("Downloading %s ...", downloadURL)
 
 	// Скачиваем файл
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Get(downloadURL)
 	if err != nil {
-		return fmt.Errorf("download failed: %v", err)
+		return fmt.Errorf(i18n.T("download failed: %v"), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server returned status %d", resp.StatusCode)
+		return fmt.Errorf(i18n.T("server returned status %d"), resp.StatusCode)
 	}
 
 	outFile, err := os.Create(tmpPath)
 	if err != nil {
-		return fmt.Errorf("could not create file %s: %v", tmpPath, err)
+		return fmt.Errorf(i18n.T("could not create file %s: %v"), tmpPath, err)
 	}
 
 	written, err := io.Copy(outFile, resp.Body)
 	if err != nil {
 		outFile.Close()
 		os.Remove(tmpPath)
-		return fmt.Errorf("file write failed: %v", err)
+		return fmt.Errorf(i18n.T("file write failed: %v"), err)
 	}
 	outFile.Close()
 
 	// Устанавливаем права на выполнение
 	if err := os.Chmod(tmpPath, 0755); err != nil {
 		os.Remove(tmpPath)
-		return fmt.Errorf("could not set executable permissions: %v", err)
+		return fmt.Errorf(i18n.T("could not set executable permissions: %v"), err)
 	}
 
-	color.Green("Downloaded %d bytes to %s", written, tmpPath)
+	i18n.Green("Downloaded %d bytes to %s", written, tmpPath)
 
 	// Определяем текущий путь к бинарнику через which/where
 	currentPath, err := findBinaryPath(name)
 	if err != nil {
 		os.Remove(tmpPath)
-		return fmt.Errorf("could not determine current %s path: %v", name, err)
+		return fmt.Errorf(i18n.T("could not determine current %s path: %v"), name, err)
 	}
 
-	color.Cyan("Current %s path: %s", name, currentPath)
-	color.Cyan("Installing new version from the downloaded file...")
+	i18n.Cyan("Current %s path: %s", name, currentPath)
+	i18n.Cyan("Installing new version from the downloaded file...")
 
 	// Запускаем скачанный файл с командой install: install сам определяет
 	// исходный файл как os.Executable() (скачанный бинарник) и спрашивает
@@ -108,16 +108,16 @@ func SelfUpdate(name string) error {
 
 	if err := cmd.Run(); err != nil {
 		os.Remove(tmpPath)
-		return fmt.Errorf("installation failed: %v", err)
+		return fmt.Errorf(i18n.T("installation failed: %v"), err)
 	}
 
 	// Удаляем скачанный файл
-	color.Cyan("Removing temporary file...")
+	i18n.Cyan("Removing temporary file...")
 	if err := os.Remove(tmpPath); err != nil {
-		return fmt.Errorf("could not remove temporary file %s: %v", tmpPath, err)
+		return fmt.Errorf(i18n.T("could not remove temporary file %s: %v"), tmpPath, err)
 	}
 
-	color.Green("Update completed successfully!")
+	i18n.Green("Update completed successfully!")
 	return nil
 }
 
@@ -142,12 +142,12 @@ func findBinaryPath(name string) (string, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("%s not found in PATH", name)
+		return "", fmt.Errorf(i18n.T("%s not found in PATH"), name)
 	}
 
 	path := strings.TrimSpace(string(out))
 	if path == "" {
-		return "", fmt.Errorf("%s not found in PATH", name)
+		return "", fmt.Errorf(i18n.T("%s not found in PATH"), name)
 	}
 
 	return path, nil

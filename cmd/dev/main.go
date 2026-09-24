@@ -17,6 +17,7 @@ import (
 	"dev/internal/debug"
 	"dev/internal/detector"
 	"dev/internal/docker"
+	"dev/internal/i18n"
 	"dev/internal/install"
 	"dev/internal/logs"
 	"dev/internal/migrate"
@@ -123,7 +124,7 @@ func applyForcedLanguage(info *detector.ProjectInfo) error {
 	lang, flag := "", ""
 	set := func(name, value string) error {
 		if lang != "" {
-			return fmt.Errorf("conflicting language flags: --%s and --%s",
+			return fmt.Errorf(i18n.T("conflicting language flags: --%s and --%s"),
 				flagName(flag), name)
 		}
 		lang, flag = value, name
@@ -279,11 +280,11 @@ func runUnit(args []string) {
 	cwd, _ := os.Getwd()
 	info, err := detectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
-	color.Green("Running unit tests: %s (%s)", info.Framework, info.Language)
+	i18n.Green("Running unit tests: %s (%s)", info.Framework, info.Language)
 	opts := unit.Options{
 		Framework: info.Framework,
 		Language:  info.Language,
@@ -291,7 +292,7 @@ func runUnit(args []string) {
 		Args:      args,
 	}
 	if err := unit.Run(opts); err != nil {
-		color.Red("Unit tests failed: %v", err)
+		i18n.Red("Unit tests failed: %v", err)
 	}
 }
 
@@ -371,7 +372,7 @@ var dbCmd = &cobra.Command{
 	Long:  "Analyze databases in the project, connect, list tables, and view data.",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := db.Run(); err != nil {
-			color.Red("Error: %v", err)
+			i18n.Red("Error: %v", err)
 		}
 	},
 }
@@ -380,7 +381,7 @@ func runAnalyze() {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
@@ -389,36 +390,36 @@ func runAnalyze() {
 	red := color.New(color.FgRed).SprintFunc()
 	cyan := color.New(color.FgCyan).SprintFunc()
 
-	fmt.Printf("Dev version: %s\n", cyan(version.Version))
+	i18n.Printf("Dev version: %s\n", cyan(version.Version))
 	fmt.Println()
 
-	color.Cyan("=== Project Analysis ===")
+	i18n.Cyan("=== Project Analysis ===")
 
 	// Версия языка проекта (например "go 1.23"), если она определена.
 	languageLabel := info.Language
 	if info.LanguageVersion != "" {
 		languageLabel = info.Language + " " + info.LanguageVersion
 	}
-	fmt.Printf("Language:  %s\n", green(languageLabel))
-	fmt.Printf("Framework: %s\n", green(info.Framework))
+	i18n.Printf("Language:  %s\n", green(languageLabel))
+	i18n.Printf("Framework: %s\n", green(info.Framework))
 
 	if info.HasEnv {
-		fmt.Printf(".env:      %s\n", green("present"))
+		i18n.Printf(".env:      %s\n", green(i18n.T("present")))
 	} else {
-		fmt.Printf(".env:      %s\n", red("missing"))
+		i18n.Printf(".env:      %s\n", red(i18n.T("missing")))
 	}
 
 	if info.HasVendor {
-		fmt.Printf("Vendor:    %s\n", green("installed"))
+		i18n.Printf("Vendor:    %s\n", green(i18n.T("installed")))
 	} else {
-		fmt.Printf("Vendor:    %s\n", yellow("not installed"))
+		i18n.Printf("Vendor:    %s\n", yellow(i18n.T("not installed")))
 	}
 
 	if len(info.DockerServices) > 0 {
 		statuses, err := docker.GetServiceStatuses()
 		if err != nil {
 			// Если ошибка, выводим просто список
-			fmt.Printf("Docker services: %s\n", cyan(strings.Join(info.DockerServices, ", ")))
+			i18n.Printf("Docker services: %s\n", cyan(strings.Join(info.DockerServices, ", ")))
 		} else {
 			var colored []string
 			// Вспомогательная функция для короткого статуса
@@ -446,11 +447,11 @@ func runAnalyze() {
 					var coloredShort string
 					switch short {
 					case "up":
-						coloredShort = green(short)
+						coloredShort = green(i18n.T("up"))
 					case "err":
-						coloredShort = red(short)
+						coloredShort = red(i18n.T("err"))
 					case "warn":
-						coloredShort = yellow(short)
+						coloredShort = yellow(i18n.T("warn"))
 					default:
 						coloredShort = cyan(short)
 					}
@@ -462,38 +463,37 @@ func runAnalyze() {
 			}
 			if len(colored) == 0 {
 				// Если все сервисы без контейнеров, выводим "none"
-				fmt.Printf("Docker services: %s\n", yellow("none"))
+				i18n.Printf("Docker services: %s\n", yellow(i18n.T("none")))
 			} else {
-				fmt.Printf("Docker services: %s\n", strings.Join(colored, ", "))
+				i18n.Printf("Docker services: %s\n", strings.Join(colored, ", "))
 			}
 		}
 	} else {
-		fmt.Printf("Docker services: %s\n", yellow("none"))
+		i18n.Printf("Docker services: %s\n", yellow(i18n.T("none")))
 	}
 
 	if len(info.MakeCommands) > 0 {
-		fmt.Printf("Make commands:   %s\n", cyan(strings.Join(info.MakeCommands, ", ")))
+		i18n.Printf("Make commands:   %s\n", cyan(strings.Join(info.MakeCommands, ", ")))
 	} else {
-		fmt.Printf("Make commands:   %s\n", yellow("none"))
+		i18n.Printf("Make commands:   %s\n", yellow(i18n.T("none")))
 	}
 
 	if len(info.DevCommands) > 0 {
-		fmt.Printf("Dev commands:    %s\n", cyan(strings.Join(info.DevCommands, ", ")))
+		i18n.Printf("Dev commands:    %s\n", cyan(strings.Join(info.DevCommands, ", ")))
 	}
 
 	// Databases
 	if len(info.Databases) > 0 {
-		fmt.Printf("Databases:       ")
 		var dbStrs []string
 		for _, db := range info.Databases {
 			loc := ""
 			switch db.Location {
 			case detector.LocationLocal:
-				loc = "local"
+				loc = i18n.T("local")
 			case detector.LocationDocker:
-				loc = "docker"
+				loc = i18n.T("docker")
 			case detector.LocationRemote:
-				loc = "remote"
+				loc = i18n.T("remote")
 			default:
 				loc = db.Location
 			}
@@ -503,9 +503,9 @@ func runAnalyze() {
 			}
 			dbStrs = append(dbStrs, fmt.Sprintf("%s [%s] (%s:%s, %s)", dbName, loc, db.Host, db.Port, db.Type))
 		}
-		fmt.Printf("%s\n", cyan(strings.Join(dbStrs, ", ")))
+		i18n.Printf("Databases:       %s\n", cyan(strings.Join(dbStrs, ", ")))
 	} else {
-		fmt.Printf("Databases:       %s\n", yellow("none detected"))
+		i18n.Printf("Databases:       %s\n", yellow(i18n.T("none detected")))
 	}
 
 	fmt.Println()
@@ -515,43 +515,43 @@ func runCache() {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
-	color.Yellow("Clearing cache for %s (%s)...", info.Framework, info.Language)
+	i18n.Yellow("Clearing cache for %s (%s)...", info.Framework, info.Language)
 	err = cache.ClearCache(info.Framework)
 	if err != nil {
-		color.Red("Failed to clear cache: %v", err)
+		i18n.Red("Failed to clear cache: %v", err)
 		return
 	}
-	color.Green("Cache cleared successfully.")
+	i18n.Green("Cache cleared successfully.")
 }
 
 func runLogs() {
 	cwd, _ := os.Getwd()
 	entries, err := logs.FindLogs(cwd)
 	if err != nil {
-		color.Red("Error finding logs: %v", err)
+		i18n.Red("Error finding logs: %v", err)
 		return
 	}
 
 	if len(entries) == 0 {
-		color.Yellow("No log files or docker containers found.")
+		i18n.Yellow("No log files or docker containers found.")
 		return
 	}
 
-	color.Cyan("Available logs:")
+	i18n.Cyan("Available logs:")
 	for i, entry := range entries {
 		typ := entry.Type
 		if typ == "docker" {
-			color.Yellow("  %d) [docker] %s", i+1, entry.Path)
+			i18n.Yellow("  %d) [docker] %s", i+1, entry.Path)
 		} else {
-			color.White("  %d) [file]   %s", i+1, entry.Path)
+			i18n.White("  %d) [file]   %s", i+1, entry.Path)
 		}
 	}
 
-	fmt.Print("\nSelect log number to open in lnav (or 0 to exit): ")
+	i18n.Printf("\nSelect log number to open in lnav (or 0 to exit): ")
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
@@ -560,15 +560,15 @@ func runLogs() {
 	}
 	idx, err := strconv.Atoi(input)
 	if err != nil || idx < 1 || idx > len(entries) {
-		color.Red("Invalid selection")
+		i18n.Red("Invalid selection")
 		return
 	}
 
 	selected := entries[idx-1]
-	color.Green("Opening %s (%s)...", selected.Path, selected.Type)
+	i18n.Green("Opening %s (%s)...", selected.Path, selected.Type)
 	err = logs.OpenLogInLnav(selected.Path, selected.Type)
 	if err != nil {
-		color.Red("Failed to open log: %v", err)
+		i18n.Red("Failed to open log: %v", err)
 	}
 }
 
@@ -576,23 +576,23 @@ func runRun() {
 	cwd, _ := os.Getwd()
 	info, err := detectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
-	color.Green("Running project: %s (%s)", info.Framework, info.Language)
+	i18n.Green("Running project: %s (%s)", info.Framework, info.Language)
 	opts := run.RunOptions{Port: runPort, PublicDir: info.PublicDir, Version: info.LanguageVersion}
 	err = run.RunProjectWithOptions(info.Framework, info.Language, opts)
 	if err != nil {
-		color.Red("Failed to run project: %v", err)
+		i18n.Red("Failed to run project: %v", err)
 	}
 }
 
 func runDcr() {
-	color.Cyan("Starting docker-compose...")
+	i18n.Cyan("Starting docker-compose...")
 	err := docker.ComposeUp()
 	if err != nil {
-		color.Red("Docker compose failed: %v", err)
+		i18n.Red("Docker compose failed: %v", err)
 	}
 }
 
@@ -600,65 +600,65 @@ func runPrepare() {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
-	color.Yellow("Preparing project...")
+	i18n.Yellow("Preparing project...")
 	err = prepare.PrepareProject(info.Framework, info.Language)
 	if err != nil {
-		color.Red("Preparation failed: %v", err)
+		i18n.Red("Preparation failed: %v", err)
 		return
 	}
-	color.Green("Project prepared successfully.")
+	i18n.Green("Project prepared successfully.")
 }
 
 func runInstall(file string) {
-	color.Cyan("Installing dev...")
+	i18n.Cyan("Installing dev...")
 	err := install.Install(file)
 	if err != nil {
-		color.Red("Install failed: %v", err)
+		i18n.Red("Install failed: %v", err)
 		return
 	}
-	color.Green("Installation successful.")
+	i18n.Green("Installation successful.")
 }
 
 func runVirus(path string) {
-	color.Cyan("Copying to remote server %s...", path)
+	i18n.Cyan("Copying to remote server %s...", path)
 	err := virus.Virus(path)
 	if err != nil {
-		color.Red("Virus command failed: %v", err)
+		i18n.Red("Virus command failed: %v", err)
 		return
 	}
-	color.Green("Copy successful.")
+	i18n.Green("Copy successful.")
 }
 
 func runBuild() {
 	cwd, _ := os.Getwd()
 	info, err := detectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
-	color.Green("Building project: %s (%s)", info.Framework, info.Language)
+	i18n.Green("Building project: %s (%s)", info.Framework, info.Language)
 	err = build.BuildProject(info.Framework, info.Language, info.LanguageVersion, buildOutput)
 	if err != nil {
-		color.Red("Build failed: %v", err)
+		i18n.Red("Build failed: %v", err)
 		return
 	}
-	color.Green("Build successful.")
+	i18n.Green("Build successful.")
 }
 
 func runDebug(params []string) {
 	cwd, _ := os.Getwd()
 	info, err := detectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
-	color.Green("Debugging project: %s (%s)", info.Framework, info.Language)
+	i18n.Green("Debugging project: %s (%s)", info.Framework, info.Language)
 	opts := debug.Options{
 		Framework: info.Framework,
 		Language:  info.Language,
@@ -668,7 +668,7 @@ func runDebug(params []string) {
 		Port:      debugPort,
 	}
 	if err := debug.Run(opts); err != nil {
-		color.Red("Debug failed: %v", err)
+		i18n.Red("Debug failed: %v", err)
 	}
 }
 
@@ -676,23 +676,23 @@ func runMigrate() {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
-	color.Green("Running migrations for %s (%s)", info.Framework, info.Language)
+	i18n.Green("Running migrations for %s (%s)", info.Framework, info.Language)
 	err = migrate.RunMigrations(info.Framework, info.Language)
 	if err != nil {
-		color.Red("Migration failed: %v", err)
+		i18n.Red("Migration failed: %v", err)
 		return
 	}
-	color.Green("Migrations completed successfully.")
+	i18n.Green("Migrations completed successfully.")
 }
 
 func runMigrateStatus() {
 	err := migrate.RunMigrationStatus()
 	if err != nil {
-		color.Red("Migration status error: %v", err)
+		i18n.Red("Migration status error: %v", err)
 	}
 }
 
@@ -700,17 +700,17 @@ func runMigrateNew(name string) {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
-	color.Green("Creating new migration for %s (%s)", info.Framework, info.Language)
+	i18n.Green("Creating new migration for %s (%s)", info.Framework, info.Language)
 	err = migrate.CreateNewMigration(info.Framework, info.Language, name)
 	if err != nil {
-		color.Red("Failed to create migration: %v", err)
+		i18n.Red("Failed to create migration: %v", err)
 		return
 	}
-	color.Green("Migration created successfully.")
+	i18n.Green("Migration created successfully.")
 }
 
 var portCmd = &cobra.Command{
@@ -759,14 +759,14 @@ Examples:
 func runPortCheck(addr string) {
 	err := port.CheckPort(addr)
 	if err != nil {
-		color.Red("Error: %v", err)
+		i18n.Red("Error: %v", err)
 	}
 }
 
 func runCurl(url, method string) {
 	err := curl.Run(url, method)
 	if err != nil {
-		color.Red("Error: %v", err)
+		i18n.Red("Error: %v", err)
 	}
 }
 
@@ -778,7 +778,7 @@ The binary is downloaded to the home directory, installed via 'dev install',
 and then the temporary file is removed.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := update.SelfUpdate("dev"); err != nil {
-			color.Red("Error: %v", err)
+			i18n.Red("Error: %v", err)
 		}
 	},
 }
@@ -791,7 +791,7 @@ Creates the file with default empty parameters if it doesn't exist.
 Uses $EDITOR or nano by default.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := ai.EditConfig(); err != nil {
-			color.Red("Error: %v", err)
+			i18n.Red("Error: %v", err)
 		}
 	},
 }
@@ -804,7 +804,7 @@ Creates the file with a default template if it doesn't exist.
 Uses $EDITOR or nano by default.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := custom.Edit(); err != nil {
-			color.Red("Error: %v", err)
+			i18n.Red("Error: %v", err)
 		}
 	},
 }
@@ -825,7 +825,7 @@ Use 'dev self-config' to set up your API endpoint, token, and model.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		text := strings.Join(args, " ")
 		if err := ai.RunAI(text); err != nil {
-			color.Red("Error: %v", err)
+			i18n.Red("Error: %v", err)
 		}
 	},
 }
@@ -904,12 +904,12 @@ func runCheck(opts check.Options) {
 
 	info, err := detectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
 	if err := check.Run(info, opts); err != nil {
-		color.Red("Check failed: %v", err)
+		i18n.Red("Check failed: %v", err)
 	}
 }
 
@@ -923,12 +923,12 @@ func runCheckAI(text string) {
 
 	info, err := detectProject(cwd)
 	if err != nil {
-		color.Red("Error detecting project: %v", err)
+		i18n.Red("Error detecting project: %v", err)
 		return
 	}
 
 	if err := check.RunAI(info, opts, text); err != nil {
-		color.Red("AI check failed: %v", err)
+		i18n.Red("AI check failed: %v", err)
 	}
 }
 
@@ -977,7 +977,7 @@ func runRoot(args []string) {
 
 	cfg, err := custom.LoadAll(cwd)
 	if err != nil {
-		color.Red("Failed to load custom commands: %v", err)
+		i18n.Red("Failed to load custom commands: %v", err)
 		os.Exit(1)
 		return
 	}
@@ -985,17 +985,31 @@ func runRoot(args []string) {
 	ctx := custom.Context{Dir: cwd, Language: lang, Framework: framework}
 	found, err := cfg.RunCommand(name, ctx)
 	if err != nil {
-		color.Red("Custom command %q failed: %v", name, err)
+		i18n.Red("Custom command %q failed: %v", name, err)
 		os.Exit(1)
 		return
 	}
 	if !found {
-		color.Red("Unknown command %q for \"dev\"", name)
+		i18n.Red("Unknown command %q for \"dev\"", name)
 		if names := cfg.NamesFor(ctx); len(names) > 0 {
-			color.Yellow("Available custom commands: %s", strings.Join(names, ", "))
+			i18n.Yellow("Available custom commands: %s", strings.Join(names, ", "))
 		}
-		fmt.Fprintln(os.Stderr, "Run 'dev --help' for usage.")
+		fmt.Fprintln(os.Stderr, i18n.T("Run 'dev --help' for usage."))
 		os.Exit(1)
+	}
+}
+
+// localizeCommand переводит пользовательские текстовые поля команды cobra.
+// Поле Use не переводится — это синтаксис вызова команды.
+func localizeCommand(cmd *cobra.Command) {
+	if cmd.Short != "" {
+		cmd.Short = i18n.T(cmd.Short)
+	}
+	if cmd.Long != "" {
+		cmd.Long = i18n.T(cmd.Long)
+	}
+	if cmd.Example != "" {
+		cmd.Example = i18n.T(cmd.Example)
 	}
 }
 
@@ -1032,8 +1046,21 @@ func main() {
 		runRoot(args)
 	}
 
+	// PersistentPreRun выполняется после парсинга флагов: язык берётся из
+	// конфигурации приложения (ключ LANGUAGE в main.conf); при его отсутствии
+	// определяется из окружения (LC_ALL/LC_MESSAGES/LANG).
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		i18n.SetLang(ai.LanguageFromConfig())
+	}
+
+	// Локализуем текст справки: root и все прямые подкоманды.
+	localizeCommand(rootCmd)
+	for _, c := range rootCmd.Commands() {
+		localizeCommand(c)
+	}
+
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, i18n.T("Error: %v", err))
 		os.Exit(1)
 	}
 }

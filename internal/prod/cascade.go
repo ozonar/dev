@@ -2,6 +2,7 @@ package prod
 
 import (
 	"dev/internal/colors"
+	"dev/internal/i18n"
 	"fmt"
 	"sort"
 )
@@ -121,7 +122,7 @@ func shortLabel(label string) string {
 // RenderCascade выводит цепочку стрелками и список корневых кандидатов.
 func RenderCascade(c Cascade) {
 	if len(c.Chain) == 0 {
-		fmt.Println(levelColor(LevelInfo)("No active anomalies detected — no cascade."))
+		fmt.Println(levelColor(LevelInfo)(i18n.T("No active anomalies detected — no cascade.")))
 		return
 	}
 	// Первый узел сверху, далее вниз стрелкой ↑ в обратном направлении не нужно.
@@ -141,9 +142,10 @@ func RenderCascade(c Cascade) {
 	}
 
 	if len(c.Roots) > 0 {
-		fmt.Println("\n  ROOT CANDIDATES")
+		fmt.Println()
+		fmt.Println("  " + i18n.T("ROOT CANDIDATES"))
 		for i, r := range c.Roots {
-			conf := levelColor(confidenceLevel(r.Confidence))("(" + r.Confidence + " confidence)")
+			conf := levelColor(confidenceLevel(r.Confidence))(i18n.T("(%s confidence)", r.Confidence))
 			fmt.Printf("  %d. %-40s %s\n", i+1, r.Name, conf)
 		}
 	}

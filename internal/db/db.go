@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"dev/internal/detector"
+	"dev/internal/i18n"
 
 	"github.com/fatih/color"
 
@@ -31,18 +32,18 @@ func Run() error {
 	cwd, _ := os.Getwd()
 	info, err := detector.DetectProject(cwd)
 	if err != nil {
-		color.Red("Project analysis error: %v", err)
+		i18n.Red("Project analysis error: %v", err)
 		return err
 	}
 
 	databases := info.Databases
 	if len(databases) == 0 {
-		color.Yellow("No databases found in the project.")
-		color.Yellow("Check .env file or docker-compose configurations.")
+		i18n.Yellow("No databases found in the project.")
+		i18n.Yellow("Check .env file or docker-compose configurations.")
 		return nil
 	}
 
-	color.Cyan("=== Found databases ===")
+	i18n.Cyan("=== Found databases ===")
 	for i, db := range databases {
 		locationColor := color.New(color.FgCyan).SprintFunc()
 		switch db.Location {
@@ -64,7 +65,8 @@ func Run() error {
 	}
 
 	// Database selection (even if only one)
-	fmt.Print("\nSelect database (default 1): ")
+	fmt.Println()
+	i18n.Printf("Select database (default 1): ")
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
@@ -74,7 +76,7 @@ func Run() error {
 	} else {
 		idx, err := strconv.Atoi(input)
 		if err != nil || idx < 1 || idx > len(databases) {
-			color.Red("Invalid choice, using first database.")
+			i18n.Red("Invalid choice, using first database.")
 			selectedIndex = 0
 		} else {
 			selectedIndex = idx - 1
@@ -82,32 +84,33 @@ func Run() error {
 	}
 
 	selectedDB := databases[selectedIndex]
-	color.Green("Connecting to %s...", selectedDB.URL)
+	i18n.Green("Connecting to %s...", selectedDB.URL)
 
 	// Connection
 	db, err := connectDB(selectedDB)
 	if err != nil {
-		color.Red("Connection error: %v", err)
+		i18n.Red("Connection error: %v", err)
 		return err
 	}
 	defer db.Close()
 
-	color.Green("Connection successful.")
+	i18n.Green("Connection successful.")
 
 	// Table selection loop
 	for {
 		tables, err := listTables(db, selectedDB.Type)
 		if err != nil {
-			color.Red("Error fetching tables: %v", err)
+			i18n.Red("Error fetching tables: %v", err)
 			return err
 		}
 
 		if len(tables) == 0 {
-			color.Yellow("No tables in selected database.")
+			i18n.Yellow("No tables in selected database.")
 			return nil
 		}
 
-		color.Cyan("\n=== Tables in database ===")
+		fmt.Println()
+		i18n.Cyan("=== Tables in database ===")
 		for i, tbl := range tables {
 			count, err := getTableRowCount(db, selectedDB.Type, tbl)
 			if err != nil || count < 0 {
@@ -117,16 +120,17 @@ func Run() error {
 			}
 		}
 
-		fmt.Print("\nSelect table (0 to exit): ")
+		fmt.Println()
+		i18n.Printf("Select table (0 to exit): ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 		if input == "0" {
-			color.Yellow("Exiting.")
+			i18n.Yellow("Exiting.")
 			return nil
 		}
 		idx, err := strconv.Atoi(input)
 		if err != nil || idx < 1 || idx > len(tables) {
-			color.Red("Invalid choice.")
+			i18n.Red("Invalid choice.")
 			continue
 		}
 		tableName := tables[idx-1]
@@ -134,47 +138,51 @@ func Run() error {
 		// Show table structure
 		columns, err := describeTable(db, selectedDB.Type, tableName)
 		if err != nil {
-			color.Red("Error fetching table structure: %v", err)
+			i18n.Red("Error fetching table structure: %v", err)
 			continue
 		}
 
 		// Get exact row count
 		exactCount, err := getExactRowCount(db, selectedDB.Type, tableName)
 		if err != nil {
-			color.Cyan("\n=== Table structure: %s ===", tableName)
+			fmt.Println()
+			i18n.Cyan("=== Table structure: %s ===", tableName)
 		} else {
-			color.Green("Total rows: %d\n", exactCount)
-			color.Cyan("\n=== Table structure: %s ===", tableName)
+			i18n.Green("Total rows: %d", exactCount)
+			fmt.Println()
+			i18n.Cyan("=== Table structure: %s ===", tableName)
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "Field\tType\tNULL\tKey")
+		fmt.Fprintln(w, i18n.T("Field\tType\tNULL\tKey"))
 		for _, col := range columns {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", col.Name, col.Type, col.Nullable, col.Key)
 		}
 		w.Flush()
 
 		// Ask to show recent values
-		fmt.Print("\nShow latest values? (Y/n): ")
+		fmt.Println()
+		i18n.Printf("Show latest values? (Y/n): ")
 		input, _ = reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 		if strings.ToLower(input) == "n" || strings.ToLower(input) == "no" {
-			color.Yellow("Skipping data.")
+			i18n.Yellow("Skipping data.")
 			continue
 		}
 
 		// Get last 20 rows
 		rows, err := getLastRows(db, selectedDB.Type, tableName, 20)
 		if err != nil {
-			color.Red("Error fetching data: %v", err)
+			i18n.Red("Error fetching data: %v", err)
 			continue
 		}
 
 		if len(rows) == 0 {
-			color.Yellow("Table is empty.")
+			i18n.Yellow("Table is empty.")
 			continue
 		}
 
-		color.Cyan("\n=== Last %d rows ===", len(rows))
+		fmt.Println()
+		i18n.Cyan("=== Last %d rows ===", len(rows))
 		// Determine column widths for pretty output
 		colWidths := make(map[string]int)
 		for _, col := range columns {
@@ -229,7 +237,8 @@ func Run() error {
 			}
 			fmt.Println(line)
 		}
-		fmt.Print("\nPress Enter to continue...")
+		fmt.Println()
+		i18n.Printf("Press Enter to continue...")
 		bufio.NewReader(os.Stdin).ReadString('\n')
 	}
 }
@@ -260,7 +269,7 @@ func connectDB(dbInfo detector.DatabaseInfo) (*sql.DB, error) {
 		driver = "sqlite3"
 		dsn = dbInfo.Database // file path
 	default:
-		return nil, fmt.Errorf("unsupported DB type: %s", dbInfo.Type)
+		return nil, fmt.Errorf(i18n.T("unsupported DB type: %s"), dbInfo.Type)
 	}
 
 	db, err := sql.Open(driver, dsn)
@@ -285,7 +294,7 @@ func listTables(db *sql.DB, dbType string) ([]string, error) {
 	case "sqlite":
 		query = `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`
 	default:
-		return nil, fmt.Errorf("unsupported DB type for table listing: %s", dbType)
+		return nil, fmt.Errorf(i18n.T("unsupported DB type for table listing: %s"), dbType)
 	}
 
 	rows, err := db.Query(query)
@@ -317,7 +326,7 @@ func getTableRowCount(db *sql.DB, dbType, tableName string) (int, error) {
 	case "sqlite":
 		query = `SELECT COUNT(*) FROM "` + tableName + `"`
 	default:
-		return 0, fmt.Errorf("unsupported DB type for row count: %s", dbType)
+		return 0, fmt.Errorf(i18n.T("unsupported DB type for row count: %s"), dbType)
 	}
 
 	var count int
@@ -339,7 +348,7 @@ func getExactRowCount(db *sql.DB, dbType, tableName string) (int, error) {
 	case "sqlite":
 		query = `SELECT COUNT(*) FROM "` + tableName + `"`
 	default:
-		return 0, fmt.Errorf("unsupported DB type for exact row count: %s", dbType)
+		return 0, fmt.Errorf(i18n.T("unsupported DB type for exact row count: %s"), dbType)
 	}
 
 	var count int
@@ -365,7 +374,7 @@ func describeTable(db *sql.DB, dbType, tableName string) ([]ColumnInfo, error) {
 	case "sqlite":
 		query = `PRAGMA table_info(` + tableName + `)`
 	default:
-		return nil, fmt.Errorf("unsupported DB type for table description: %s", dbType)
+		return nil, fmt.Errorf(i18n.T("unsupported DB type for table description: %s"), dbType)
 	}
 
 	rows, err := db.Query(query, tableName)
@@ -477,10 +486,10 @@ func getLastRows(db *sql.DB, dbType, tableName string, limit int) ([]map[string]
 		// которые lib/pq может возвращать при SELECT *
 		cols, err := getColumnNames(db, tableName)
 		if err != nil {
-			return nil, fmt.Errorf("error getting column names: %w", err)
+			return nil, fmt.Errorf(i18n.T("error getting column names: %w"), err)
 		}
 		if len(cols) == 0 {
-			return nil, fmt.Errorf("no columns found for table %s", tableName)
+			return nil, fmt.Errorf(i18n.T("no columns found for table %s"), tableName)
 		}
 
 		// Экранируем имена колонок кавычками
@@ -502,7 +511,7 @@ func getLastRows(db *sql.DB, dbType, tableName string, limit int) ([]map[string]
 		query = `SELECT * FROM ` + tableName + ` LIMIT ` + strconv.Itoa(limit)
 		args = []any{}
 	default:
-		return nil, fmt.Errorf("unsupported DB type for data selection: %s", dbType)
+		return nil, fmt.Errorf(i18n.T("unsupported DB type for data selection: %s"), dbType)
 	}
 
 	rows, err := db.Query(query, args...)

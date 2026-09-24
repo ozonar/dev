@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"dev/internal/detector"
+	"dev/internal/i18n"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -64,14 +65,14 @@ type chatResponse struct {
 func RunAI(text string) error {
 	cfg, err := LoadConfig()
 	if err != nil {
-		color.Red("Config error: %v", err)
+		i18n.Red("Config error: %v", err)
 		if err := InteractiveEditConfig(); err != nil {
 			return err
 		}
 		// Пробуем снова после редактирования
 		cfg, err = LoadConfig()
 		if err != nil {
-			return fmt.Errorf("config still invalid after edit: %w", err)
+			return fmt.Errorf(i18n.T("config still invalid after edit: %w"), err)
 		}
 	}
 
@@ -190,17 +191,18 @@ func interactiveLoop(cfg *Config, history []HistoryEntry) error {
 		// Получаем ответ от LLM
 		commands, err := queryLLM(cfg, history)
 		if err != nil {
-			return fmt.Errorf("LLM query failed: %w", err)
+			return fmt.Errorf(i18n.T("LLM query failed: %w"), err)
 		}
 
 		// Проверяем на REFINE
 		if len(commands) == 1 && commands[0].Command == "REFINE" {
 			desc := commands[0].Description
 			if desc == "" {
-				desc = "Request needs clarification"
+				desc = i18n.T("Request needs clarification")
 			}
-			color.Yellow("LLM: %s", desc)
-			fmt.Print("\nEnter clarification: ")
+			i18n.Yellow("LLM: %s", desc)
+			fmt.Println()
+			i18n.Printf("Enter clarification: ")
 			input, _ := reader.ReadString('\n')
 			input = strings.TrimSpace(input)
 			if input == "exit" || input == "q" {
@@ -228,21 +230,22 @@ func interactiveLoop(cfg *Config, history []HistoryEntry) error {
 func runShellCommand(history *[]HistoryEntry, input string) error {
 	shellCmd := strings.TrimSpace(input[1:])
 	if shellCmd == "" {
-		color.Yellow("Empty command after '!'. Usage: !command")
+		i18n.Yellow("Empty command after '!'. Usage: !command")
 		return nil
 	}
 
-	color.Cyan("\n=== Executing shell command: %s ===", shellCmd)
+	fmt.Println()
+	i18n.Cyan("=== Executing shell command: %s ===", shellCmd)
 	output, execErr := runCommandStreaming(shellCmd)
 	truncatedOutput := truncateOutput(output, MaxMessageLines)
 	if execErr != nil {
-		color.Red("Execution error: %v", execErr)
+		i18n.Red("Execution error: %v", execErr)
 		*history = append(*history, HistoryEntry{
 			Role:    "assistant",
 			Content: fmt.Sprintf("Executed shell command: %s\nError: %v\nOutput: %s", shellCmd, execErr, truncatedOutput),
 		})
 	} else {
-		color.Green("✓ Shell command executed successfully")
+		i18n.Green("✓ Shell command executed successfully")
 		*history = append(*history, HistoryEntry{
 			Role:    "assistant",
 			Content: fmt.Sprintf("Executed shell command: %s\nOutput: %s", shellCmd, truncatedOutput),
@@ -288,7 +291,7 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 		// Проверяем, является ли ввод числом (номер команды)
 		if idx, err := strconv.Atoi(input); err == nil {
 			if idx < 1 || idx > len(commands) {
-				color.Yellow("Invalid command number. Enter a number from 1 to %d.", len(commands))
+				i18n.Yellow("Invalid command number. Enter a number from 1 to %d.", len(commands))
 				continue
 			}
 
@@ -296,7 +299,8 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 
 			// Special "SEND_ANALYSIS" command — send analysis results to LLM
 			if cmd.Command == "SEND_ANALYSIS" {
-				color.Cyan("\n=== Sending analysis results to LLM ===")
+				fmt.Println()
+				i18n.Cyan("=== Sending analysis results to LLM ===")
 				*history = append(*history, HistoryEntry{
 					Role:    "user",
 					Content: "Анамнез собран. На основе полученных данных проанализируй проблему и предложи команды для её решения. Используй type: \"fix\" для финальных команд и type: \"sequence\" для промежуточных шагов.",
@@ -304,11 +308,11 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 
 				newCommands, err := queryLLM(cfg, *history)
 				if err != nil {
-					return fmt.Errorf("LLM query failed: %w", err)
+					return fmt.Errorf(i18n.T("LLM query failed: %w"), err)
 				}
 
 				if len(newCommands) == 1 && newCommands[0].Command == "REFINE" {
-					color.Yellow("LLM: %s", newCommands[0].Description)
+					i18n.Yellow("LLM: %s", newCommands[0].Description)
 					continue
 				}
 
@@ -319,7 +323,8 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 
 			// Special "Fix error" command — send to LLM
 			if cmd.Command == "FIX_ERROR" {
-				color.Cyan("\n=== Sending error to LLM for fix ===")
+				fmt.Println()
+				i18n.Cyan("=== Sending error to LLM for fix ===")
 				*history = append(*history, HistoryEntry{
 					Role:    "user",
 					Content: "Предыдущая команда завершилась с ошибкой. Исправь её и предложи новые команды.",
@@ -327,11 +332,11 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 
 				newCommands, err := queryLLM(cfg, *history)
 				if err != nil {
-					return fmt.Errorf("LLM query failed: %w", err)
+					return fmt.Errorf(i18n.T("LLM query failed: %w"), err)
 				}
 
 				if len(newCommands) == 1 && newCommands[0].Command == "REFINE" {
-					color.Yellow("LLM: %s", newCommands[0].Description)
+					i18n.Yellow("LLM: %s", newCommands[0].Description)
 					continue
 				}
 
@@ -340,21 +345,22 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 			}
 
 			// Execute the selected command
-			color.Cyan("\n=== Executing: %s ===", cmd.Command)
+			fmt.Println()
+			i18n.Cyan("=== Executing: %s ===", cmd.Command)
 			if cmd.Description != "" {
-				color.White("Description: %s", cmd.Description)
+				i18n.White("Description: %s", cmd.Description)
 			}
 
 			output, execErr := runCommandStreaming(cmd.Command)
 			truncatedOutput := truncateOutput(output, MaxMessageLines)
 			if execErr != nil {
-				color.Red("Execution error: %v", execErr)
+				i18n.Red("Execution error: %v", execErr)
 				*history = append(*history, HistoryEntry{
 					Role:    "assistant",
 					Content: fmt.Sprintf("Executed command: %s\nError: %v\nOutput: %s", cmd.Command, execErr, truncatedOutput),
 				})
 			} else {
-				color.Green("✓ Command executed successfully")
+				i18n.Green("✓ Command executed successfully")
 				*history = append(*history, HistoryEntry{
 					Role:    "assistant",
 					Content: fmt.Sprintf("Executed command: %s\nOutput: %s", cmd.Command, truncatedOutput),
@@ -373,13 +379,14 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 			if execErr != nil {
 				fixCmd := CommandAction{
 					Command:     "FIX_ERROR",
-					Description: fmt.Sprintf("Fix error in command: %s", cmd.Command),
+					Description: i18n.T("Fix error in command: %s", cmd.Command),
 				}
 				commands = append(commands, fixCmd)
 			}
 
 			if len(commands) > 0 {
-				color.Cyan("\nRemaining commands: %d", len(commands))
+				fmt.Println()
+				i18n.Cyan("Remaining commands: %d", len(commands))
 			}
 			continue
 		}
@@ -398,22 +405,23 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 			return nil
 		}
 
-		color.Cyan("\n=== Sending refinement to LLM ===")
+		fmt.Println()
+		i18n.Cyan("=== Sending refinement to LLM ===")
 		*history = append(*history, HistoryEntry{Role: "assistant", Content: formatCommandsJSON(commands)})
 		*history = append(*history, HistoryEntry{Role: "user", Content: input})
 
 		newCommands, err := queryLLM(cfg, *history)
 		if err != nil {
-			return fmt.Errorf("LLM query failed: %w", err)
+			return fmt.Errorf(i18n.T("LLM query failed: %w"), err)
 		}
 
 		// Проверяем на REFINE
 		if len(newCommands) == 1 && newCommands[0].Command == "REFINE" {
 			desc := newCommands[0].Description
 			if desc == "" {
-				desc = "Request needs clarification"
+				desc = i18n.T("Request needs clarification")
 			}
-			color.Yellow("LLM: %s", desc)
+			i18n.Yellow("LLM: %s", desc)
 			continue
 		}
 
@@ -423,7 +431,8 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 	// После выполнения всех команд проверяем, были ли среди них analysis
 	// и не отправляли ли мы уже результат
 	if analysisExecuted {
-		color.Cyan("\n=== Sending analysis results to LLM ===")
+		fmt.Println()
+		i18n.Cyan("=== Sending analysis results to LLM ===")
 		*history = append(*history, HistoryEntry{
 			Role:    "user",
 			Content: "Анамнез собран. На основе полученных данных проанализируй проблему и предложи команды для её решения. Используй type: \"fix\" для финальных команд и type: \"sequence\" для промежуточных шагов.",
@@ -431,11 +440,11 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 
 		newCommands, err := queryLLM(cfg, *history)
 		if err != nil {
-			return fmt.Errorf("LLM query failed: %w", err)
+			return fmt.Errorf(i18n.T("LLM query failed: %w"), err)
 		}
 
 		if len(newCommands) == 1 && newCommands[0].Command == "REFINE" {
-			color.Yellow("LLM: %s", newCommands[0].Description)
+			i18n.Yellow("LLM: %s", newCommands[0].Description)
 			return nil
 		}
 
@@ -444,7 +453,8 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 		return commandLoop(cfg, history, commands, reader)
 	}
 
-	color.Green("\n✓ All commands executed!")
+	fmt.Println()
+	i18n.Green("✓ All commands executed!")
 	return nil
 }
 
@@ -471,7 +481,7 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 
 		jsonData, err := json.Marshal(reqBody)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request: %w", err)
+			return nil, fmt.Errorf(i18n.T("failed to marshal request: %w"), err)
 		}
 
 		// Выполняем curl-запрос
@@ -489,28 +499,28 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 		curlCmd.Stderr = &stderr
 
 		if err := curlCmd.Run(); err != nil {
-			return nil, fmt.Errorf("curl failed: %w\nStderr: %s", err, stderr.String())
+			return nil, fmt.Errorf(i18n.T("curl failed: %w\nStderr: %s"), err, stderr.String())
 		}
 
 		// Парсим ответ
 		var resp chatResponse
 		if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
-			lastErr = fmt.Errorf("unparsable response: %w\nBody: %s", err, stdout.String())
-			color.Red("LLM returned unparsable response (attempt %d/3)", attempt+1)
+			lastErr = fmt.Errorf(i18n.T("unparsable response: %w\nBody: %s"), err, stdout.String())
+			i18n.Red("LLM returned unparsable response (attempt %d/3)", attempt+1)
 			continue
 		}
 
 		// API-ошибка. Поле error бывает строкой или объектом; здесь нам важен
 		// сам факт ошибки, а не формат — повторяем запрос, такие ошибки часто временные.
 		if len(resp.Error) > 0 {
-			lastErr = fmt.Errorf("API error: %s", strings.TrimSpace(string(resp.Error)))
-			color.Red("LLM API error (attempt %d/3)", attempt+1)
+			lastErr = fmt.Errorf(i18n.T("API error: %s"), strings.TrimSpace(string(resp.Error)))
+			i18n.Red("LLM API error (attempt %d/3)", attempt+1)
 			continue
 		}
 
 		if len(resp.Choices) == 0 {
-			lastErr = fmt.Errorf("empty response from API")
-			color.Red("LLM returned empty response (attempt %d/3)", attempt+1)
+			lastErr = fmt.Errorf(i18n.T("empty response from API"))
+			i18n.Red("LLM returned empty response (attempt %d/3)", attempt+1)
 			continue
 		}
 
@@ -520,7 +530,7 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 		// Парсим команды
 		var commands []CommandAction
 		if err := json.Unmarshal([]byte(content), &commands); err != nil {
-			color.Red("LLM returned invalid JSON (attempt %d/3)", attempt+1)
+			i18n.Red("LLM returned invalid JSON (attempt %d/3)", attempt+1)
 			// Добавляем в историю ответ LLM и просьбу исправиться
 			history = append(history, HistoryEntry{
 				Role:    "assistant",
@@ -536,7 +546,7 @@ func queryLLM(cfg *Config, history []HistoryEntry) ([]CommandAction, error) {
 		return commands, nil
 	}
 
-	return nil, fmt.Errorf("LLM request failed after 3 attempts: %w", lastErr)
+	return nil, fmt.Errorf(i18n.T("LLM request failed after 3 attempts: %w"), lastErr)
 }
 
 // extractJSON извлекает JSON из markdown-блока если есть
@@ -590,12 +600,13 @@ func printCommands(commands []CommandAction, analysisExecuted bool) {
 
 	// Если есть analysis-команды — пишем пояснение перед всеми блоками
 	if len(analysisCmds) > 0 {
-		color.White("LLM doesn't understand what happened, so it suggests an analysis")
+		i18n.White("LLM doesn't understand what happened, so it suggests an analysis")
 	}
 
 	// Блок 1: Analysis commands
 	if len(analysisCmds) > 0 {
-		color.Cyan("\n── Analysis commands ──")
+		fmt.Println()
+		i18n.Cyan("── Analysis commands ──")
 		for i, cmd := range analysisCmds {
 			commandStr := analysisBg.Sprintf(" %s ", cmd.Command)
 			if cmd.Description != "" {
@@ -609,7 +620,8 @@ func printCommands(commands []CommandAction, analysisExecuted bool) {
 	// Блок 2: Action commands
 	if len(actionCmds) > 0 {
 		if len(analysisCmds) > 0 {
-			color.Cyan("\n── Action commands ──")
+			fmt.Println()
+			i18n.Cyan("── Action commands ──")
 		}
 		for i, cmd := range actionCmds {
 			idx := len(analysisCmds) + i + 1
@@ -638,7 +650,8 @@ func printCommands(commands []CommandAction, analysisExecuted bool) {
 	// Блок 3: LLM commands (FIX_ERROR, SEND_ANALYSIS)
 	if len(llmCmds) > 0 {
 		if len(analysisCmds) > 0 || len(actionCmds) > 0 {
-			color.Cyan("\n── LLM commands ──")
+			fmt.Println()
+			i18n.Cyan("── LLM commands ──")
 		}
 		for i, cmd := range llmCmds {
 			idx := len(analysisCmds) + len(actionCmds) + i + 1
@@ -661,7 +674,7 @@ func truncateOutput(output string, n int) string {
 
 	truncated := lines[len(lines)-n:]
 	omitted := len(lines) - n
-	return fmt.Sprintf("... (%d lines omitted) ...\n%s", omitted, strings.Join(truncated, "\n"))
+	return i18n.T("... (%d lines omitted) ...\n%s", omitted, strings.Join(truncated, "\n"))
 }
 
 // runCommandStreaming выполняет команду в shell и выводит результат построчно по мере поступления.
@@ -671,16 +684,16 @@ func runCommandStreaming(command string) (string, error) {
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", fmt.Errorf("failed to create stdout pipe: %w", err)
+		return "", fmt.Errorf(i18n.T("failed to create stdout pipe: %w"), err)
 	}
 
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return "", fmt.Errorf("failed to create stderr pipe: %w", err)
+		return "", fmt.Errorf(i18n.T("failed to create stderr pipe: %w"), err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("failed to start command: %w", err)
+		return "", fmt.Errorf(i18n.T("failed to start command: %w"), err)
 	}
 
 	var outputBuf strings.Builder
@@ -721,7 +734,7 @@ func runCommandStreaming(command string) (string, error) {
 		if err := <-done; err != nil {
 			// Ждём завершения процесса перед возвратом ошибки сканера
 			cmd.Wait()
-			return strings.TrimSpace(outputBuf.String()), fmt.Errorf("error reading command output: %w", err)
+			return strings.TrimSpace(outputBuf.String()), fmt.Errorf(i18n.T("error reading command output: %w"), err)
 		}
 	}
 
@@ -730,7 +743,7 @@ func runCommandStreaming(command string) (string, error) {
 	output := strings.TrimSpace(outputBuf.String())
 
 	if err != nil {
-		return output, fmt.Errorf("command failed (exit code %d)", cmd.ProcessState.ExitCode())
+		return output, fmt.Errorf(i18n.T("command failed (exit code %d)"), cmd.ProcessState.ExitCode())
 	}
 
 	return output, nil

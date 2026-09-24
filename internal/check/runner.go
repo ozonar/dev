@@ -11,9 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"dev/internal/i18n"
 	"dev/internal/toolchain"
-
-	"github.com/fatih/color"
 )
 
 // Mode определяет режим запуска проверки.
@@ -127,7 +126,8 @@ func runProgram(manager *toolchain.Manager, prog toolchain.Executable, args []st
 
 // printProgramHeader выводит заголовок перед запуском программы.
 func printProgramHeader(prog toolchain.Executable) {
-	color.Cyan("\n=== %s ===\n", prog.Name())
+	fmt.Println()
+	i18n.Cyan("=== %s ===", prog.Name())
 }
 
 // runPhpLint запускает синтаксическую проверку php -l для PHP-файлов scope.
@@ -136,7 +136,7 @@ func printProgramHeader(prog toolchain.Executable) {
 func runPhpLint(manager *toolchain.Manager, programs []toolchain.Executable, scope Scope) {
 	files := scope.FilesWithExt(".php")
 	if len(files) == 0 {
-		color.Yellow("No PHP files in scope. Skipping php -l.")
+		i18n.Yellow("No PHP files in scope. Skipping php -l.")
 		return
 	}
 
@@ -150,14 +150,15 @@ func runPhpLint(manager *toolchain.Manager, programs []toolchain.Executable, sco
 		}
 	}
 	if php == nil {
-		color.Yellow("PHP runtime not available. Skipping php -l.")
+		i18n.Yellow("PHP runtime not available. Skipping php -l.")
 		return
 	}
 
-	color.Cyan("\n=== php -l ===\n")
+	fmt.Println()
+	i18n.Cyan("=== php -l ===")
 	for _, f := range files {
 		if err := runProgram(manager, php, []string{"-l", f}); err != nil {
-			color.Red("php -l %s finished with error: %v", f, err)
+			i18n.Red("php -l %s finished with error: %v", f, err)
 		}
 	}
 }
@@ -168,36 +169,37 @@ func runPhpLint(manager *toolchain.Manager, programs []toolchain.Executable, sco
 // в Go при запуске проекта).
 func runNpmCheck(scope Scope) {
 	if len(scope.FilesWithExt(codeExtensionsFor("javascript")...)) == 0 {
-		color.Yellow("No JS/TS files in scope. Skipping npm run.")
+		i18n.Yellow("No JS/TS files in scope. Skipping npm run.")
 		return
 	}
 
 	if _, err := exec.LookPath("npm"); err != nil {
-		color.Yellow("npm not found in PATH. Skipping npm run.")
+		i18n.Yellow("npm not found in PATH. Skipping npm run.")
 		return
 	}
 
 	data, err := os.ReadFile("package.json")
 	if err != nil {
-		color.Yellow("package.json not found. Skipping npm run.")
+		i18n.Yellow("package.json not found. Skipping npm run.")
 		return
 	}
 	var pkg struct {
 		Scripts map[string]string `json:"scripts"`
 	}
 	if err := json.Unmarshal(data, &pkg); err != nil || len(pkg.Scripts) == 0 {
-		color.Yellow("No scripts found in package.json. Skipping npm run.")
+		i18n.Yellow("No scripts found in package.json. Skipping npm run.")
 		return
 	}
 
 	script := promptNpmScript(pkg.Scripts)
 
-	color.Cyan("\n=== npm run %s ===\n", script)
+	fmt.Println()
+	i18n.Cyan("=== npm run %s ===", script)
 	cmd := exec.Command("npm", "run", script)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		color.Red("npm run %s finished with error: %v", script, err)
+		i18n.Red("npm run %s finished with error: %v", script, err)
 	}
 }
 
@@ -221,11 +223,12 @@ func promptNpmScript(scripts map[string]string) string {
 	}
 
 	if len(names) > 1 {
-		fmt.Println("\nSelect npm script to run:")
+		fmt.Println()
+		i18n.Printf("Select npm script to run:\n")
 		for i, name := range names {
 			fmt.Printf("  %d) %s\n", i+1, name)
 		}
-		fmt.Printf("Select number to run [%d]: ", defaultIdx+1)
+		i18n.Printf("Select number to run [%d]: ", defaultIdx+1)
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)

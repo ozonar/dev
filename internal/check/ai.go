@@ -8,15 +8,14 @@ import (
 
 	"dev/internal/ai"
 	"dev/internal/detector"
-
-	"github.com/fatih/color"
+	"dev/internal/i18n"
 )
 
 // RunAI выполняет AI-код-ревью изменённого кода.
 // info — уже определённая информация о проекте (детекция и принудительный
 // язык из флагов выполняются на уровне команд перед вызовом).
 func RunAI(info *detector.ProjectInfo, opts Options, instruction string) error {
-	color.Green("Project: %s (%s)", info.Language, info.Framework)
+	i18n.Green("Project: %s (%s)", info.Language, info.Framework)
 
 	// Определяем объём проверки.
 	scope, err := resolveScopeForAI(opts)
@@ -29,18 +28,18 @@ func RunAI(info *detector.ProjectInfo, opts Options, instruction string) error {
 
 	// Если отправить нечего — выходим.
 	if text == "" {
-		color.Yellow("Nothing to send. Aborting review.")
+		i18n.Yellow("Nothing to send. Aborting review.")
 		return nil
 	}
 
 	// Ограничиваем размер отправляемого кода общим лимитом символов на ревью
 	if len(text) > ai.MaxReviewTotalChars {
-		color.Yellow("Code exceeds %d characters, truncating.", ai.MaxReviewTotalChars)
+		i18n.Yellow("Code exceeds %d characters, truncating.", ai.MaxReviewTotalChars)
 		text = text[:ai.MaxReviewTotalChars]
 	}
 
 	if _, err := ai.RunCodeReview(text, instruction); err != nil {
-		return fmt.Errorf("AI review failed: %v", err)
+		return fmt.Errorf(i18n.T("AI review failed: %v"), err)
 	}
 
 	return nil
@@ -75,7 +74,7 @@ func readScopeFiles(files []string) string {
 		}
 		if info.Size() > ai.MaxReviewFileSize {
 			// Файл слишком большой — исключаем из ревью целиком, не читая его.
-			color.Yellow("Skipping file %s: size %d exceeds limit of %d bytes",
+			i18n.Yellow("Skipping file %s: size %d exceeds limit of %d bytes",
 				f, info.Size(), ai.MaxReviewFileSize)
 			continue
 		}
@@ -87,7 +86,7 @@ func readScopeFiles(files []string) string {
 		}
 		if strings.ContainsRune(string(data), 0) {
 			// Признак бинарного файла — пропускаем.
-			color.Yellow("Skipping binary file: %s", f)
+			i18n.Yellow("Skipping binary file: %s", f)
 			continue
 		}
 

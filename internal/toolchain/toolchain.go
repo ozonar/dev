@@ -8,6 +8,7 @@
 package toolchain
 
 import (
+	"dev/internal/i18n"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -172,7 +173,7 @@ func (m *Manager) Ensure(executables ...Executable) ([]Executable, error) {
 			current[resolved.Name()] = resolved
 			continue
 		}
-		fmt.Printf("Downloading %s %s\n", resolved.Name(), resolved.Version())
+		i18n.Printf("Downloading %s %s\n", resolved.Name(), resolved.Version())
 		if err := m.download(resolved); err != nil {
 			return nil, err
 		}
@@ -232,9 +233,9 @@ func (m *Manager) resolve(ex Executable) (Executable, error) {
 func (m *Manager) resolveRuntime(rt Runtime) (Executable, error) {
 	if cand, ok := rt.Resolve(m.dir, rt.Version()); ok {
 		if sys, isRT := cand.(Runtime); isRT && sys.IsSystem() {
-			fmt.Printf("Using local %s %s\n", cand.Name(), cand.Version())
+			i18n.Printf("Using local %s %s\n", cand.Name(), cand.Version())
 		} else {
-			fmt.Printf("Using downloaded %s %s\n", cand.Name(), cand.Version())
+			i18n.Printf("Using downloaded %s %s\n", cand.Name(), cand.Version())
 		}
 		return cand, nil
 	}

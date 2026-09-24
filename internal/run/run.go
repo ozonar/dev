@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"dev/internal/common"
+	"dev/internal/i18n"
 	"dev/internal/port"
 	"dev/internal/toolchain"
 
@@ -58,7 +59,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			}
 			return runAndHandlePortError(runtimePath, args, port)
 		}
-		return fmt.Errorf("artisan not found")
+		return fmt.Errorf(i18n.T("artisan not found"))
 	case "yii":
 		addr := fmt.Sprintf("localhost:%d", port)
 		args := append([]string{}, opts.ExtraPhpArgs...)
@@ -76,31 +77,31 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			OnlyMainGo:       false,
 		})
 		if err != nil {
-			return fmt.Errorf("error finding main files: %v", err)
+			return fmt.Errorf(i18n.T("error finding main files: %v"), err)
 		}
 		if len(mainFiles) == 0 {
-			return fmt.Errorf("no Go main files found")
+			return fmt.Errorf(i18n.T("no Go main files found"))
 		}
 		var target string
 		if len(mainFiles) == 1 {
 			target = mainFiles[0]
 		} else {
-			// Show list for user to choose
-			fmt.Println("Multiple main files found:")
+			// Показываем список для выбора пользователем
+			i18n.Printf("Multiple main files found:\n")
 			for i, f := range mainFiles {
 				fmt.Printf("  %d) %s\n", i+1, f)
 			}
-			fmt.Printf("Select number to run [1]: ")
+			i18n.Printf("Select number to run [1]: ")
 			reader := bufio.NewReader(os.Stdin)
 			input, _ := reader.ReadString('\n')
 			input = strings.TrimSpace(input)
 			if input == "" {
 				target = mainFiles[0]
-				fmt.Printf("Running %s\n", target)
+				i18n.Printf("Running %s\n", target)
 			} else {
 				idx, err := strconv.Atoi(input)
 				if err != nil || idx < 1 || idx > len(mainFiles) {
-					return fmt.Errorf("invalid selection")
+					return fmt.Errorf(i18n.T("invalid selection"))
 				}
 				target = mainFiles[idx-1]
 			}
@@ -118,7 +119,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			cmd.Stderr = os.Stderr
 			return cmd.Run()
 		}
-		return fmt.Errorf("package.json not found")
+		return fmt.Errorf(i18n.T("package.json not found"))
 	case "python":
 		// Try to run Django or Flask
 		if _, err := os.Stat("manage.py"); err == nil {
@@ -139,7 +140,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			args = append(args, "-S", addr)
 			return runAndHandlePortError(runtimePath, args, port)
 		}
-		return fmt.Errorf("unsupported framework: %s", framework)
+		return fmt.Errorf(i18n.T("unsupported framework: %s"), framework)
 	}
 }
 
@@ -152,7 +153,7 @@ func runSymfony(opts RunOptions, port int, phpPath string) error {
 	// Symfony CLI сама управляет процессом php и не передаёт ему наши -d-флаги.
 	if len(opts.ExtraPhpArgs) > 0 || !isBinaryAvailable("symfony") {
 		if len(opts.ExtraPhpArgs) == 0 {
-			color.Yellow("Symfony CLI not found. Falling back to built-in PHP server (php -S).")
+			i18n.Yellow("Symfony CLI not found. Falling back to built-in PHP server (php -S).")
 		}
 		addr := fmt.Sprintf("0.0.0.0:%d", port)
 		args := append([]string{}, opts.ExtraPhpArgs...)
@@ -212,7 +213,7 @@ func runAndHandlePortError(name string, args []string, portNum int) error {
 		}
 		killByFuser(portNum)
 
-		color.Green("Process on port %d killed. Restarting...", portNum)
+		i18n.Green("Process on port %d killed. Restarting...", portNum)
 
 		// Создаём НОВЫЙ cmd для повторного запуска
 		cmd2 := exec.Command(name, args...)
@@ -231,18 +232,18 @@ func ensurePortFree(portNum int) error {
 		return nil
 	}
 
-	color.Yellow("⚠ Port %d is already in use.", portNum)
+	i18n.Yellow("⚠ Port %d is already in use.", portNum)
 	if info != "" {
 		fmt.Println(info)
 	}
-	fmt.Print("Do you want to kill the process using port " + strconv.Itoa(portNum) + "? [Y/n]: ")
+	i18n.Printf("Do you want to kill the process using port %d? [Y/n]: ", portNum)
 
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 
 	if input == "n" || input == "N" || input == "no" || input == "NO" {
-		return fmt.Errorf("port %d is already in use", portNum)
+		return fmt.Errorf(i18n.T("port %d is already in use"), portNum)
 	}
 
 	if err := port.KillProcessOnPort(portNum); err != nil {
@@ -251,7 +252,7 @@ func ensurePortFree(portNum int) error {
 	// Дополнительно пробуем через fuser для надёжности (если он установлен)
 	killByFuser(portNum)
 
-	color.Green("Process on port %d killed.", portNum)
+	i18n.Green("Process on port %d killed.", portNum)
 	return nil
 }
 

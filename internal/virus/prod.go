@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"dev/internal/ai"
+	"dev/internal/i18n"
 	"dev/internal/prod"
 )
 
@@ -22,7 +23,7 @@ func ProdVirus(path string) error {
 	// Определяем путь к текущему исполняемому файлу.
 	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("could not determine executable path: %v", err)
+		return fmt.Errorf(i18n.T("could not determine executable path: %v"), err)
 	}
 
 	// Парсим строку подключения.
@@ -40,15 +41,15 @@ func ProdVirus(path string) error {
 
 	// Переносим каталог /etc/prod-command (deps.conf и пр., без истории отчётов).
 	if err := copyProdCommand(username, host); err != nil {
-		fmt.Printf("Warning: could not copy prod-command files: %v\n", err)
+		i18n.Printf("Warning: could not copy prod-command files: %v\n", err)
 	}
 
 	// Переносим LLM-конфиг, чтобы работала команда prod llm.
 	if err := copyLLMConfig(username, host); err != nil {
-		fmt.Printf("Warning: could not copy LLM config: %v\n", err)
+		i18n.Printf("Warning: could not copy LLM config: %v\n", err)
 	}
 
-	fmt.Printf("Successfully copied to %s:%s\n", host, remotePath)
+	i18n.Printf("Successfully copied to %s:%s\n", host, remotePath)
 	return nil
 }
 
@@ -68,13 +69,13 @@ func copyProdCommandFrom(localDir, username, host string) error {
 	info, err := os.Stat(localDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Printf("Config directory %s not found, skipping config copy.\n", localDir)
+			i18n.Printf("Config directory %s not found, skipping config copy.\n", localDir)
 			return nil
 		}
-		return fmt.Errorf("could not check config directory: %v", err)
+		return fmt.Errorf(i18n.T("could not check config directory: %v"), err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("path %s is not a directory", localDir)
+		return fmt.Errorf(i18n.T("path %s is not a directory"), localDir)
 	}
 
 	// История отчётов (reports) на удалённый сервер не переносится: готовим
@@ -82,7 +83,7 @@ func copyProdCommandFrom(localDir, username, host string) error {
 	// удалённой стороне и не тащить лишние данные по сети.
 	staged, err := stageWithoutReports(localDir)
 	if err != nil {
-		return fmt.Errorf("could not prepare config copy: %v", err)
+		return fmt.Errorf(i18n.T("could not prepare config copy: %v"), err)
 	}
 	defer os.RemoveAll(filepath.Dir(staged))
 
@@ -103,9 +104,9 @@ func copyProdCommandFrom(localDir, username, host string) error {
 	remoteCmd := fmt.Sprintf("sudo mkdir -p %s && sudo cp -r %s/. %s/ && rm -rf %s",
 		remoteCommandDir, tmpDir, remoteCommandDir, tmpDir)
 	if err := sshRun(username, host, remoteCmd); err != nil {
-		return fmt.Errorf("could not install configs to %s: %v", remoteCommandDir, err)
+		return fmt.Errorf(i18n.T("could not install configs to %s: %v"), remoteCommandDir, err)
 	}
-	fmt.Printf("Configs successfully copied to %s@%s:%s\n", username, host, remoteCommandDir)
+	i18n.Printf("Configs successfully copied to %s@%s:%s\n", username, host, remoteCommandDir)
 	return nil
 }
 
@@ -167,7 +168,7 @@ func stageWithoutReports(src string) (string, error) {
 func copyLLMConfig(username, host string) error {
 	src := resolveFirstExisting(ai.ConfigPaths())
 	if src == "" {
-		fmt.Println("LLM config not found, skipping config copy.")
+		i18n.Printf("LLM config not found, skipping config copy.\n")
 		return nil
 	}
 
@@ -187,9 +188,9 @@ func copyLLMConfig(username, host string) error {
 		}
 		remoteCmd := fmt.Sprintf("sudo mkdir -p %s && sudo mv %s %s", remoteDir, tmpTarget, remoteTarget)
 		if err := sshRun(username, host, remoteCmd); err != nil {
-			return fmt.Errorf("could not install LLM config to %s: %v", remoteTarget, err)
+			return fmt.Errorf(i18n.T("could not install LLM config to %s: %v"), remoteTarget, err)
 		}
-		fmt.Printf("LLM config copied to %s@%s:%s\n", username, host, remoteTarget)
+		i18n.Printf("LLM config copied to %s@%s:%s\n", username, host, remoteTarget)
 		return nil
 	}
 
@@ -201,7 +202,7 @@ func copyLLMConfig(username, host string) error {
 	if err := scpFile(src, username, host, remoteTarget); err != nil {
 		return err
 	}
-	fmt.Printf("LLM config copied to %s@%s:%s\n", username, host, remoteTarget)
+	i18n.Printf("LLM config copied to %s@%s:%s\n", username, host, remoteTarget)
 	return nil
 }
 

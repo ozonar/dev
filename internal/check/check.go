@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"dev/internal/detector"
+	"dev/internal/i18n"
 	"dev/internal/toolchain"
 
 	"github.com/fatih/color"
@@ -31,9 +32,9 @@ func Run(info *detector.ProjectInfo, opts Options) error {
 	}
 
 	if len(scope.Files) > 0 {
-		color.Yellow("Scope: %s (%d files)", scope.Name, len(scope.Files))
+		i18n.Yellow("Scope: %s (%d files)", scope.Name, len(scope.Files))
 	} else {
-		color.Yellow("Scope: %s (all files)", scope.Name)
+		i18n.Yellow("Scope: %s (all files)", scope.Name)
 	}
 
 	modeLabel := "dry-run"
@@ -52,11 +53,11 @@ func Run(info *detector.ProjectInfo, opts Options) error {
 	}
 
 	if len(langs) == 0 {
-		color.Yellow("No files with supported extensions found in scope. Nothing to check.")
+		i18n.Yellow("No files with supported extensions found in scope. Nothing to check.")
 		return nil
 	}
 
-	color.Green("Detected languages from files: %s", strings.Join(langs, ", "))
+	i18n.Green("Detected languages from files: %s", strings.Join(langs, ", "))
 
 	for _, lang := range langs {
 		// Версия из детектора применяется только к языку проекта, чтобы
@@ -66,7 +67,7 @@ func Run(info *detector.ProjectInfo, opts Options) error {
 			version = info.LanguageVersion
 		}
 		if err := runLanguage(lang, version, scope, opts.Mode); err != nil {
-			color.Red("Checks for %s failed: %v", lang, err)
+			i18n.Red("Checks for %s failed: %v", lang, err)
 		}
 	}
 
@@ -82,7 +83,7 @@ func runLanguage(language, version string, scope Scope, mode Mode) error {
 		return err
 	}
 
-	color.Green("Language: %s", language)
+	i18n.Green("Language: %s", language)
 
 	for _, prog := range programs {
 		if _, isRuntime := prog.(toolchain.Runtime); isRuntime {
@@ -90,12 +91,12 @@ func runLanguage(language, version string, scope Scope, mode Mode) error {
 		}
 		args, ok := buildArgs(prog, scope, mode)
 		if !ok {
-			color.Yellow("No files for %s in scope. Skipping.", prog.Name())
+			i18n.Yellow("No files for %s in scope. Skipping.", prog.Name())
 			continue
 		}
 		printProgramHeader(prog)
 		if err := runProgram(manager, prog, args); err != nil {
-			color.Red("%s finished with error: %v", prog.Name(), err)
+			i18n.Red("%s finished with error: %v", prog.Name(), err)
 		}
 	}
 

@@ -3,6 +3,7 @@ package build
 import (
 	"bufio"
 	"dev/internal/common"
+	"dev/internal/i18n"
 	"dev/internal/toolchain"
 	"fmt"
 	"os"
@@ -20,7 +21,7 @@ func BuildProject(framework, language, version, output string) error {
 	case "javascript":
 		return buildNode()
 	default:
-		fmt.Printf("Build not required for language %s\n", language)
+		i18n.Printf("Build not required for language %s\n", language)
 		return nil
 	}
 }
@@ -38,32 +39,32 @@ func buildGo(version, output string) error {
 		OnlyMainGo:       false,
 	})
 	if err != nil {
-		return fmt.Errorf("error finding main files: %v", err)
+		return fmt.Errorf(i18n.T("error finding main files: %v"), err)
 	}
 	if len(mainFiles) == 0 {
-		return fmt.Errorf("no Go main file found")
+		return fmt.Errorf(i18n.T("no Go main file found"))
 	}
 
 	var target string
 	if len(mainFiles) == 1 {
 		target = mainFiles[0]
 	} else {
-		// Show list for user to choose
-		fmt.Println("Multiple main files found:")
+		// Показываем список для выбора пользователем
+		i18n.Printf("Multiple main files found:\n")
 		for i, f := range mainFiles {
 			fmt.Printf("  %d) %s\n", i+1, f)
 		}
-		fmt.Printf("Select number to build [1]: ")
+		i18n.Printf("Select number to build [1]: ")
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 		if input == "" {
 			target = mainFiles[0]
-			fmt.Printf("Building %s\n", target)
+			i18n.Printf("Building %s\n", target)
 		} else {
 			idx, err := strconv.Atoi(input)
 			if err != nil || idx < 1 || idx > len(mainFiles) {
-				return fmt.Errorf("invalid selection")
+				return fmt.Errorf(i18n.T("invalid selection"))
 			}
 			target = mainFiles[idx-1]
 		}
@@ -72,7 +73,7 @@ func buildGo(version, output string) error {
 	// Имя исполняемого файла: явно заданное через -o, либо выведенное из пути
 	output = resolveOutput(target, output)
 
-	fmt.Printf("Build %s to %s...\n", target, output)
+	i18n.Printf("Build %s to %s...\n", target, output)
 	cmd := exec.Command(runtimePath, "build", "-o", output, target)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -82,22 +83,22 @@ func buildGo(version, output string) error {
 	// После успешной сборки выводим полный путь к сгенерированному исполняемому файлу
 	absPath, err := filepath.Abs(output)
 	if err != nil {
-		return fmt.Errorf("error resolving absolute path: %v", err)
+		return fmt.Errorf(i18n.T("error resolving absolute path: %v"), err)
 	}
-	fmt.Printf("Executable file: %s\n", absPath)
+	i18n.Printf("Executable file: %s\n", absPath)
 	return nil
 }
 
 // buildNode собирает Node.js проект
 func buildNode() error {
 	if _, err := os.Stat("package.json"); err != nil {
-		return fmt.Errorf("package.json not found")
+		return fmt.Errorf(i18n.T("package.json not found"))
 	}
 	// Проверяем, есть ли скрипт build
 	cmd := exec.Command("npm", "run", "build")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	fmt.Println("Running npm run build...")
+	i18n.Printf("Running npm run build...\n")
 	return cmd.Run()
 }
 
