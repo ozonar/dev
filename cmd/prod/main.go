@@ -105,13 +105,13 @@ var releaseCmd = &cobra.Command{
 	Aliases: []string{"deploy"},
 	Short:   "Prepare and switch production releases",
 	Long: `Prepares a new release folder from build artifacts and switches the
-active release via a symlink. Configuration is read from release.yml in the
-current directory; if missing, an editor opens with a filled template.
-
-Commands:
-  prepare [name]   move build artifacts to releases/release-<datetime>
-  switch [name]    switch the current release symlink
-  release          prepare then switch (both steps in order)
+	active release via a symlink. Configuration is read from release.yml in the
+	current directory; if missing, an editor opens with a filled template.
+	
+	Commands:
+	  prepare [name]   copy build artifacts to releases/release-<datetime>
+	  switch [name]    switch the current release symlink
+	  release          prepare then switch (both steps in order)
 
 Examples:
   prod release prepare backend
@@ -124,7 +124,7 @@ Examples:
 
 var releasePrepareCmd = &cobra.Command{
 	Use:   "prepare [name]",
-	Short: "Move build artifacts into a new release folder",
+	Short: "Copy build artifacts into a new release folder",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runReleasePrepare(args)
@@ -351,7 +351,8 @@ func selectReleaseName(cfg *release.Config, arg string) (string, error) {
 }
 
 // runReleasePrepare выполняет команду prod release prepare [name]:
-// переносит содержимое builds_folder в releases_folder/release-<datetime>.
+// копирует содержимое builds_folder в releases_folder/release-<datetime>,
+// оставляя папку сборки нетронутой.
 func runReleasePrepare(args []string) {
 	cfg, err := release.EnsureConfig(".")
 	if err != nil {

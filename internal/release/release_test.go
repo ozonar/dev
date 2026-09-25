@@ -56,8 +56,9 @@ func TestCustomPrefixAndFormat(t *testing.T) {
 	}
 }
 
-// TestPrepareMove проверяет перенос содержимого builds_folder в новую папку релиза.
-func TestPrepareMove(t *testing.T) {
+// TestPrepareCopy проверяет копирование содержимого builds_folder в новую
+// папку релиза: исходники остаются на месте, копия появляется в releases_folder.
+func TestPrepareCopy(t *testing.T) {
 	base := t.TempDir()
 	builds := filepath.Join(base, "builds")
 	releases := filepath.Join(base, "releases")
@@ -78,22 +79,28 @@ func TestPrepareMove(t *testing.T) {
 		t.Fatalf("неожиданное имя релиза: %s", name)
 	}
 
-	// Содержимое перемещено в папку релиза.
+	// Содержимое скопировано в папку релиза.
 	dst := filepath.Join(releases, name)
 	if _, err := os.Stat(filepath.Join(dst, "index.html")); err != nil {
-		t.Fatal("index.html не перемещён")
+		t.Fatal("index.html не скопирован")
 	}
 	if _, err := os.Stat(filepath.Join(dst, "app")); err != nil {
-		t.Fatal("директория app не перемещена")
+		t.Fatal("директория app не скопирована")
 	}
 
-	// builds_folder опустел после переноса.
+	// builds_folder остался нетронутым после копирования.
 	entries, err := os.ReadDir(builds)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 0 {
-		t.Fatalf("builds_folder должна быть пустой, найдено %d элементов", len(entries))
+	if len(entries) != 2 {
+		t.Fatalf("builds_folder должна содержать 2 элемента, найдено %d", len(entries))
+	}
+	if _, err := os.Stat(filepath.Join(builds, "index.html")); err != nil {
+		t.Fatal("index.html не должен удаляться из builds_folder")
+	}
+	if _, err := os.Stat(filepath.Join(builds, "app")); err != nil {
+		t.Fatal("директория app не должна удаляться из builds_folder")
 	}
 }
 
@@ -144,7 +151,7 @@ func TestPrepareCollision(t *testing.T) {
 		t.Fatalf("ожидалось имя с суффиксом, получено %s", name)
 	}
 	if _, err := os.Stat(filepath.Join(releases, name, "a.txt")); err != nil {
-		t.Fatal("файл не перемещён в суффиксную папку")
+		t.Fatal("файл не скопирован в суффиксную папку")
 	}
 }
 
@@ -369,7 +376,7 @@ func TestPrepareCustomPrefix(t *testing.T) {
 		t.Fatalf("неожиданное имя релиза: %s", name)
 	}
 	if _, err := os.Stat(filepath.Join(releases, name, "a.txt")); err != nil {
-		t.Fatal("файл не перемещён")
+		t.Fatal("файл не скопирован")
 	}
 
 	// ListReleases должен распознать кастомный префикс.

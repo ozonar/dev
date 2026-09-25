@@ -53,8 +53,9 @@ func (r *Release) ParseReleaseName(name string) (time.Time, bool) {
 	return t, err == nil
 }
 
-// Prepare переносит содержимое builds_folder в новую папку
+// Prepare копирует содержимое builds_folder в новую папку
 // releases_folder/release-<datetime> и возвращает имя созданного релиза.
+// Исходная папка сборки при этом не изменяется.
 func Prepare(cfg *Release, now time.Time) (string, error) {
 	if !common.FileExists(cfg.BuildsFolder) {
 		return "", fmt.Errorf("builds folder not found: %s", cfg.BuildsFolder)
@@ -79,15 +80,14 @@ func Prepare(cfg *Release, now time.Time) (string, error) {
 	if err := os.MkdirAll(dest, 0755); err != nil {
 		return "", err
 	}
-	if err := moveContents(cfg.BuildsFolder, dest); err != nil {
-		return "", fmt.Errorf("failed to move build artifacts: %w", err)
+	if err := copyContents(cfg.BuildsFolder, dest); err != nil {
+		return "", fmt.Errorf("failed to copy build artifacts: %w", err)
 	}
 	return filepath.Base(dest), nil
 }
 
-// moveContents перемещает всё содержимое src в dst. Перемещение выполняется
-// через os.Rename, а при пересечении файловых систем — копированием с удалением.
-func moveContents(src, dst string) error {
+// copyContents копирует всё содержимое src в dst, не трогая исходники.
+func copyContents(src, dst string) error {
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		return err
@@ -95,14 +95,7 @@ func moveContents(src, dst string) error {
 	for _, e := range entries {
 		from := filepath.Join(src, e.Name())
 		to := filepath.Join(dst, e.Name())
-		if err := os.Rename(from, to); err == nil {
-			continue
-		}
-		// rename не удался (например, cross-device) — копируем и удаляем исходник.
 		if err := copyRecursive(from, to); err != nil {
-			return err
-		}
-		if err := os.RemoveAll(from); err != nil {
 			return err
 		}
 	}

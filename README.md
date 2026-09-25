@@ -102,7 +102,7 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Non-interactive flags: `--all`, `--commit=N`, `--branch=master|develop`, `--code`
 
 - **`prod release`** – Production release management (prepare + switch):
-  - `prod release prepare [name]` – move build artifacts from `builds_folder` into a new `releases_folder/release-<datetime>` archive folder; interactive release name selection (default: first) when omitted
+  - `prod release prepare [name]` – copy build artifacts from `builds_folder` into a new `releases_folder/release-<datetime>` archive folder (source folder is left untouched); interactive release name selection (default: first) when omitted
   - `prod release switch [name]` – list the most recent releases (newest first, today's releases highlighted with a white background) and switch the `current_release_folder` symlink to the selected one; `-l/--lines` controls how many releases are shown (default: 5)
   - `prod release` – run both steps in order: prepare a new release, then switch to it
   - Configuration is read from `release.yml` in the current directory; if missing or invalid, an editor opens with a filled template (same behavior as `dev self-config`)
@@ -176,7 +176,7 @@ dev check fix           # run analysis and auto-fix issues
 
 prod                    # production server health report
 prod release            # prepare a new release and switch to it
-prod release prepare    # move build artifacts to releases/release-<datetime>
+prod release prepare    # copy build artifacts to releases/release-<datetime>
 prod release switch -l 5  # switch the current release symlink
 prod virus user@host    # copy prod to remote server
 prod install            # install prod to system
