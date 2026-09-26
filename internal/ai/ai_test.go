@@ -125,3 +125,66 @@ func TestRunShellCommand_Error(t *testing.T) {
 		t.Errorf("history entry should mention error, got: %q", entry.Content)
 	}
 }
+
+// TestAppendSendAnalysis_NoAnalysis проверяет, что пока analysis-команды
+// не выполнялись, пункт SEND_ANALYSIS в список не добавляется.
+func TestAppendSendAnalysis_NoAnalysis(t *testing.T) {
+	commands := []CommandAction{{Command: "ls", Type: CommandTypeSequence}}
+	got := appendSendAnalysis(commands, false)
+
+	if len(got) != 1 {
+		t.Fatalf("expected unchanged list length 1, got %d", len(got))
+	}
+	if got[0].Command == "SEND_ANALYSIS" {
+		t.Errorf("SEND_ANALYSIS must not be added before analysis executes")
+	}
+}
+
+// TestAppendSendAnalysis_EmptyList проверяет главный сценарий бага: после
+// выполнения единственной analysis-команды (список опустел) пункт
+// SEND_ANALYSIS всё равно должен появиться, чтобы пользователь мог
+// отправить результаты анализа в LLM.
+func TestAppendSendAnalysis_EmptyList(t *testing.T) {
+	got := appendSendAnalysis(nil, true)
+
+	if len(got) != 1 {
+		t.Fatalf("expected exactly one SEND_ANALYSIS command, got %d", len(got))
+	}
+	if got[0].Command != "SEND_ANALYSIS" {
+		t.Errorf("expected SEND_ANALYSIS command, got %q", got[0].Command)
+	}
+	if got[0].Description == "" {
+		t.Errorf("SEND_ANALYSIS should have a human-readable description")
+	}
+}
+
+// TestAppendSendAnalysis_AppendsToEnd проверяет, что SEND_ANALYSIS добавляется
+// в конец списка оставшихся команд.
+func TestAppendSendAnalysis_AppendsToEnd(t *testing.T) {
+	commands := []CommandAction{
+		{Command: "ls", Type: CommandTypeSequence},
+		{Command: "sudo nginx -t", Type: CommandTypeSequence},
+	}
+	got := appendSendAnalysis(commands, true)
+
+	if len(got) != 3 {
+		t.Fatalf("expected 3 commands, got %d", len(got))
+	}
+	if got[2].Command != "SEND_ANALYSIS" {
+		t.Errorf("expected SEND_ANALYSIS at the end, got %q at index 2", got[2].Command)
+	}
+}
+
+// TestAppendSendAnalysis_NoDuplicate проверяет, что если SEND_ANALYSIS уже
+// есть в списке (например, LLM сам его вернул), дубликат не добавляется.
+func TestAppendSendAnalysis_NoDuplicate(t *testing.T) {
+	commands := []CommandAction{
+		{Command: "ls", Type: CommandTypeSequence},
+		{Command: "SEND_ANALYSIS"},
+	}
+	got := appendSendAnalysis(commands, true)
+
+	if len(got) != 2 {
+		t.Fatalf("expected no duplicate, got %d commands", len(got))
+	}
+}

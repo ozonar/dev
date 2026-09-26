@@ -213,7 +213,7 @@ func interactiveLoop(cfg *Config, history []HistoryEntry) error {
 		}
 
 		// Выводим список команд и начинаем цикл выполнения/уточнения
-		err = commandLoop(cfg, &history, commands, reader)
+		err = commandLoop(cfg, &history, commands, reader, false, false)
 		if err != nil {
 			return err
 		}
@@ -253,26 +253,13 @@ func runShellCommand(history *[]HistoryEntry, input string) error {
 	return nil
 }
 
-// commandLoop цикл: показывает команды, ждёт ввод (цифра = выполнить, текст = уточнение)
-func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction, reader *bufio.Reader) error {
-	// Флаг: была ли выполнена хотя бы одна analysis-команда
-	analysisExecuted := false
-
+// commandLoop цикл: показывает команды, ждёт ввод (цифра = выполнить, текст = уточнение).
+// analysisExecuted — выполнялись ли analysis-команды (тогда в списке появляется пункт SEND_ANALYSIS);
+// pendingAnalysis — есть ли результаты анализа, которые ещё не отправлены в LLM.
+func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction, reader *bufio.Reader, analysisExecuted, pendingAnalysis bool) error {
 	for len(commands) > 0 {
 		// Добавляем виртуальную команду SEND_ANALYSIS в конец списка, если analysis выполнялись
-		hasSendAnalysis := false
-		for _, c := range commands {
-			if c.Command == "SEND_ANALYSIS" {
-				hasSendAnalysis = true
-				break
-			}
-		}
-		if analysisExecuted && !hasSendAnalysis {
-			commands = append(commands, CommandAction{
-				Command:     "SEND_ANALYSIS",
-				Description: "Send analysis results to LLM for solution",
-			})
-		}
+		commands = appendSendAnalysis(commands, analysisExecuted)
 
 		fmt.Println()
 		printCommands(commands, analysisExecuted)
@@ -316,7 +303,9 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 				}
 
 				commands = newCommands
+				// Анализ только что отправлен вручную — новых неотправленных результатов нет.
 				analysisExecuted = true
+				pendingAnalysis = false
 				continue
 			}
 
@@ -366,9 +355,11 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 				})
 			}
 
-			// Если выполнили analysis-команду — ставим флаг
+			// Если выполнили analysis-команду — помечаем, что появились результаты,
+			// которые нужно будет отправить в LLM
 			if cmd.Type == CommandTypeAnalysis {
 				analysisExecuted = true
+				pendingAnalysis = true
 			}
 
 			// Убираем выполненную команду из списка
@@ -427,9 +418,9 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 		commands = newCommands
 	}
 
-	// После выполнения всех команд проверяем, были ли среди них analysis
-	// и не отправляли ли мы уже результат
-	if analysisExecuted {
+	// После выполнения всех команд проверяем, остались ли неотправленные
+	// результаты анализа — тогда автоматически запрашиваем решение у LLM
+	if pendingAnalysis {
 		fmt.Println()
 		i18n.Cyan("=== Sending analysis results to LLM ===")
 		*history = append(*history, HistoryEntry{
@@ -448,8 +439,10 @@ func commandLoop(cfg *Config, history *[]HistoryEntry, commands []CommandAction,
 		}
 
 		commands = newCommands
-		// Рекурсивно запускаем commandLoop для новых команд (уже без флага analysis)
-		return commandLoop(cfg, history, commands, reader)
+		// Рекурсивно запускаем commandLoop для новых команд. Состояние анализа
+		// сохраняется, чтобы пункт SEND_ANALYSIS оставался доступным в списке,
+		// а повторного автозапроса не происходило (pendingAnalysis=false).
+		return commandLoop(cfg, history, commands, reader, true, false)
 	}
 
 	fmt.Println()
@@ -521,6 +514,23 @@ func extractJSON(s string) string {
 func formatCommandsJSON(commands []CommandAction) string {
 	data, _ := json.Marshal(commands)
 	return string(data)
+}
+
+// appendSendAnalysis добавляет виртуальную команду SEND_ANALYSIS в конец списка,
+// если выполнялись analysis-команды и такого пункта ещё нет.
+func appendSendAnalysis(commands []CommandAction, analysisExecuted bool) []CommandAction {
+	if !analysisExecuted {
+		return commands
+	}
+	for _, c := range commands {
+		if c.Command == "SEND_ANALYSIS" {
+			return commands
+		}
+	}
+	return append(commands, CommandAction{
+		Command:     "SEND_ANALYSIS",
+		Description: "Send analysis results to LLM for solution",
+	})
 }
 
 // printCommands выводит список команд, разбитый на три блока:
@@ -599,10 +609,8 @@ func printCommands(commands []CommandAction, analysisExecuted bool) {
 
 	// Блок 3: LLM commands (FIX_ERROR, SEND_ANALYSIS)
 	if len(llmCmds) > 0 {
-		if len(analysisCmds) > 0 || len(actionCmds) > 0 {
-			fmt.Println()
-			i18n.Cyan("── LLM commands ──")
-		}
+		fmt.Println()
+		i18n.Cyan("── LLM commands ──")
 		for i, cmd := range llmCmds {
 			idx := len(analysisCmds) + len(actionCmds) + i + 1
 			commandStr := llmBg.Sprintf(" %s ", cmd.Command)
