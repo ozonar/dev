@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -107,7 +106,12 @@ var releaseCmd = &cobra.Command{
 	Long: `Prepares a new release folder from build artifacts and switches the
 	active release via a symlink. Configuration is read from release.yml in the
 	current directory; if missing, an editor opens with a filled template.
-	
+
+	The target can be a single release or a whole group (releases that list the
+	group name in their "groups" property). For a group, every member release is
+	processed in order. Releases marked important ask for confirmation before
+	the switch step.
+
 	Commands:
 	  prepare [name]   copy build artifacts to releases/release-<datetime>
 	  switch [name]    switch the current release symlink
@@ -116,6 +120,7 @@ var releaseCmd = &cobra.Command{
 Examples:
   prod release prepare backend
   prod release switch -l 5
+  prod release web    # release the whole group "web"
   prod release`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runReleaseBoth()
@@ -325,69 +330,150 @@ func argOrEmpty(args []string) string {
 	return ""
 }
 
-// selectReleaseName определяет имя релиза из аргумента либо интерактивно:
-// выводит список всех релизов конфига и просит выбрать номер (по умолчанию 1).
-func selectReleaseName(cfg *release.Config, arg string) (string, error) {
+// selectTarget определяет цель операции из аргумента либо интерактивно.
+// Меню показывает цели по группам: сначала группы (со списком входящих
+// релизов), затем одиночные релизы. Важные цели помечаются меткой.
+func selectTarget(cfg *release.Config, arg string) (release.Target, error) {
 	if arg != "" {
-		if cfg.Releases[arg] == nil {
-			return "", fmt.Errorf("unknown release %q", arg)
+		return cfg.ResolveTarget(arg)
+	}
+	targets := cfg.AllTargets()
+	fmt.Println(colors.Cyan("Available targets:"))
+	for i, t := range targets {
+		var label string
+		switch t.Kind {
+		case release.TargetGroup:
+			members, err := cfg.GroupMembers(t.Name)
+			if err != nil {
+				return release.Target{}, err
+			}
+			label = "Group: " + t.Name + " [" + strings.Join(members, ", ") + "]"
+		default:
+			label = "Release: " + t.Name
 		}
-		return arg, nil
+		if cfg.NeedsConfirmation(t) {
+			label += " " + colors.Yellow("[important]")
+		}
+		fmt.Printf("  %d. %s\n", i+1, label)
 	}
-	names := make([]string, 0, len(cfg.Releases))
-	for n := range cfg.Releases {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	fmt.Println(colors.Cyan("Available releases:"))
-	for i, n := range names {
-		fmt.Printf("  %d. %s\n", i+1, n)
-	}
-	idx, err := release.SelectIndex(os.Stdin, os.Stdout, "Select release", len(names))
+	idx, err := release.SelectIndex(os.Stdin, os.Stdout, "Select target", len(targets))
 	if err != nil {
-		return "", err
+		return release.Target{}, err
 	}
-	return names[idx], nil
+	return targets[idx], nil
 }
 
-// runReleasePrepare выполняет команду prod release prepare [name]:
+// confirmImportant спрашивает подтверждение, если цель помечена как важная
+// (important релиз или группа с важными релизами). Возвращает false, когда
+// пользователь отменил операцию. Подтверждение относится к шагу switch.
+func confirmImportant(cfg *release.Config, t release.Target) bool {
+	if !cfg.NeedsConfirmation(t) {
+		return true
+	}
+	fmt.Println(colors.Yellow("Important target selected: " + cfg.TargetLabel(t)))
+	fmt.Print("Are you really sure you want to switch? [y/N]: ")
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	line = strings.ToLower(strings.TrimSpace(line))
+	return line == "y" || line == "yes"
+}
+
+// runReleasePrepare выполняет команду prod release prepare [target]:
 // копирует содержимое builds_folder в releases_folder/release-<datetime>,
-// оставляя папку сборки нетронутой.
+// оставляя папку сборки нетронутой. Для группы готовятся все её релизы.
 func runReleasePrepare(args []string) {
 	cfg, err := release.EnsureConfig(".")
 	if err != nil {
 		fmt.Println(colors.Red("release config error: " + err.Error()))
 		return
 	}
-	name, err := selectReleaseName(cfg, argOrEmpty(args))
+	target, err := selectTarget(cfg, argOrEmpty(args))
 	if err != nil {
 		fmt.Println(colors.Red(err.Error()))
 		return
 	}
-	created, err := release.Prepare(cfg.Releases[name], time.Now())
+	if target.Kind == release.TargetGroup {
+		prepared, err := cfg.PrepareGroup(target.Name, time.Now())
+		if err != nil {
+			fmt.Println(colors.Red("prepare failed: " + err.Error()))
+			return
+		}
+		for _, p := range prepared {
+			fmt.Println(colors.Green("Release prepared: " + p.Release + " -> " + p.Name))
+		}
+		return
+	}
+	created, err := release.Prepare(cfg.Releases[target.Name], time.Now())
 	if err != nil {
 		fmt.Println(colors.Red("prepare failed: " + err.Error()))
 		return
 	}
-	fmt.Println(colors.Green("Release prepared: " + name + " -> " + created))
+	fmt.Println(colors.Green("Release prepared: " + target.Name + " -> " + created))
 }
 
-// runReleaseSwitch выполняет команду prod release switch [name]: показывает
+// switchOneRelease переключает один релиз на выбранную папку с выводом
+// результата. Возвращает ошибку, если переключение не удалось.
+func switchOneRelease(rel *release.Release, releaseName string) error {
+	if err := release.SwitchRelease(rel, releaseName); err != nil {
+		return err
+	}
+	fmt.Println(colors.Green("Switched " + rel.CurrentReleaseLink + " -> " + filepath.Join(rel.ReleasesFolder, releaseName)))
+	return nil
+}
+
+// switchGroup переключает каждый релиз группы на его самый свежий
+// подготовленный релиз. Группа без подготовленных релизов пропускается.
+func switchGroup(cfg *release.Config, groupName string) error {
+	members, err := cfg.GroupMembers(groupName)
+	if err != nil {
+		return err
+	}
+	for _, name := range members {
+		rel := cfg.Releases[name]
+		infos, err := release.ListReleases(rel)
+		if err != nil {
+			return fmt.Errorf("release %q: %w", name, err)
+		}
+		if len(infos) == 0 {
+			fmt.Println(colors.Yellow("No releases found in " + rel.ReleasesFolder + " (" + name + ")"))
+			continue
+		}
+		if err := switchOneRelease(rel, infos[0].Name); err != nil {
+			return fmt.Errorf("release %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// runReleaseSwitch выполняет команду prod release switch [target]: показывает
 // список последних релизов (сегодняшние подсвечены белым фоном) и переключает
-// симлинк current_release_folder на выбранный.
+// симлинк current_release_folder на выбранный. Для группы переключаются все
+// её релизы на самые свежие версии. Важная цель требует подтверждения.
 func runReleaseSwitch(args []string) {
 	cfg, err := release.EnsureConfig(".")
 	if err != nil {
 		fmt.Println(colors.Red("release config error: " + err.Error()))
 		return
 	}
-	name, err := selectReleaseName(cfg, argOrEmpty(args))
+	target, err := selectTarget(cfg, argOrEmpty(args))
 	if err != nil {
 		fmt.Println(colors.Red(err.Error()))
 		return
 	}
-	rel := cfg.Releases[name]
+	// Переспрос перед сменой симлинка на важный релиз или группу.
+	if !confirmImportant(cfg, target) {
+		fmt.Println(colors.Yellow("Switch cancelled."))
+		return
+	}
 
+	if target.Kind == release.TargetGroup {
+		if err := switchGroup(cfg, target.Name); err != nil {
+			fmt.Println(colors.Red("switch failed: " + err.Error()))
+		}
+		return
+	}
+
+	rel := cfg.Releases[target.Name]
 	infos, err := release.ListReleases(rel)
 	if err != nil {
 		fmt.Println(colors.Red(err.Error()))
@@ -411,7 +497,7 @@ func runReleaseSwitch(args []string) {
 	current, hasCurrent := release.CurrentRelease(rel)
 	// Сегодняшние релизы подсвечиваем белым задним фоном.
 	todayStyle := color.New(color.BgWhite, color.FgBlack)
-	fmt.Println(colors.Cyan("Recent releases (" + name + "):"))
+	fmt.Println(colors.Cyan("Recent releases (" + target.Name + "):"))
 	for i, r := range recent {
 		label := r.Name
 		if r.IsToday {
@@ -428,39 +514,55 @@ func runReleaseSwitch(args []string) {
 		fmt.Println(colors.Red(err.Error()))
 		return
 	}
-	target := recent[idx].Name
-	if err := release.SwitchRelease(rel, target); err != nil {
+	if err := switchOneRelease(rel, recent[idx].Name); err != nil {
 		fmt.Println(colors.Red("switch failed: " + err.Error()))
-		return
 	}
-	fmt.Println(colors.Green("Switched " + rel.CurrentReleaseLink + " -> " + filepath.Join(rel.ReleasesFolder, target)))
 }
 
 // runReleaseBoth выполняет обе операции по порядку: prepare затем switch
-// на только что созданный релиз.
+// на только что созданные релизы. Для группы обрабатываются все её релизы,
+// а важная цель требует подтверждения перед переключением.
 func runReleaseBoth() {
 	cfg, err := release.EnsureConfig(".")
 	if err != nil {
 		fmt.Println(colors.Red("release config error: " + err.Error()))
 		return
 	}
-	name, err := selectReleaseName(cfg, "")
+	target, err := selectTarget(cfg, "")
 	if err != nil {
 		fmt.Println(colors.Red(err.Error()))
 		return
 	}
-	rel := cfg.Releases[name]
+	// Переспрос относится к шагу switch, поэтому спрашиваем до prepare:
+	// при отмене не создаём лишних папок.
+	if !confirmImportant(cfg, target) {
+		fmt.Println(colors.Yellow("Release cancelled."))
+		return
+	}
 
+	if target.Kind == release.TargetGroup {
+		prepared, err := cfg.PrepareGroup(target.Name, time.Now())
+		if err != nil {
+			fmt.Println(colors.Red("prepare failed: " + err.Error()))
+			return
+		}
+		for _, p := range prepared {
+			if err := switchOneRelease(cfg.Releases[p.Release], p.Name); err != nil {
+				fmt.Println(colors.Red("switch failed: " + err.Error()))
+				return
+			}
+		}
+		return
+	}
+
+	rel := cfg.Releases[target.Name]
 	created, err := release.Prepare(rel, time.Now())
 	if err != nil {
 		fmt.Println(colors.Red("prepare failed: " + err.Error()))
 		return
 	}
 	fmt.Println(colors.Green("Release prepared: " + created))
-
-	if err := release.SwitchRelease(rel, created); err != nil {
+	if err := switchOneRelease(rel, created); err != nil {
 		fmt.Println(colors.Red("switch failed: " + err.Error()))
-		return
 	}
-	fmt.Println(colors.Green("Switched " + rel.CurrentReleaseLink + " -> " + filepath.Join(rel.ReleasesFolder, created)))
 }

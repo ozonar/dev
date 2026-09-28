@@ -30,6 +30,14 @@ type Release struct {
 	// заменяются дефолтными (release- и 2006-01-02_15-04-05).
 	ReleasePrefix     string `yaml:"release_prefix,omitempty"`
 	ReleaseTimeFormat string `yaml:"release_time_format,omitempty"`
+
+	// Groups — имена групп, в которые входит релиз. Группы позволяют
+	// деплоить несколько релизов одним запуском команды.
+	Groups []string `yaml:"groups,omitempty"`
+
+	// Important помечает релиз как опасный для переключения: команда
+	// switch перед сменой симлинка запросит явное подтверждение.
+	Important bool `yaml:"important,omitempty"`
 }
 
 // Config — корневая структура release.yml.
@@ -48,15 +56,24 @@ const defaultTemplate = `# Production release configuration
 # Optional per-release settings (defaults shown):
 #   release_prefix       release-              prefix of release folder names
 #   release_time_format  "2006-01-02_15-04-05" time layout inside the name
+#   groups               []                    group names this release belongs to
+#   important            false                 require explicit confirmation on switch
+#
+# Groups join several releases for a joint deploy: 'prod release' can release
+# the whole group at once. A release marked important asks for confirmation
+# before the switch step.
 releases:
   backend:
     builds_folder: ./builds/backend
     releases_folder: ./releases/backend
     current_release_folder: ./current/backend
+    groups: [web]
   frontend:
     builds_folder: ./builds/frontend
     releases_folder: ./releases/frontend
     current_release_folder: ./current/frontend
+    groups: [web]
+    important: true
 `
 
 // LoadConfig читает release.yml из директории dir и валидирует его.
@@ -85,6 +102,18 @@ func LoadConfig(dir string) (*Config, error) {
 		// иначе релизы нельзя будет отсортировать по дате.
 		if rel.ReleaseTimeFormat != "" && !validTimeFormat(rel.ReleaseTimeFormat) {
 			return nil, fmt.Errorf("release %q: invalid release_time_format %q", name, rel.ReleaseTimeFormat)
+		}
+		// Имена групп должны быть непустыми и уникальными, иначе
+		// принадлежность релиза к группе становится неоднозначной.
+		seen := make(map[string]bool, len(rel.Groups))
+		for _, g := range rel.Groups {
+			if strings.TrimSpace(g) == "" {
+				return nil, fmt.Errorf("release %q: empty group name", name)
+			}
+			if seen[g] {
+				return nil, fmt.Errorf("release %q: duplicate group %q", name, g)
+			}
+			seen[g] = true
 		}
 	}
 	return &cfg, nil
