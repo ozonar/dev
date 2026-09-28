@@ -86,13 +86,19 @@ func runLanguage(language, version string, scope Scope, mode Mode) {
 		if _, isRuntime := prog.(toolchain.Runtime); isRuntime {
 			continue
 		}
+		// golangci-lint запускается из корня Go-модуля (который может лежать
+		// в подпапке проекта), поэтому обрабатывается отдельно.
+		if prog.Name() == "golangci-lint" {
+			runGoLint(manager, prog, scope, mode)
+			continue
+		}
 		args, ok := buildArgs(prog, scope, mode)
 		if !ok {
 			i18n.Yellow("No files for %s in scope. Skipping.", prog.Name())
 			continue
 		}
 		printProgramHeader(prog)
-		if err := runProgram(manager, prog, args); err != nil {
+		if err := runProgram(manager, prog, args, "."); err != nil {
 			i18n.Red("%s finished with error: %v", prog.Name(), err)
 		}
 	}

@@ -11,52 +11,15 @@ import (
 	"dev/internal/toolchain"
 )
 
-// TestBuildArgs_Golangci проверяет построение аргументов golangci-lint.
-func TestBuildArgs_Golangci(t *testing.T) {
+// TestBuildArgs_GolangciGuard проверяет, что buildArgs не обрабатывает
+// golangci-lint: в runLanguage программа маршрутизируется в runGoLint
+// (которому нужен корень Go-модуля), поэтому прямой вызов buildArgs для неё
+// считается ошибкой маршрутизации и возвращает ok=false. Сама логика запуска
+// golangci-lint покрыта тестами goLintRuns/buildGoLintArgs в gomod_test.go.
+func TestBuildArgs_GolangciGuard(t *testing.T) {
 	prog := goLinter(toolchain.NewGo(""))
-
-	// Весь код в dry-run.
-	args, ok := buildArgs(prog, Scope{Name: "all", kind: scopeAll}, ModeDryRun)
-	if !ok {
-		t.Fatal("golangci must run for the all-code scope")
-	}
-	if got := strings.Join(args, " "); got != "run ./..." {
-		t.Errorf("golangci dry-run all args = %q, want %q", got, "run ./...")
-	}
-
-	// Директория с Go-файлом проходит фильтр, директория без — отбрасывается.
-	withGo := filepath.Join(t.TempDir(), "pkg")
-	if err := os.MkdirAll(withGo, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(withGo, "a.go"), []byte("package pkg\n"), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	emptyDir := filepath.Join(t.TempDir(), "nogo")
-
-	scope := Scope{Name: "changed", Dirs: []string{emptyDir, withGo}}
-	args, ok = buildArgs(prog, scope, ModeDryRun)
-	if !ok {
-		t.Fatal("golangci must run when a Go dir exists")
-	}
-	if got, want := strings.Join(args, " "), "run "+withGo; got != want {
-		t.Errorf("golangci dry-run dirs args = %q, want %q", got, want)
-	}
-
-	// Fix-режим.
-	args, ok = buildArgs(prog, scope, ModeFix)
-	if !ok {
-		t.Fatal("golangci must run in fix mode when a Go dir exists")
-	}
-	if got, want := strings.Join(args, " "), "run --fix "+withGo; got != want {
-		t.Errorf("golangci fix args = %q, want %q", got, want)
-	}
-
-	// Если после фильтрации директорий не осталось и объём не полный —
-	// программу запускать не нужно (пункт 5: остановка вместо проверки всего).
-	scopeEmpty := Scope{Name: "changed", Dirs: []string{emptyDir}}
-	if _, ok := buildArgs(prog, scopeEmpty, ModeDryRun); ok {
-		t.Error("golangci must not run when there are no Go dirs in the changed scope")
+	if _, ok := buildArgs(prog, Scope{Name: "all", kind: scopeAll}, ModeDryRun); ok {
+		t.Error("buildArgs must not accept golangci-lint; it is routed to runGoLint")
 	}
 }
 

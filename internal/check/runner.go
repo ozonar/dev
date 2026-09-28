@@ -29,19 +29,12 @@ func buildArgs(prog toolchain.Executable, scope Scope, mode Mode) ([]string, boo
 	var args []string
 	switch prog.Name() {
 	case "golangci-lint":
-		// golangci-lint run [--fix] <dirs>
-		// golangci-lint не принимает файлы из разных директорий одновременно
-		// поэтому передаём уникальные директории изменённых файлов.
-		// Директории без Go-файлов (например корневой "." при изменении README/go.mod)
-		// отфильтровываем: golangci-lint падает с "no go files to analyze".
-		args = append(args, "run")
-		if mode == ModeFix {
-			args = append(args, "--fix")
-		}
-		dirs := goDirArgs(scope.Dirs)
-		if !appendPaths(&args, dirs, scope, "./...") {
-			return nil, false
-		}
+		// golangci-lint обрабатывается отдельно через runGoLint: ему нужна
+		// рабочая директория — корень Go-модуля, который может находиться
+		// в подпапке проекта и не известен здесь. Если buildArgs вызывают
+		// для golangci-lint напрямую, это ошибка маршрутизации: программу
+		// запускать нельзя, иначе она упадёт с "no go files to analyze".
+		return nil, false
 	case "phpstan":
 		// PHPStan не поддерживает автоисправление, поэтому режим fix не влияет.
 		args = append(args, "analyse", "--memory-limit=1G", "--level=5")
@@ -107,17 +100,41 @@ func appendPaths(args *[]string, files []string, scope Scope, all string) bool {
 }
 
 // runProgram запускает одну программу с потоковым выводом stdout/stderr
-// в консоль. Возвращает ошибку, если выполнение завершилось неуспешно.
-func runProgram(manager *toolchain.Manager, prog toolchain.Executable, args []string) error {
+// в консоль. dir — рабочая директория процесса: для линтеров, требующих
+// запуска из корня модуля (golangci-lint), это корень Go-модуля; для
+// остальных — корень проекта ("."). Возвращает ошибку, если выполнение
+// завершилось неуспешно.
+func runProgram(manager *toolchain.Manager, prog toolchain.Executable, args []string, dir string) error {
 	name, cmdArgs := manager.Command(prog, args)
 
 	cmd := exec.Command(name, cmdArgs...)
-	cmd.Dir = "."
+	cmd.Dir = dir
 	// Прямой потоковый вывод в консоль.
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
+}
+
+// runGoLint запускает golangci-lint по корням Go-модулей, найденным в scope.
+// Для каждого модуля выполняется отдельный запуск из его корня с путями,
+// пересчитанными относительно него: golangci-lint работает только внутри
+// своего модуля и не принимает пути извне. Если ни одного модуля не найдено,
+// линтер пропускается с предупреждением (запуск всё равно упал бы с ошибкой
+// "no go files to analyze").
+func runGoLint(manager *toolchain.Manager, prog toolchain.Executable, scope Scope, mode Mode) {
+	runs := goLintRuns(scope)
+	if len(runs) == 0 {
+		i18n.Yellow("No Go module found for Go files in scope. Skipping %s.", prog.Name())
+		return
+	}
+	for _, r := range runs {
+		printProgramHeader(prog)
+		args := buildGoLintArgs(r, mode)
+		if err := runProgram(manager, prog, args, r.Dir); err != nil {
+			i18n.Red("%s finished with error: %v", prog.Name(), err)
+		}
+	}
 }
 
 // printProgramHeader выводит заголовок перед запуском программы.
@@ -153,7 +170,7 @@ func runPhpLint(manager *toolchain.Manager, programs []toolchain.Executable, sco
 	fmt.Println()
 	i18n.Cyan("=== php -l ===")
 	for _, f := range files {
-		if err := runProgram(manager, php, []string{"-l", f}); err != nil {
+		if err := runProgram(manager, php, []string{"-l", f}, "."); err != nil {
 			i18n.Red("php -l %s finished with error: %v", f, err)
 		}
 	}
