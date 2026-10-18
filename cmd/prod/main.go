@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -189,9 +190,35 @@ You will be prompted to choose installation directory: /usr/local/bin (default) 
 	},
 }
 
+// servicePeriod — период анализа падений служб (по умолчанию 6 часов).
+var servicePeriod time.Duration
+
+var serviceCmd = &cobra.Command{
+	Use:     "service",
+	Aliases: []string{"services", "svc"},
+	Short:   "Show systemd services status and logs",
+	Long: `Shows user systemd services with color-coded state (red — failed/stopped,
+yellow — crashed in the period, white — restarted in the period, green — OK),
+then lists currently failed services and services that crashed in the given
+period. Finally offers to show logs for any of the problem services.
+
+Flags:
+  --since, -s   period to look back for crashes (e.g. 6h, 30m, 2h30m).
+                Default: 6h
+
+Examples:
+  prod service
+  prod service --since 2h
+  prod service -s 30m`,
+	Run: func(cmd *cobra.Command, args []string) {
+		runService(servicePeriod)
+	},
+}
+
 func main() {
 	statCmd.Flags().BoolVarP(&statAll, "all", "a", false, "Show full report with all categories")
 	releaseCmd.PersistentFlags().IntVarP(&releaseLines, "lines", "l", 5, "Number of recent releases to show")
+	serviceCmd.Flags().DurationVarP(&servicePeriod, "since", "s", 6*time.Hour, "Period to look back for crashes (e.g. 6h, 30m)")
 	rootCmd.AddCommand(statCmd)
 	rootCmd.AddCommand(detailCmd)
 	rootCmd.AddCommand(cascadeCmd)
@@ -202,6 +229,7 @@ func main() {
 	rootCmd.AddCommand(virusCmd)
 	rootCmd.AddCommand(selfUpdateCmd)
 	rootCmd.AddCommand(installCmd)
+	rootCmd.AddCommand(serviceCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -229,6 +257,47 @@ func runInstall(file string) {
 		return
 	}
 	fmt.Println(colors.Green("Installation successful."))
+}
+
+// runService выполняет команду service: собирает и показывает отчёт о службах,
+// затем предлагает посмотреть логи проблемных служб.
+func runService(period time.Duration) {
+	rep := prod.CollectServices(period)
+	prod.RenderServices(rep, period)
+	offerServiceLogs(rep)
+}
+
+// offerServiceLogs показывает объединённый список проблемных служб (упавшие
+// сейчас + падавшие за период) и ждёт выбора номера. Пустой ввод или
+// неверный номер — выход из программы. После выбора показывает последние
+// логи выбранной службы.
+func offerServiceLogs(rep *prod.ServiceReport) {
+	problems := rep.ProblemServices()
+	if len(problems) == 0 {
+		return
+	}
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println(colors.Gray("=============================================="))
+	fmt.Println("Show logs?")
+	for i, name := range problems {
+		fmt.Printf("  %d. %s\n", i+1, name)
+	}
+	fmt.Print(colors.Cyan("Select [0 to exit]: "))
+
+	line, _ := reader.ReadString('\n')
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	idx, err := strconv.Atoi(line)
+	if err != nil || idx < 1 || idx > len(problems) {
+		return
+	}
+	name := problems[idx-1]
+	fmt.Println(colors.Cyan("Logs for " + name + ":"))
+	for _, l := range prod.ServiceLogs(name, 30) {
+		fmt.Println("  " + l)
+	}
 }
 
 // collectAndSave собирает отчёт (с учётом предыдущего снапшота) и сохраняет.
