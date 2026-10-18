@@ -34,6 +34,11 @@ jobs:
             goarch: arm64
             artifact_name: dev-darwin-arm64
             output_name: dev
+          - os: ubuntu-latest
+            goos: android
+            goarch: arm64
+            artifact_name: dev-android-arm64
+            output_name: dev
 
     steps:
       - name: Checkout code
@@ -100,6 +105,12 @@ jobs:
           GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./cmd/dev
           GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/dev
 
+      # Кросс-проверка компиляции под Android (arm64): ловит поломки
+      # платформенных адаптеров в обычных PR.
+      - name: Cross-build check (android)
+        run: |
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/dev
+
       # Vet компилирует тестовые файлы, поэтому проверяет и darwin-тесты.
       - name: Cross-vet tests (darwin)
         run: |
@@ -159,4 +170,14 @@ jobs:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: artifacts/dev-darwin-arm64/dev
           asset_name: dev-darwin-arm64
+          asset_content_type: application/octet-stream
+
+      - name: Upload Android arm64 executable
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: artifacts/dev-android-arm64/dev
+          asset_name: dev-android-arm64
           asset_content_type: application/octet-stream
