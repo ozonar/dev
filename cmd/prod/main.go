@@ -215,6 +215,18 @@ Examples:
 	},
 }
 
+var logsCmd = &cobra.Command{
+	Use:     "logs",
+	Aliases: []string{"log"},
+	Short:   "Show and open server logs",
+	Long: `Shows a list of log sources: the current folder,
+user systemd services and core services. Selecting a service shows its
+journal plus standard log files. Logs open in lnav, journal — via journalctl in lnav.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		prod.RunLogs()
+	},
+}
+
 func main() {
 	statCmd.Flags().BoolVarP(&statAll, "all", "a", false, "Show full report with all categories")
 	releaseCmd.PersistentFlags().IntVarP(&releaseLines, "lines", "l", 5, "Number of recent releases to show")
@@ -230,6 +242,7 @@ func main() {
 	rootCmd.AddCommand(selfUpdateCmd)
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(serviceCmd)
+	rootCmd.AddCommand(logsCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
