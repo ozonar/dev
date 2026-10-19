@@ -113,6 +113,19 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - LLM config (`~/dev-config/main.conf` or `/etc/dev-command/main.conf`) so `prod llm` works right away
   - Supports `user@host` or just `ip` formats (SSH key auth only)
 
+- **`prod service [--since 6h]`** – Show systemd services status:
+  - User services (from `/etc/systemd/system`) and core services (nginx, php-fpm, postgresql, redis, etc., shown only if present in the system)
+  - Color-coded state: red (failed/stopped), yellow (crashed in the period), white (restarted in the period), green (OK), with uptime in parentheses
+  - Currently failed services (`systemctl --failed`)
+  - Services that crashed in the period (journalctl error scan)
+  - Interactive selection of a problem service to show its recent logs
+  - `-s/--since` sets the look-back period (default: 6h, e.g. `2h`, `30m`)
+
+- **`prod logs`** – Show and open server logs:
+  - Numbered list: current folder (default), user services, core services
+  - Selecting a service shows its journal plus standard log files (core: nginx access, postgres slow, etc.) or logs in the service working directory (user)
+  - Files open in `lnav`; journal opens as a static snapshot of the last 200 lines in `lnav`
+
 - **`prod install [file]`** – Install the prod tool (or a specified executable) to a system directory (`/usr/local/bin`, `~/bin`, etc.) with interactive directory selection.
 
 - **`prod self-update`** – Download and install the latest version of prod from GitHub releases.
@@ -178,6 +191,9 @@ prod                    # production server health report
 prod release            # prepare a new release and switch to it
 prod release prepare    # copy build artifacts to releases/release-<datetime>
 prod release switch -l 5  # switch the current release symlink
+prod service            # show systemd services status
+prod service -s 24h      # show services with a 2-hour crash window
+prod logs               # show and open server logs
 prod virus user@host    # copy prod to remote server
 prod install            # install prod to system
 prod self-update        # update prod to latest version
