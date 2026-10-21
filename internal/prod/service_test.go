@@ -26,6 +26,30 @@ func TestParseUnitFileLines(t *testing.T) {
 	}
 }
 
+// TestParseUnitFileLinesBullet проверяет, что буллет "●" из systemctl --failed
+// не попадает в имя юнита.
+func TestParseUnitFileLinesBullet(t *testing.T) {
+	out := "● grimlock-grpc.service\tloaded\tfailed\tfailed\tGrimlock gRPC\n" +
+		"● iscsi.service\tloaded\tfailed\tfailed\tiscsi\n"
+	got := parseUnitFileLines(out)
+	want := []string{"grimlock-grpc.service", "iscsi.service"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ожидался %v, получено %v", want, got)
+	}
+}
+
+// TestParseUnitFileLinesBulletNoService проверяет, что буллет убирается и для
+// строк без суффикса ".service" (например, вывод docker ps).
+func TestParseUnitFileLinesBulletNoService(t *testing.T) {
+	out := "● my-container\n" +
+		"plain-container\n"
+	got := parseUnitFileLines(out)
+	want := []string{"my-container", "plain-container"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ожидался %v, получено %v", want, got)
+	}
+}
+
 // TestTrimServiceSuffix проверяет удаление суффикса ".service".
 func TestTrimServiceSuffix(t *testing.T) {
 	cases := []struct {

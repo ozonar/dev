@@ -118,18 +118,20 @@ func discoverPhpFpmServices() []string {
 	return names
 }
 
-// parseUnitFileLines извлекает имена юнитов из вывода systemctl list-unit-files
-// (первое поле каждой непустой строки).
+// parseUnitFileLines извлекает имена юнитов из вывода systemctl/docker
+// (по одной строке на юнит). Перед разбором убираются юникод-маркеры "●",
+// которые systemctl --failed выводит перед именами упавших служб.
 func parseUnitFileLines(out string) []string {
+	out = strings.ReplaceAll(out, "●", "")
 	var names []string
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		f := strings.Fields(line)
-		if len(f) > 0 {
-			names = append(names, f[0])
+		fields := strings.Fields(line)
+		if len(fields) > 0 {
+			names = append(names, fields[0])
 		}
 	}
 	return names
