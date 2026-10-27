@@ -512,7 +512,9 @@ func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint f
 	var input string
 	fmt.Println()
 	i18n.Printf("Select [%d]: ", defaultIdx+1)
-	fmt.Fscanln(os.Stdin, &input)
+	if _, err := fmt.Fscanln(os.Stdin, &input); err != nil {
+		input = ""
+	}
 	input = strings.TrimSpace(input)
 
 	idx := defaultIdx
