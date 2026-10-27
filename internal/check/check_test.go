@@ -292,6 +292,28 @@ func TestGetChanges(t *testing.T) {
 	}
 }
 
+// TestMakeScope_FileChangesOnlyForScopeFiles проверяет, что полное содержимое
+// файлов вычисляется только для вида "изменённые файлы": остальным видам
+// на ревью уходит текст изменений, поэтому файлы не читаются (это избавляет
+// меню выбора объёма от лишней работы и от промежуточных сообщений о
+// пропущенных бинарных файлах).
+func TestMakeScope_FileChangesOnlyForScopeFiles(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "main.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	changed := makeScope(scopeChanged, "changed", []string{file}, "diff")
+	if changed.FileChanges != "" {
+		t.Errorf("makeScope(scopeChanged).FileChanges = %q, want empty", changed.FileChanges)
+	}
+
+	files := makeScope(scopeFiles, "files", []string{file}, "diff")
+	if !strings.Contains(files.FileChanges, "main.go") {
+		t.Errorf("makeScope(scopeFiles).FileChanges should contain file, got: %q", files.FileChanges)
+	}
+}
+
 // TestGoDirArgs проверяет, что goDirArgs отбрасывает директории без Go-файлов
 // (включая корневую "." и несуществующие), оставляя только Go-пакеты.
 func TestGoDirArgs(t *testing.T) {

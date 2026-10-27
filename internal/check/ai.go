@@ -74,9 +74,7 @@ func readScopeFiles(files []string) string {
 			continue
 		}
 		if info.Size() > ai.MaxReviewFileSize {
-			// Файл слишком большой — исключаем из ревью целиком, не читая его.
-			i18n.Yellow("Skipping file %s: size %d exceeds limit of %d bytes",
-				f, info.Size(), ai.MaxReviewFileSize)
+			// Слишком большой файл исключаем ещё до чтения.
 			continue
 		}
 
@@ -87,7 +85,6 @@ func readScopeFiles(files []string) string {
 		}
 		if strings.ContainsRune(string(data), 0) {
 			// Признак бинарного файла — пропускаем.
-			i18n.Yellow("Skipping binary file: %s", f)
 			continue
 		}
 

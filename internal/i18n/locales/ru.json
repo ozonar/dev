@@ -307,8 +307,6 @@
   "Nothing to send. Aborting review.": "Отправлять нечего. Ревью прервано.",
   "Code exceeds %d characters, truncating.": "Код превышает %d символов, обрезается.",
   "AI review failed: %v": "Сбой AI-ревью: %v",
-  "Skipping file %s: size %d exceeds limit of %d bytes": "Пропуск файла %s: размер %d превышает лимит %d байт",
-  "Skipping binary file: %s": "Пропуск бинарного файла: %s",
 
   "=== internal/migrate ===": "",
   "migrations for framework %s are not supported": "Миграции для фреймворка %s не поддерживаются",

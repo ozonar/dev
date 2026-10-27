@@ -67,3 +67,29 @@ func TestReadScopeFiles_MissingFile(t *testing.T) {
 		t.Errorf("missing file should be skipped, got: %q", text)
 	}
 }
+
+// TestReadScopeFiles_SkipsBinary проверяет, что бинарный файл (содержащий
+// NUL-байт) исключается из текста ревью, а текстовый файл рядом остаётся.
+func TestReadScopeFiles_SkipsBinary(t *testing.T) {
+	tmp := t.TempDir()
+
+	textFile := filepath.Join(tmp, "main.go")
+	if err := os.WriteFile(textFile, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write text file: %v", err)
+	}
+
+	// Сигнатура PNG содержит NUL-байты — это признак бинарного файла.
+	binaryFile := filepath.Join(tmp, "icon.png")
+	if err := os.WriteFile(binaryFile, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00}, 0o644); err != nil {
+		t.Fatalf("write binary file: %v", err)
+	}
+
+	text := readScopeFiles([]string{textFile, binaryFile})
+
+	if !strings.Contains(text, "main.go") {
+		t.Errorf("text file should be included in review text, got: %q", text)
+	}
+	if strings.Contains(text, "icon.png") {
+		t.Errorf("binary file should be skipped from review text, got: %q", text)
+	}
+}

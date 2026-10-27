@@ -145,13 +145,18 @@ func buildScope(kind scopeKind) Scope {
 // сформированным с учётом удалений и остаётся нетронутым.
 func makeScope(kind scopeKind, name string, files []string, changes string) Scope {
 	existing := existingFiles(files)
+
+	var fileChanges string
+	if kind == scopeFiles {
+		fileChanges = readScopeFiles(existing)
+	}
 	return Scope{
 		kind:        kind,
 		Name:        name,
 		Files:       existing,
 		Dirs:        uniqueDirs(existing),
 		Changes:     changes,
-		FileChanges: readScopeFiles(existing),
+		FileChanges: fileChanges,
 	}
 }
 
