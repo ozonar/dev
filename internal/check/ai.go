@@ -91,7 +91,7 @@ func readScopeFiles(files []string) string {
 		if sb.Len() > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString(fmt.Sprintf("===== %s =====\n", filepath.ToSlash(f)))
+		fmt.Fprintf(&sb, "===== %s =====\n", filepath.ToSlash(f))
 		sb.Write(data)
 	}
 

@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -104,7 +105,12 @@ func defaultScopeKind() scopeKind {
 
 // buildScope формирует Scope для заданного вида. Файлы из папок вендоров
 // исключаются как из списка файлов, так и из текста diff.
+// Вне git история изменений недоступна, поэтому любой вид объёма означает
+// весь код: иначе проверять было бы нечего.
 func buildScope(kind scopeKind) Scope {
+	if !hasGit() {
+		kind = scopeAll
+	}
 	switch kind {
 	case scopeChanged:
 		files := changedFiles()
@@ -390,8 +396,11 @@ func filterVendor(files []string) []string {
 // projectFiles возвращает список всех файлов проекта (отслеживаемых и
 // untracked), исключая каталоги вендоров через filterVendor. Используется
 // для полной проверки (scopeAll), когда нужно проверить весь код, а не
-// только изменения. Если git недоступен, возвращается пустой список.
+// только изменения. Вне git список собирается обходом текущей директории
 func projectFiles() []string {
+	if !hasGit() {
+		return walkProjectFiles(".")
+	}
 	var result []string
 	if out, err := gitOutput("ls-files"); err == nil {
 		result = append(result, lines(out)...)
@@ -400,6 +409,37 @@ func projectFiles() []string {
 		result = append(result, lines(out)...)
 	}
 	return uniqueSorted(filterVendor(result))
+}
+
+// walkProjectFiles собирает файлы проекта обходом файловой системы от root.
+// Вендорские и служебные каталоги (VCS, IDE) пропускаются целиком: их файлы
+// не относятся к коду проекта. Недоступные элементы пропускаются, чтобы одна
+// ошибка доступа не прерывала обход.
+func walkProjectFiles(root string) []string {
+	// Каталоги, обход которых не нужен. Вендоры исключаются по тем же именам,
+	// что и в filterVendor, чтобы обход не зависел от отдельного списка.
+	skip := map[string]bool{
+		".git": true, ".hg": true, ".svn": true, ".idea": true, ".vscode": true,
+	}
+	for name := range vendorDirNames {
+		skip[name] = true
+	}
+
+	var files []string
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if path != root && skip[d.Name()] {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		files = append(files, path)
+		return nil
+	})
+	return uniqueSorted(filterVendor(files))
 }
 
 // commitSubjectLimit — максимальная длина отображаемого текста коммита.
@@ -485,9 +525,10 @@ func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint f
 		switch opt.kind {
 		case scopeCommit1, scopeCommit2, scopeCommit3:
 			n := 1
-			if opt.kind == scopeCommit2 {
+			switch opt.kind {
+			case scopeCommit2:
 				n = 2
-			} else if opt.kind == scopeCommit3 {
+			case scopeCommit3:
 				n = 3
 			}
 			names := latestCommitNames(n)
@@ -541,7 +582,11 @@ func scopeSizeHint(kind scopeKind) string {
 	if kind == scopeAll {
 		return ""
 	}
-	n := len(buildScope(kind).GetChanges())
+	scope := buildScope(kind)
+	if scope.kind == scopeAll {
+		return ""
+	}
+	n := len(scope.GetChanges())
 	if n <= 0 {
 		return ""
 	}
@@ -555,7 +600,11 @@ func scopeFileHint(kind scopeKind) string {
 	if kind == scopeAll {
 		return ""
 	}
-	n := len(buildScope(kind).Files)
+	scope := buildScope(kind)
+	if scope.kind == scopeAll {
+		return ""
+	}
+	n := len(scope.Files)
 	if n <= 0 {
 		return ""
 	}

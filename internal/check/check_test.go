@@ -280,6 +280,116 @@ func TestScopeConstructors(t *testing.T) {
 	}
 }
 
+// TestWalkProjectFiles проверяет обход файловой системы: файлы проекта
+// собираются, а вендорские и служебные каталоги (VCS, IDE) пропускаются.
+func TestWalkProjectFiles(t *testing.T) {
+	tmp := t.TempDir()
+	writeGoFile(t, filepath.Join(tmp, "main.go"))
+	writeGoFile(t, filepath.Join(tmp, "internal", "a.go"))
+	writeGoFile(t, filepath.Join(tmp, "vendor", "dep", "b.go"))
+	writeGoFile(t, filepath.Join(tmp, "node_modules", "pkg", "c.js"))
+	writeGoFile(t, filepath.Join(tmp, ".git", "hooks", "x.go"))
+
+	got := walkProjectFiles(tmp)
+	want := []string{
+		filepath.Join(tmp, "internal", "a.go"),
+		filepath.Join(tmp, "main.go"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("walkProjectFiles() = %v, want %v", got, want)
+	}
+}
+
+// TestProjectFiles_NoGit проверяет, что вне git полный объём собирает файлы
+// обходом файловой системы, а не возвращает пустой список.
+func TestProjectFiles_NoGit(t *testing.T) {
+	tmp := t.TempDir()
+	// Запрещаем git подниматься выше временной директории: результат не
+	// зависит от того, лежит ли сама временная папка внутри репозитория.
+	t.Setenv("GIT_CEILING_DIRECTORIES", tmp)
+	writeGoFile(t, filepath.Join(tmp, "main.go"))
+	writeGoFile(t, filepath.Join(tmp, "internal", "a.go"))
+
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(old) }()
+
+	got := projectFiles()
+	want := []string{"internal/a.go", "main.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("projectFiles(no git) = %v, want %v", got, want)
+	}
+}
+
+// TestScopeAll_NoGit проверяет, что полный объём вне git находит Go-модуль,
+// поэтому golangci-lint запускается, а не пропускается.
+func TestScopeAll_NoGit(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", tmp)
+	makeModule(t, tmp)
+	writeGoFile(t, filepath.Join(tmp, "main.go"))
+
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(old) }()
+
+	scope := ScopeAll()
+	if len(scope.Files) == 0 {
+		t.Fatal("ScopeAll() has no files outside git")
+	}
+	runs := goLintRuns(scope)
+	if len(runs) != 1 || runs[0].Dir != tmp {
+		t.Errorf("goLintRuns(ScopeAll outside git) = %+v, want one run in %q", runs, tmp)
+	}
+}
+
+// TestBuildScope_NoGit проверяет, что вне git любой вид объёма приводится
+// к полному коду: история изменений без репозитория недоступна.
+func TestBuildScope_NoGit(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", tmp)
+	writeGoFile(t, filepath.Join(tmp, "main.go"))
+
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(old) }()
+
+	kinds := []scopeKind{scopeChanged, scopeFiles, scopeCommit1, scopeMaster, scopeDevelop}
+	for _, kind := range kinds {
+		scope := buildScope(kind)
+		if scope.kind != scopeAll {
+			t.Errorf("buildScope(kind=%d) outside git kind = %d, want scopeAll", kind, scope.kind)
+		}
+		if len(scope.Files) == 0 {
+			t.Errorf("buildScope(kind=%d) outside git has no files", kind)
+		}
+	}
+
+	// Подсказки меню не должны показывать размер для объёма, который вне git
+	// стал полным.
+	if got := scopeFileHint(scopeChanged); got != "" {
+		t.Errorf("scopeFileHint(scopeChanged) outside git = %q, want empty", got)
+	}
+	if got := scopeSizeHint(scopeChanged); got != "" {
+		t.Errorf("scopeSizeHint(scopeChanged) outside git = %q, want empty", got)
+	}
+}
+
 // TestGetChanges проверяет, что GetChanges возвращает нужный текст:
 // для изменённых файлов — полный код файлов, для остальных — diff.
 func TestGetChanges(t *testing.T) {
