@@ -319,7 +319,7 @@
   "Running go migrations...": "Запуск Go-миграций...",
   "migrate utility not found. Install: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest": "Утилита migrate не найдена. Установка: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest",
   "migration directory not found. Check for migrations, db/migrations or internal/migrations folder": "Директория миграций не найдена. Проверьте папки migrations, db/migrations или internal/migrations",
-  "Using default DSN: %s. Set DATABASE_URL environment variable to change.": "Используется DSN по умолчанию: %s. Задайте переменную окружения DATABASE_URL для изменения.",
+  "database not found: DATABASE_URL environment variable is not set": "База данных не найдена: переменная окружения DATABASE_URL не задана",
   "Running Node.js migrations...": "Запуск миграций Node.js...",
   "could not find migration tool (knex, typeorm) or script in package.json": "Не удалось найти инструмент миграций (knex, typeorm) или скрипт в package.json",
   "Creating Laravel migration: %s": "Создание миграции Laravel: %s",

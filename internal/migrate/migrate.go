@@ -127,11 +127,11 @@ func runGoMigrateMigrations() error {
 		return errors.New(i18n.T("migration directory not found. Check for migrations, db/migrations or internal/migrations folder"))
 	}
 
-	// Получаем DSN из переменных окружения
+	// DSN берём только из окружения: без него невозможно определить БД,
+	// поэтому миграции не запускаются.
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://localhost:5432/db?sslmode=disable"
-		i18n.Yellow("Using default DSN: %s. Set DATABASE_URL environment variable to change.", dsn)
+		return errors.New(i18n.T("database not found: DATABASE_URL environment variable is not set"))
 	}
 
 	cmd := exec.Command("migrate", "-path", migrationDir, "-database", dsn, "up")
