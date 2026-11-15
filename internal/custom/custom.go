@@ -57,16 +57,34 @@ type Config struct {
 	Commands map[string]Command `yaml:"commands"`
 }
 
-// resolvePath заменяет префикс "~/" на домашнюю директорию пользователя.
+// defaultConfigTemplate — содержимое custom.yml, создаваемое при первом
+// редактировании. Шаблон обязан быть валидным YAML: в отступах допустимы
+// только пробелы.
+const defaultConfigTemplate = `# dev custom commands
+#
+# Available variables: $(current_dir), $(language), $(framework).
+# The path field restricts a command: it runs only when the current directory
+# is inside the given path (empty means no restriction).
+
+commands:
+  example:
+    subcommands:
+      - echo "Hello from $(current_dir) [$(language)/$(framework)]"
+`
+
+// resolvePath заменяет "~" и префикс "~/" на домашнюю директорию пользователя.
 func resolvePath(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return path
-		}
-		return filepath.Join(home, path[2:])
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path
 	}
-	return path
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if path == "~" {
+		return home
+	}
+	return filepath.Join(home, path[2:])
 }
 
 // ConfigFilePath возвращает абсолютный путь к файлу custom.yml.
@@ -242,23 +260,7 @@ func Edit() error {
 
 	// Создаём файл с шаблоном, если он не существует.
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		defaultCfg := `# dev custom commands
-#
-# Глобальные команды хранятся здесь (~/dev-command/custom.yml).
-# Локальные команды проекта можно положить в файл .custom в корне проекта —
-# они будут доступны только при запуске dev из этого каталога и переопределяют
-# глобальные команды с теми же именами.
-#
-# Доступные переменные: $(current_dir), $(language), $(framework).
-# Поле path ограничивает команду: она выполняется только когда текущая
-# директория находится внутри указанного пути (пусто — без ограничений).
-
-commands:
-		example:
-		  subcommands:
-		    - echo "Hello from $(current_dir) [$(language)/$(framework)]"
-`
-		if err := os.WriteFile(path, []byte(defaultCfg), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(defaultConfigTemplate), 0644); err != nil {
 			return fmt.Errorf(i18n.T("failed to create default config: %w"), err)
 		}
 		i18n.Yellow("Created default config at %s", path)

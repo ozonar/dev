@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // testContext возвращает контекст для тестов.
@@ -340,4 +342,35 @@ func TestNamesForFiltersByPath(t *testing.T) {
 func NamesFor(t *testing.T, cfg *Config, ctx Context) []string {
 	t.Helper()
 	return cfg.NamesFor(ctx)
+}
+
+func TestDefaultConfigTemplateIsValidYAML(t *testing.T) {
+	var cfg Config
+	if err := yaml.Unmarshal([]byte(defaultConfigTemplate), &cfg); err != nil {
+		t.Fatalf("defaultConfigTemplate is not valid YAML: %v", err)
+	}
+	example, ok := cfg.Commands["example"]
+	if !ok {
+		t.Fatal("defaultConfigTemplate has no 'example' command")
+	}
+	if len(example.Subcommands) != 1 {
+		t.Fatalf("defaultConfigTemplate example subcommands = %v, want one", example.Subcommands)
+	}
+}
+
+func TestResolvePathTilde(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if got := resolvePath("~"); got != home {
+		t.Fatalf("resolvePath(~) = %q, want %q", got, home)
+	}
+	want := filepath.Join(home, "projects", "app")
+	if got := resolvePath("~/projects/app"); got != want {
+		t.Fatalf("resolvePath(~/projects/app) = %q, want %q", got, want)
+	}
+	// Пути без тильды возвращаются без изменений.
+	if got := resolvePath("./backend"); got != "./backend" {
+		t.Fatalf("resolvePath(./backend) = %q, want unchanged", got)
+	}
 }
