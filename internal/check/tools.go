@@ -91,7 +91,7 @@ func programsFor(language, version string) ([]toolchain.Executable, error) {
 // goLinter описывает golangci-lint.
 // Скачивается как tar.gz с GitHub releases (бинарник под ОС/архитектуру).
 func goLinter(goRT toolchain.Executable) toolchain.Executable {
-	const version = "1.61.0"
+	const version = "2.15.0"
 	binary := fmt.Sprintf("golangci-lint-%s-%s-%s/golangci-lint", version, runtime.GOOS, runtime.GOARCH)
 	url := fmt.Sprintf("https://github.com/golangci/golangci-lint/releases/download/v%s/golangci-lint-%s-%s-%s.tar.gz", version, version, runtime.GOOS, runtime.GOARCH)
 	return toolchain.NewProgram("golangci-lint", version, binary, url, "tar.gz", "{golangci-lint}", goRT)

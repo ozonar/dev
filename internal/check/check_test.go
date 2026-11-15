@@ -123,6 +123,19 @@ func TestProgramsFor(t *testing.T) {
 	}
 }
 
+// TestGoLinterVersion фиксирует версию golangci-lint: она должна быть собрана
+// с Go не ниже целевой версии проектов, иначе линтер завершается ошибкой
+// несовместимости версий. Версия 2.15.0 собрана с go1.27.
+func TestGoLinterVersion(t *testing.T) {
+	prog := goLinter(toolchain.NewGo(""))
+	if prog.Version() != "2.15.0" {
+		t.Errorf("golangci-lint version = %q, want 2.15.0", prog.Version())
+	}
+	if !strings.Contains(prog.URL(), "/v2.15.0/") {
+		t.Errorf("golangci-lint URL = %q, want release v2.15.0", prog.URL())
+	}
+}
+
 // TestBiomeLinter проверяет описание Biome: одиночный файл (без архива),
 // исполняемый файл и корректный URL.
 func TestBiomeLinter(t *testing.T) {
