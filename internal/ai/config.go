@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -197,7 +198,7 @@ func InteractiveEditConfig() error {
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(strings.ToLower(input))
 	if input == "n" || input == "no" {
-		return fmt.Errorf(i18n.T("config required"))
+		return errors.New(i18n.T("config required"))
 	}
 	return EditConfig()
 }

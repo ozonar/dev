@@ -12,6 +12,7 @@ package debug
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -71,7 +72,7 @@ func runGo(opts Options) error {
 		return fmt.Errorf(i18n.T("error finding main files: %v"), err)
 	}
 	if len(mainFiles) == 0 {
-		return fmt.Errorf(i18n.T("no Go main files found"))
+		return errors.New(i18n.T("no Go main files found"))
 	}
 	target := chooseMain(mainFiles)
 

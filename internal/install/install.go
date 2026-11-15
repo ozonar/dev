@@ -2,6 +2,7 @@ package install
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -85,7 +86,7 @@ func checkPathDirs() ([]string, error) {
 		allDirs = append(allDirs, dir)
 	}
 	if len(allDirs) == 0 {
-		return nil, fmt.Errorf(i18n.T("PATH variable is empty"))
+		return nil, errors.New(i18n.T("PATH variable is empty"))
 	}
 	return allDirs, nil
 }
@@ -114,7 +115,7 @@ func chooseInstallDir() (string, error) {
 	}
 	idx := 0
 	if n, err := fmt.Sscanf(input, "%d", &idx); err != nil || n != 1 || idx < 1 || idx > len(candidates) {
-		return "", fmt.Errorf(i18n.T("invalid selection"))
+		return "", errors.New(i18n.T("invalid selection"))
 	}
 	return candidates[idx-1], nil
 }

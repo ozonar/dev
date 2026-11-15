@@ -5,6 +5,7 @@ package prepare
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -174,7 +175,7 @@ func buildActions(framework, language string) []Action {
 				Status:      StatusPending,
 				Run: func() error {
 					if pipCmd == "" {
-						return fmt.Errorf(i18n.T("pip not found. Activate a virtual environment or install pip"))
+						return errors.New(i18n.T("pip not found. Activate a virtual environment or install pip"))
 					}
 					cmd := exec.Command(pipCmd, "install", "-r", "requirements.txt")
 					cmd.Stdout = os.Stdout
@@ -557,7 +558,7 @@ func copyEnvFiles(sources []string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf(i18n.T("no .env source file found"))
+	return errors.New(i18n.T("no .env source file found"))
 }
 
 // parseEnvVariables читает файл формата .env и возвращает карту переменных

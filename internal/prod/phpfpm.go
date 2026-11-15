@@ -63,9 +63,7 @@ func discoverFPMConfig() string {
 	}
 	// Поиск по glob для учёта прочих версий.
 	matches, _ := filepath.Glob("/etc/php/*/fpm/pool.d/*.conf")
-	for _, m := range matches {
-		candidates = append(candidates, m)
-	}
+	candidates = append(candidates, matches...)
 	for _, c := range candidates {
 		if procExists(c) {
 			return c

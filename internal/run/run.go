@@ -3,6 +3,7 @@ package run
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -61,7 +62,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			}
 			return runAndHandlePortError(runtimePath, args, port)
 		}
-		return fmt.Errorf(i18n.T("artisan not found"))
+		return errors.New(i18n.T("artisan not found"))
 	case "yii":
 		addr := fmt.Sprintf("localhost:%d", port)
 		args := append([]string{}, opts.ExtraPhpArgs...)
@@ -82,7 +83,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			return fmt.Errorf(i18n.T("error finding main files: %v"), err)
 		}
 		if len(mainFiles) == 0 {
-			return fmt.Errorf(i18n.T("no Go main files found"))
+			return errors.New(i18n.T("no Go main files found"))
 		}
 		var target string
 		if len(mainFiles) == 1 {
@@ -103,7 +104,7 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 			} else {
 				idx, err := strconv.Atoi(input)
 				if err != nil || idx < 1 || idx > len(mainFiles) {
-					return fmt.Errorf(i18n.T("invalid selection"))
+					return errors.New(i18n.T("invalid selection"))
 				}
 				target = mainFiles[idx-1]
 			}
@@ -155,13 +156,13 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 func chooseNpmScript(pkgPath string) (string, error) {
 	data, err := os.ReadFile(pkgPath)
 	if err != nil {
-		return "", fmt.Errorf(i18n.T("package.json not found"))
+		return "", errors.New(i18n.T("package.json not found"))
 	}
 	var pkg struct {
 		Scripts map[string]string `json:"scripts"`
 	}
 	if err := json.Unmarshal(data, &pkg); err != nil || len(pkg.Scripts) == 0 {
-		return "", fmt.Errorf(i18n.T("No npm scripts found in package.json"))
+		return "", errors.New(i18n.T("No npm scripts found in package.json"))
 	}
 
 	names := make([]string, 0, len(pkg.Scripts))

@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -109,7 +110,7 @@ func runGoMigrateMigrations() error {
 	i18n.Cyan("Running go migrations...")
 	// Проверяем наличие утилиты migrate
 	if _, err := exec.LookPath("migrate"); err != nil {
-		return fmt.Errorf(i18n.T("migrate utility not found. Install: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"))
+		return errors.New(i18n.T("migrate utility not found. Install: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"))
 	}
 
 	// Ищем файлы миграций в стандартных директориях
@@ -123,7 +124,7 @@ func runGoMigrateMigrations() error {
 	}
 
 	if migrationDir == "" {
-		return fmt.Errorf(i18n.T("migration directory not found. Check for migrations, db/migrations or internal/migrations folder"))
+		return errors.New(i18n.T("migration directory not found. Check for migrations, db/migrations or internal/migrations folder"))
 	}
 
 	// Получаем DSN из переменных окружения
@@ -167,7 +168,7 @@ func runNodeMigrations() error {
 		return cmd.Run()
 	}
 
-	return fmt.Errorf(i18n.T("could not find migration tool (knex, typeorm) or script in package.json"))
+	return errors.New(i18n.T("could not find migration tool (knex, typeorm) or script in package.json"))
 }
 
 // createLaravelMigration создает новую миграцию Laravel

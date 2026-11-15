@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -106,7 +107,7 @@ func RunMigrationStatus() error {
 	}
 
 	if dbInfo == nil {
-		return fmt.Errorf(i18n.T("no PostgreSQL or MySQL database found in project configuration"))
+		return errors.New(i18n.T("no PostgreSQL or MySQL database found in project configuration"))
 	}
 
 	status := &MigrationStatus{}
@@ -234,9 +235,10 @@ func findDBProcess(status *MigrationStatus, dbInfo *detector.DatabaseInfo) {
 	defer database.Close()
 	database.SetConnMaxLifetime(5 * time.Second)
 
-	if dbInfo.Type == "postgresql" {
+	switch dbInfo.Type {
+	case "postgresql":
 		findPostgresDBProcess(status, database)
-	} else if dbInfo.Type == "mysql" {
+	case "mysql":
 		findMySQLDBProcess(status, database)
 	}
 }
@@ -441,9 +443,10 @@ func analyzeLocks(status *MigrationStatus, dbInfo *detector.DatabaseInfo) {
 	defer database.Close()
 	database.SetConnMaxLifetime(5 * time.Second)
 
-	if dbInfo.Type == "postgresql" {
+	switch dbInfo.Type {
+	case "postgresql":
 		analyzePostgresLocks(status, database)
-	} else if dbInfo.Type == "mysql" {
+	case "mysql":
 		analyzeMySQLLocks(status, database)
 	}
 }

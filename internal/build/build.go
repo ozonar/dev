@@ -5,6 +5,7 @@ import (
 	"dev/internal/common"
 	"dev/internal/i18n"
 	"dev/internal/toolchain"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -42,7 +43,7 @@ func buildGo(version, output string) error {
 		return fmt.Errorf(i18n.T("error finding main files: %v"), err)
 	}
 	if len(mainFiles) == 0 {
-		return fmt.Errorf(i18n.T("no Go main file found"))
+		return errors.New(i18n.T("no Go main file found"))
 	}
 
 	var target string
@@ -64,7 +65,7 @@ func buildGo(version, output string) error {
 		} else {
 			idx, err := strconv.Atoi(input)
 			if err != nil || idx < 1 || idx > len(mainFiles) {
-				return fmt.Errorf(i18n.T("invalid selection"))
+				return errors.New(i18n.T("invalid selection"))
 			}
 			target = mainFiles[idx-1]
 		}
@@ -92,7 +93,7 @@ func buildGo(version, output string) error {
 // buildNode собирает Node.js проект
 func buildNode() error {
 	if _, err := os.Stat("package.json"); err != nil {
-		return fmt.Errorf(i18n.T("package.json not found"))
+		return errors.New(i18n.T("package.json not found"))
 	}
 	// Проверяем, есть ли скрипт build
 	cmd := exec.Command("npm", "run", "build")

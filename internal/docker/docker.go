@@ -2,6 +2,7 @@ package docker
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -109,7 +110,7 @@ func ColorizeStatus(status string) string {
 func ComposeUp() error {
 	// Check if docker-compose.yml exists
 	if _, err := os.Stat("docker-compose.yml"); os.IsNotExist(err) {
-		return fmt.Errorf(i18n.T("docker-compose.yml not found"))
+		return errors.New(i18n.T("docker-compose.yml not found"))
 	}
 
 	i18n.Cyan("Running docker-compose up -d...")

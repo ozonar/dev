@@ -3,6 +3,7 @@ package ai
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -96,7 +97,7 @@ func (c *Client) Chat(history []HistoryEntry, temperature float64) (string, erro
 		}
 
 		if len(resp.Choices) == 0 {
-			lastErr = fmt.Errorf(i18n.T("empty response from API"))
+			lastErr = errors.New(i18n.T("empty response from API"))
 			i18n.Red("LLM returned empty response (attempt %d/3)", attempt+1)
 			continue
 		}

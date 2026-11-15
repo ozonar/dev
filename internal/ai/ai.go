@@ -130,7 +130,7 @@ func buildContext(info *detector.ProjectInfo) string {
 	cwd, _ := os.Getwd()
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("Текущая директория: %s\n", cwd))
+	fmt.Fprintf(&sb, "Текущая директория: %s\n", cwd)
 	sb.WriteString("\nСодержимое директории:\n")
 
 	entries, _ := os.ReadDir(cwd)
@@ -140,9 +140,9 @@ func buildContext(info *detector.ProjectInfo) string {
 			continue
 		}
 		if entry.IsDir() {
-			sb.WriteString(fmt.Sprintf("  📁 %s/\n", name))
+			fmt.Fprintf(&sb, "  📁 %s/\n", name)
 		} else {
-			sb.WriteString(fmt.Sprintf("  📄 %s\n", name))
+			fmt.Fprintf(&sb, "  📄 %s\n", name)
 		}
 	}
 
@@ -151,8 +151,8 @@ func buildContext(info *detector.ProjectInfo) string {
 	if info.LanguageVersion != "" {
 		langLabel = info.Language + " " + info.LanguageVersion
 	}
-	sb.WriteString(fmt.Sprintf("Язык: %s\n", langLabel))
-	sb.WriteString(fmt.Sprintf("Фреймворк: %s\n", info.Framework))
+	fmt.Fprintf(&sb, "Язык: %s\n", langLabel)
+	fmt.Fprintf(&sb, "Фреймворк: %s\n", info.Framework)
 	if info.HasEnv {
 		sb.WriteString(".env: присутствует\n")
 	} else {
@@ -173,7 +173,7 @@ func buildContext(info *detector.ProjectInfo) string {
 		sb.WriteString("Базы данных:\n")
 		for _, db := range info.Databases {
 			if db.URL != "" {
-				sb.WriteString(fmt.Sprintf("  %s\n", db.URL))
+				fmt.Fprintf(&sb, "  %s\n", db.URL)
 			}
 		}
 	}

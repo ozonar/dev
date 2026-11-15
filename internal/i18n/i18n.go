@@ -269,4 +269,4 @@ func noArgs(format string, a ...interface{}) string {
 // --- Обёртки fmt ---
 
 // Printf печатает переведённое сообщение с подстановкой аргументов.
-func Printf(format string, a ...interface{}) { fmt.Printf(T(format, a...)) }
+func Printf(format string, a ...interface{}) { fmt.Print(T(format, a...)) }

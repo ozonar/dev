@@ -1,6 +1,7 @@
 package virus
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,7 +19,7 @@ func parseTarget(path string) (username, host string, err error) {
 	if strings.Contains(path, "@") {
 		parts := strings.Split(path, "@")
 		if len(parts) != 2 {
-			return "", "", fmt.Errorf(i18n.T("invalid path format. Expected user@ip"))
+			return "", "", errors.New(i18n.T("invalid path format. Expected user@ip"))
 		}
 		return parts[0], parts[1], nil
 	}

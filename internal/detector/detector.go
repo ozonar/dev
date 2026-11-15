@@ -369,11 +369,12 @@ func findDockerServices(root string) []string {
 		// Определяем отступ (количество пробелов в начале строки)
 		indent := 0
 		for _, ch := range line {
-			if ch == ' ' {
+			switch ch {
+			case ' ':
 				indent++
-			} else if ch == '\t' {
+			case '\t':
 				indent += 4 // считаем таб как 4 пробела
-			} else {
+			default:
 				break
 			}
 		}
