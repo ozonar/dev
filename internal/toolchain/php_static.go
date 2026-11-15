@@ -4,16 +4,8 @@
 package toolchain
 
 import (
-	"regexp"
 	"strings"
 )
-
-// phpStaticReleasesURL — листинг статических сборок PHP (static-php-cli).
-const phpStaticReleasesURL = "https://dl.static-php.dev/static-php-cli/common/"
-
-// phpVersionRe — шаблон имени файла статической сборки PHP для macOS,
-// например "php-8.4.23-cli-macos-aarch64.tar.gz".
-var phpVersionRe = regexp.MustCompile(`php-(\d+\.\d+\.\d+)-cli-macos-(x86_64|aarch64)\.tar\.gz`)
 
 // pickStaticPhpVersion выбирает из списка versions (отсортирован от новейшей
 // к старейшей) самую свежую версию, удовлетворяющую требованию required
