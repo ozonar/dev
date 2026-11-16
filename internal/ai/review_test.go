@@ -82,3 +82,26 @@ func TestRenderMarkdown_InlineCode(t *testing.T) {
 		t.Errorf("renderMarkdown should keep inline code text, got: %q", got)
 	}
 }
+
+// TestParseVerdict проверяет разбор машиночитаемого вердикта из ответа модели.
+func TestParseVerdict(t *testing.T) {
+	tests := []struct {
+		name   string
+		review string
+		want   Verdict
+	}{
+		{"ok", "Проблем нет.\nVERDICT: OK", VerdictOK},
+		{"critical", "Найден баг.\nVERDICT: CRITICAL", VerdictCritical},
+		{"lowercase", "вердикт\nverdict: critical", VerdictCritical},
+		{"extra spaces", "VERDICT :  OK", VerdictOK},
+		{"missing", "просто текст без вердикта", VerdictUnknown},
+		{"last wins", "VERDICT: CRITICAL\n\nЛожное срабатывание.\nVERDICT: OK", VerdictOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseVerdict(tt.review); got != tt.want {
+				t.Errorf("parseVerdict(%q) = %v, want %v", tt.review, got, tt.want)
+			}
+		})
+	}
+}

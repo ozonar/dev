@@ -690,8 +690,9 @@ func runCommandStreaming(command string) (string, error) {
 	// Ждём завершения чтения обоих потоков
 	for i := 0; i < 2; i++ {
 		if err := <-done; err != nil {
-			// Ждём завершения процесса перед возвратом ошибки сканера
-			cmd.Wait()
+			// Ждём завершения процесса перед возвратом ошибки сканера.
+			// Ошибка ожидания не важнее ошибки чтения, поэтому игнорируется.
+			_ = cmd.Wait()
 			return strings.TrimSpace(outputBuf.String()), fmt.Errorf(i18n.T("error reading command output: %w"), err)
 		}
 	}

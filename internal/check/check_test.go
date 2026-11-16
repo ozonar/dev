@@ -272,11 +272,51 @@ func TestScopeConstructors(t *testing.T) {
 	if s := ScopeCommits(2); !strings.Contains(s.Name, "2 commits") {
 		t.Errorf("ScopeCommits(2) name = %q", s.Name)
 	}
-	if s := ScopeDiff("master"); !strings.Contains(s.Name, "master") {
-		t.Errorf("ScopeDiff(master) name = %q", s.Name)
+}
+
+// TestScopeDiff проверяет, что diff строится с существующей веткой,
+// а несуществующая ветка приводит к ошибке, а не к проверке всего кода.
+func TestScopeDiff(t *testing.T) {
+	tmp := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+	} {
+		if err := gitRun(tmp, args...); err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
 	}
-	if s := ScopeDiff("develop"); !strings.Contains(s.Name, "develop") {
-		t.Errorf("ScopeDiff(develop) name = %q", s.Name)
+	writeFile(t, filepath.Join(tmp, "a.go"), "package a\n")
+	if err := gitRun(tmp, "add", "."); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+	if err := gitRun(tmp, "commit", "-qm", "init"); err != nil {
+		t.Fatalf("git commit: %v", err)
+	}
+	if err := gitRun(tmp, "checkout", "-q", "-b", "main"); err != nil {
+		t.Fatalf("git checkout -b main: %v", err)
+	}
+
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldDir) }()
+
+	scope, err := ScopeDiff("main")
+	if err != nil {
+		t.Fatalf("ScopeDiff(main) error: %v", err)
+	}
+	if !strings.Contains(scope.Name, "main") {
+		t.Errorf("ScopeDiff(main) name = %q, want it to contain %q", scope.Name, "main")
+	}
+
+	if _, err := ScopeDiff("dev-no-such-branch"); err == nil {
+		t.Error("ScopeDiff(missing branch) should return an error")
 	}
 }
 
@@ -369,7 +409,7 @@ func TestBuildScope_NoGit(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(old) }()
 
-	kinds := []scopeKind{scopeChanged, scopeFiles, scopeCommit1, scopeMaster, scopeDevelop}
+	kinds := []scopeKind{scopeChanged, scopeFiles, scopeCommit1, scopeCommit2, scopeCommit3}
 	for _, kind := range kinds {
 		scope := buildScope(kind)
 		if scope.kind != scopeAll {
@@ -380,12 +420,18 @@ func TestBuildScope_NoGit(t *testing.T) {
 		}
 	}
 
+	// Diff с веткой вне git также приводится к полному коду.
+	if scope := buildBranchScope("main"); scope.kind != scopeAll {
+		t.Errorf("buildBranchScope outside git kind = %d, want scopeAll", scope.kind)
+	}
+
 	// Подсказки меню не должны показывать размер для объёма, который вне git
 	// стал полным.
-	if got := scopeFileHint(scopeChanged); got != "" {
+	changed := scopeOption{kind: scopeChanged}
+	if got := scopeFileHint(changed); got != "" {
 		t.Errorf("scopeFileHint(scopeChanged) outside git = %q, want empty", got)
 	}
-	if got := scopeSizeHint(scopeChanged); got != "" {
+	if got := scopeSizeHint(changed); got != "" {
 		t.Errorf("scopeSizeHint(scopeChanged) outside git = %q, want empty", got)
 	}
 }
@@ -883,10 +929,10 @@ func TestScopeFileHint(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(oldDir) }()
 
-	if got := scopeFileHint(scopeChanged); got != "2 files" {
+	if got := scopeFileHint(scopeOption{kind: scopeChanged}); got != "2 files" {
 		t.Errorf("scopeFileHint(scopeChanged) = %q, want %q", got, "2 files")
 	}
-	if got := scopeFileHint(scopeAll); got != "" {
+	if got := scopeFileHint(scopeOption{kind: scopeAll}); got != "" {
 		t.Errorf("scopeFileHint(scopeAll) = %q, want empty", got)
 	}
 }

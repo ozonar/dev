@@ -56,40 +56,59 @@ const (
 	scopeCommit2                  // + 2 коммита
 	scopeCommit3                  // + 3 коммита
 	scopeAll                      // весь код
-	scopeMaster                   // разница текущей ветки с master
-	scopeDevelop                  // разница текущей ветки с develop
+	scopeBranch                   // разница текущей ветки с базовой (branch)
 )
 
 // scopeOption — описание одного варианта выбора для пользователя.
 type scopeOption struct {
-	kind  scopeKind
-	label string
+	kind   scopeKind
+	branch string // базовая ветка для scopeBranch
+	label  string
+}
+
+// baseBranchCandidates — ветки, с которыми имеет смысл сравнивать текущую.
+// В меню попадают только те из них, что реально существуют в репозитории.
+var baseBranchCandidates = []string{"develop", "main", "master"}
+
+// branchOptions возвращает варианты "Diff with <branch>" для существующих
+// базовых веток. Вне git или при отсутствии веток список пуст.
+func branchOptions() []scopeOption {
+	var options []scopeOption
+	for _, branch := range baseBranchCandidates {
+		if _, ok := branchRef(branch); !ok {
+			continue
+		}
+		options = append(options, scopeOption{
+			kind:   scopeBranch,
+			branch: branch,
+			label:  i18n.T("Diff with %s", branch),
+		})
+	}
+	return options
 }
 
 // scopeOptions возвращает список вариантов выбора объёма проверки.
 func scopeOptions() []scopeOption {
-	return []scopeOption{
-		{scopeChanged, i18n.T("Changed code")},
-		{scopeCommit1, i18n.T("Changed code + 1 commit")},
-		{scopeCommit2, i18n.T("Changed code + 2 commits")},
-		{scopeCommit3, i18n.T("Changed code + 3 commits")},
-		{scopeAll, i18n.T("All code")},
-		{scopeMaster, i18n.T("Diff with master")},
-		{scopeDevelop, i18n.T("Diff with develop")},
+	options := []scopeOption{
+		{kind: scopeChanged, label: i18n.T("Changed code")},
+		{kind: scopeCommit1, label: i18n.T("Changed code + 1 commit")},
+		{kind: scopeCommit2, label: i18n.T("Changed code + 2 commits")},
+		{kind: scopeCommit3, label: i18n.T("Changed code + 3 commits")},
+		{kind: scopeAll, label: i18n.T("All code")},
 	}
+	return append(options, branchOptions()...)
 }
 
 // scopeOptionsForAI возвращает варианты объёма для AI-ревью.
 func scopeOptionsForAI() []scopeOption {
-	return []scopeOption{
-		{scopeChanged, i18n.T("Changed code")},
-		{scopeFiles, i18n.T("Changed files")},
-		{scopeCommit1, i18n.T("Changed code + 1 commit")},
-		{scopeCommit2, i18n.T("Changed code + 2 commits")},
-		{scopeCommit3, i18n.T("Changed code + 3 commits")},
-		{scopeMaster, i18n.T("Diff with master")},
-		{scopeDevelop, i18n.T("Diff with develop")},
+	options := []scopeOption{
+		{kind: scopeChanged, label: i18n.T("Changed code")},
+		{kind: scopeFiles, label: i18n.T("Changed files")},
+		{kind: scopeCommit1, label: i18n.T("Changed code + 1 commit")},
+		{kind: scopeCommit2, label: i18n.T("Changed code + 2 commits")},
+		{kind: scopeCommit3, label: i18n.T("Changed code + 3 commits")},
 	}
+	return append(options, branchOptions()...)
 }
 
 // defaultScopeKind выбирает объём по умолчанию:
@@ -127,12 +146,10 @@ func buildScope(kind scopeKind) Scope {
 	case scopeCommit3:
 		files := filesSinceCommit(3)
 		return makeScope(kind, i18n.T("changed code + 3 commits"), files, diffSinceCommitText(3, files))
-	case scopeMaster:
-		files := diffWithBranch("master")
-		return makeScope(kind, i18n.T("diff with master"), files, diffBranchText("master", files))
-	case scopeDevelop:
-		files := diffWithBranch("develop")
-		return makeScope(kind, i18n.T("diff with develop"), files, diffBranchText("develop", files))
+	case scopeBranch:
+		// Базовая ветка — параметр объёма, поэтому такой Scope строится
+		// только через buildBranchScope.
+		panic("check: scopeBranch must be built via buildBranchScope")
 	default:
 		files := existingFiles(projectFiles())
 		return Scope{
@@ -142,6 +159,24 @@ func buildScope(kind scopeKind) Scope {
 			Dirs:  uniqueDirs(files),
 		}
 	}
+}
+
+// buildBranchScope формирует объём "разница текущей ветки с branch".
+// Вне git история изменений недоступна, поэтому проверяется весь код.
+func buildBranchScope(branch string) Scope {
+	if !hasGit() {
+		return buildScope(scopeAll)
+	}
+	files := diffWithBranch(branch)
+	return makeScope(scopeBranch, i18n.T("Diff with %s", branch), files, diffBranchText(branch, files))
+}
+
+// buildScopeOption строит Scope по выбранному варианту меню.
+func buildScopeOption(opt scopeOption) Scope {
+	if opt.kind == scopeBranch {
+		return buildBranchScope(opt.branch)
+	}
+	return buildScope(opt.kind)
 }
 
 // makeScope собирает Scope из файлов и текста изменений, вычисляя
@@ -240,6 +275,21 @@ func diffSinceCommitText(n int, paths []string) string {
 	return sb.String()
 }
 
+// branchRef возвращает ссылку для сравнения с веткой: origin/<branch>,
+// если она есть, иначе локальную <branch>. ok=false — ветки нет.
+func branchRef(branch string) (string, bool) {
+	if branch == "" {
+		return "", false
+	}
+	if _, err := gitOutput("rev-parse", "--verify", "--quiet", "origin/"+branch); err == nil {
+		return "origin/" + branch, true
+	}
+	if _, err := gitOutput("rev-parse", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+		return branch, true
+	}
+	return "", false
+}
+
 // diffBranchText возвращает текст изменений текущей ветки относительно branch,
 // ограниченный переданными путями.
 func diffBranchText(branch string, paths []string) string {
@@ -247,8 +297,11 @@ func diffBranchText(branch string, paths []string) string {
 	if pathArgs == nil {
 		return ""
 	}
-	base := []string{"diff", "origin/" + branch + "...HEAD"}
-	out, err := gitOutput(append(base, pathArgs...)...)
+	ref, ok := branchRef(branch)
+	if !ok {
+		return ""
+	}
+	out, err := gitOutput(append([]string{"diff", ref + "...HEAD"}, pathArgs...)...)
 	if err != nil {
 		return ""
 	}
@@ -288,15 +341,12 @@ func scopeKindFromCommits(n int) scopeKind {
 }
 
 // ScopeDiff возвращает объём "разница текущей ветки с branch".
-func ScopeDiff(branch string) Scope {
-	switch branch {
-	case "master":
-		return buildScope(scopeMaster)
-	case "develop":
-		return buildScope(scopeDevelop)
-	default:
-		return buildScope(scopeAll)
+// Несуществующая ветка — ошибка: иначе на проверку попал бы не тот код.
+func ScopeDiff(branch string) (Scope, error) {
+	if _, ok := branchRef(branch); !ok {
+		return Scope{}, fmt.Errorf("branch %q not found", branch)
 	}
+	return buildBranchScope(branch), nil
 }
 
 // ScopeDefault возвращает объём по умолчанию: изменённый код, если есть
@@ -347,11 +397,15 @@ func filesSinceCommit(n int) []string {
 
 // diffWithBranch возвращает файлы, изменённые относительно ветки branch.
 func diffWithBranch(branch string) []string {
-	var result []string
-	if out, err := gitOutput("diff", "origin/"+branch+"...HEAD", "--name-only"); err == nil {
-		result = append(result, lines(out)...)
+	ref, ok := branchRef(branch)
+	if !ok {
+		return nil
 	}
-	return uniqueSorted(filterVendor(result))
+	out, err := gitOutput("diff", ref+"...HEAD", "--name-only")
+	if err != nil {
+		return nil
+	}
+	return uniqueSorted(filterVendor(lines(out)))
 }
 
 // vendorDirNames — имена каталогов вендоров, которые не должны попадать
@@ -516,7 +570,7 @@ func promptScopeForAI() Scope {
 // promptScopeWithOptions показывает список вариантов выбора и ждёт ответа.
 // При пустом вводе используется defaultKind. hint формирует подсказку
 // о составе объёма (количество файлов для линтеров или символов для AI).
-func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint func(scopeKind) string) Scope {
+func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint func(scopeOption) string) Scope {
 	fmt.Println()
 	i18n.Printf("Select scope:\n")
 	for i, opt := range options {
@@ -536,7 +590,7 @@ func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint f
 				fmt.Printf("  (%s)", strings.Join(names, ", "))
 			}
 		}
-		if h := hint(opt.kind); h != "" {
+		if h := hint(opt); h != "" {
 			fmt.Printf("  (%s)", h)
 		}
 		fmt.Println()
@@ -564,7 +618,7 @@ func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint f
 			idx = n - 1
 		}
 	}
-	return buildScope(options[idx].kind)
+	return buildScopeOption(options[idx])
 }
 
 // parseInt разбирает число из строки.
@@ -578,11 +632,11 @@ func parseInt(s string) (int, error) {
 // будет отправлен на ревью для заданного вида объёма. Возвращает пустую
 // строку, если размер неинформативен (нулевой или текста нет вовсе), —
 // тогда в меню размер не выводится.
-func scopeSizeHint(kind scopeKind) string {
-	if kind == scopeAll {
+func scopeSizeHint(opt scopeOption) string {
+	if opt.kind == scopeAll {
 		return ""
 	}
-	scope := buildScope(kind)
+	scope := buildScopeOption(opt)
 	if scope.kind == scopeAll {
 		return ""
 	}
@@ -596,11 +650,11 @@ func scopeSizeHint(kind scopeKind) string {
 // scopeFileHint возвращает количество файлов в объёме, например "3 files".
 // Возвращает пустую строку, если файлов нет вовсе или объём — весь код.
 // Используется для статической проверки, где важен объём анализа.
-func scopeFileHint(kind scopeKind) string {
-	if kind == scopeAll {
+func scopeFileHint(opt scopeOption) string {
+	if opt.kind == scopeAll {
 		return ""
 	}
-	scope := buildScope(kind)
+	scope := buildScopeOption(opt)
 	if scope.kind == scopeAll {
 		return ""
 	}

@@ -21,6 +21,7 @@ func writeHomeConfig(t *testing.T, content string) {
 }
 
 func TestLanguageFromConfig(t *testing.T) {
+	t.Setenv("LANGUAGE", "")
 	writeHomeConfig(t, "# комментарий\nLANGUAGE=ru\nLLM_ENDPOINT=x\n")
 	if got := LanguageFromConfig(); got != "ru" {
 		t.Errorf("LanguageFromConfig() = %q, want ru", got)
@@ -29,6 +30,7 @@ func TestLanguageFromConfig(t *testing.T) {
 
 func TestLanguageFromConfigAuto(t *testing.T) {
 	// Конфиг есть, но ключа LANGUAGE нет — автоопределение (пустая строка).
+	t.Setenv("LANGUAGE", "")
 	writeHomeConfig(t, "LLM_ENDPOINT=x\n")
 	if got := LanguageFromConfig(); got != "" {
 		t.Errorf("LanguageFromConfig() = %q, want empty (auto)", got)
@@ -38,9 +40,61 @@ func TestLanguageFromConfigAuto(t *testing.T) {
 func TestLanguageFromConfigMissing(t *testing.T) {
 	// HOME без конфига — пустая строка (автоопределение),
 	// если нет и системного конфига в /etc/dev-command.
+	t.Setenv("LANGUAGE", "")
 	t.Setenv("HOME", t.TempDir())
 	if got := LanguageFromConfig(); got != "" {
 		t.Errorf("LanguageFromConfig() = %q, want empty", got)
+	}
+}
+
+// TestLoadConfigFromEnv проверяет, что параметры могут быть заданы только
+// окружением: в CI конфиг-файла нет.
+func TestLoadConfigFromEnv(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LLM_ENDPOINT", "env-endpoint")
+	t.Setenv("LLM_TOKEN", "env-token")
+	t.Setenv("LLM_MODEL", "env-model")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error: %v", err)
+	}
+	if cfg.Endpoint != "env-endpoint" || cfg.Token != "env-token" || cfg.Model != "env-model" {
+		t.Errorf("LoadConfig() = %+v, want values from environment", cfg)
+	}
+}
+
+// TestLoadConfigEnvOverridesFile проверяет единое правило: окружение
+// приоритетнее файла, остальные значения берутся из файла.
+func TestLoadConfigEnvOverridesFile(t *testing.T) {
+	writeHomeConfig(t, "LLM_ENDPOINT=file-e\nLLM_TOKEN=file-t\nLLM_MODEL=file-m\n")
+	t.Setenv("LLM_TOKEN", "env-token")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error: %v", err)
+	}
+	if cfg.Endpoint != "file-e" {
+		t.Errorf("Endpoint = %q, want file-e", cfg.Endpoint)
+	}
+	if cfg.Token != "env-token" {
+		t.Errorf("Token = %q, want env-token", cfg.Token)
+	}
+	if cfg.Model != "file-m" {
+		t.Errorf("Model = %q, want file-m", cfg.Model)
+	}
+}
+
+// TestLoadConfigIncompleteEnv проверяет, что неполный набор переменных
+// без файла — ошибка, а не тихое использование пустых значений.
+func TestLoadConfigIncompleteEnv(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LLM_ENDPOINT", "env-endpoint")
+	t.Setenv("LLM_TOKEN", "")
+	t.Setenv("LLM_MODEL", "env-model")
+
+	if _, err := LoadConfig(); err == nil {
+		t.Error("LoadConfig() should fail when LLM_TOKEN is missing")
 	}
 }
 

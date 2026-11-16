@@ -61,81 +61,123 @@ func resolveConfigPath() string {
 	return ConfigPaths()[0]
 }
 
-// LoadConfig загружает конфиг из файла.
-// Ищет сначала ~/dev-config/main.conf, затем /etc/dev-command/main.conf.
+// configParam связывает ключ конфига с полем структуры Config.
+type configParam struct {
+	key   string
+	field func(*Config) *string
+}
+
+// configParams — единственное место, где перечислены параметры конфига.
+// По этой таблице и читается файл, и накладывается окружение, поэтому
+// отдельного списка переменных окружения не существует.
+var configParams = []configParam{
+	{"LLM_ENDPOINT", func(c *Config) *string { return &c.Endpoint }},
+	{"LLM_TOKEN", func(c *Config) *string { return &c.Token }},
+	{"LLM_MODEL", func(c *Config) *string { return &c.Model }},
+	{"LANGUAGE", func(c *Config) *string { return &c.Language }},
+}
+
+// readConfigFile читает файл конфига в набор "ключ → значение".
+// Имена ключей здесь не проверяются: отбор известных параметров выполняет
+// resolveValues по таблице configParams.
+func readConfigFile(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	values := make(map[string]string)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		values[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+	}
+	return values, nil
+}
+
+// resolveValues возвращает итоговые значения параметров: переменная окружения
+// с именем ключа приоритетнее значения из файла. Правило одно для всех
+// параметров, поэтому источник каждого значения предсказуем.
+func resolveValues(fileValues map[string]string) map[string]string {
+	values := make(map[string]string, len(configParams))
+	for _, p := range configParams {
+		if v := os.Getenv(p.key); v != "" {
+			values[p.key] = v
+			continue
+		}
+		if v, ok := fileValues[p.key]; ok {
+			values[p.key] = v
+		}
+	}
+	return values
+}
+
+// applyValues переносит разрешённые значения в поля структуры.
+func (c *Config) applyValues(values map[string]string) {
+	for _, p := range configParams {
+		if v, ok := values[p.key]; ok {
+			*p.field(c) = v
+		}
+	}
+}
+
+// complete сообщает, что заданы все обязательные параметры подключения.
+func (c *Config) complete() bool {
+	return c.Endpoint != "" && c.Token != "" && c.Model != ""
+}
+
+// LoadConfig загружает параметры конфига. Значения берутся из файла
+// (~/dev-config/main.conf, затем /etc/dev-command/main.conf) и окружения:
+// переменная с именем ключа приоритетнее файла. Если файла нет, параметры
+// могут быть полностью заданы окружением (CI).
 func LoadConfig() (*Config, error) {
 	var lastErr error
 	for _, p := range ConfigPaths() {
-		data, err := os.ReadFile(p)
+		fileValues, err := readConfigFile(p)
 		if err != nil {
 			lastErr = err
 			continue
 		}
 
 		cfg := &Config{}
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			key := strings.TrimSpace(parts[0])
-			val := strings.TrimSpace(parts[1])
-			switch key {
-			case "LLM_ENDPOINT":
-				cfg.Endpoint = val
-			case "LLM_TOKEN":
-				cfg.Token = val
-			case "LLM_MODEL":
-				cfg.Model = val
-			case "LANGUAGE":
-				cfg.Language = val
-			}
-		}
-
-		if cfg.Endpoint == "" || cfg.Token == "" || cfg.Model == "" {
+		cfg.applyValues(resolveValues(fileValues))
+		if !cfg.complete() {
 			lastErr = fmt.Errorf(i18n.T("incomplete config at %s: need ENDPOINT, TOKEN, MODEL"), p)
 			continue
 		}
+		return cfg, nil
+	}
 
+	// Файла нет: параметры могут быть заданы только окружением.
+	cfg := &Config{}
+	cfg.applyValues(resolveValues(nil))
+	if cfg.complete() {
 		return cfg, nil
 	}
 
 	return nil, fmt.Errorf(i18n.T("config file not found: %w"), lastErr)
 }
 
-// LanguageFromConfig возвращает язык интерфейса из конфигурации (ключ LANGUAGE).
-// Читается из первого существующего конфига без строгой валидации остальных
-// параметров, поэтому язык доступен даже при неполном конфиге. Пустая строка
-// означает автоопределение из окружения.
+// LanguageFromConfig возвращает язык интерфейса: LANGUAGE из окружения
+// или из первого существующего конфига. Пустая строка означает
+// автоопределение из окружения (LC_ALL/LANG).
 func LanguageFromConfig() string {
+	var fileValues map[string]string
 	for _, p := range ConfigPaths() {
-		data, err := os.ReadFile(p)
+		values, err := readConfigFile(p)
 		if err != nil {
 			continue
 		}
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			if strings.TrimSpace(parts[0]) == "LANGUAGE" {
-				return strings.TrimSpace(parts[1])
-			}
-		}
-		// Первый существующий конфиг определяет язык, даже если в нём нет
-		// ключа LANGUAGE: файлы ниже по приоритету не рассматриваются.
-		return ""
+		fileValues = values
+		break
 	}
-	return ""
+	return resolveValues(fileValues)["LANGUAGE"]
 }
 
 // EditConfig открывает конфиг на редактирование, создавая при необходимости.

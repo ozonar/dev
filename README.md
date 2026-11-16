@@ -98,8 +98,8 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
   - Downloads required tools (and php runtime) to `~/dev-config/check` if not present
   - Interactive selection of the check scope (changed code, changed code + N commits, all code, diff with master/develop)
   - Runs by default in **dry-run** mode; output is streamed to the console
-  - Subcommands: `dev check fix` (auto-fix issues), `dev check ai` (AI review, planned)
-  - Non-interactive flags: `--all`, `--commit=N`, `--branch=master|develop`, `--code`
+  - Subcommands: `dev check fix` (auto-fix issues), `dev check ai` (AI code review)
+  - Non-interactive flags: `--all`, `--commit=N`, `--branch=NAME`, `--code`
 
 - **`prod release`** – Production release management (prepare + switch):
   - `prod release prepare [name]` – copy build artifacts from `builds_folder` into a new `releases_folder/release-<datetime>` archive folder (source folder is left untouched); interactive release name selection (default: first) when omitted
@@ -186,6 +186,8 @@ dev ai "install npm"    # ask AI to generate commands
 dev self-config         # configure AI settings
 dev check               # run static code analysis (dry-run)
 dev check fix           # run analysis and auto-fix issues
+dev check ai            # AI code review of the changed code
+dev check ai --branch=main  # AI review of the diff with main (CI)
 
 prod                    # production server health report
 prod release            # prepare a new release and switch to it
@@ -239,6 +241,98 @@ Available variables in subcommands: `$(current_dir)`, `$(language)`, `$(framewor
 ### Project Detection
 
 No configuration files are required for project detection. The tool automatically detects your project based on common file patterns.
+
+## AI Code Review in CI
+
+`dev check ai` can be used as a quality gate. The command exits with code 1 when:
+
+- the AI finds critical issues;
+- the model does not return a verdict;
+- the review itself fails (network, configuration, token).
+
+To make the result machine-readable, the model must end its answer with a verdict line:
+
+```
+VERDICT: OK
+```
+
+or
+
+```
+VERDICT: CRITICAL
+```
+
+LLM parameters are read from `~/dev-config/main.conf` or from environment variables. The environment wins, so no config file is needed on a runner:
+
+| Variable | Where to store it |
+|----------|-------------------|
+| `LLM_ENDPOINT` | repository variable |
+| `LLM_MODEL` | repository variable |
+| `LLM_TOKEN` | secret |
+
+The scope is selected with the same flags as `dev check`: `--code`, `--commit=N`, `--all`, or `--branch=NAME`. Pass a scope flag explicitly in CI: without it the command asks for the scope interactively. `--branch` accepts any existing base branch, for example `main`.
+
+### GitHub Actions
+
+A ready-to-use workflow is provided in `.github/workflows/ai-review.yml`. Minimal version:
+
+```yaml
+name: AI Review
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    env:
+      LLM_ENDPOINT: ${{ vars.LLM_ENDPOINT }}
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+      LLM_TOKEN: ${{ secrets.LLM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required for diff with the base branch
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+      - run: go build -o "$RUNNER_TEMP/dev" ./cmd/dev
+      - name: AI review (pull request)
+        if: github.event_name == 'pull_request'
+        run: '"$RUNNER_TEMP/dev" check ai --branch=${{ github.base_ref }}'
+      - name: AI review (push)
+        if: github.event_name == 'push'
+        run: '"$RUNNER_TEMP/dev" check ai --commit=1'
+```
+
+Store `LLM_ENDPOINT` and `LLM_MODEL` under Settings → Secrets and variables → Actions → Variables, and `LLM_TOKEN` under Secrets. If credentials are not configured, the workflow skips the review with a warning instead of failing, so pull requests from forks are not blocked.
+
+### GitLab CI
+
+```yaml
+ai-review:
+  image: golang:1.27.3
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  variables:
+    LLM_ENDPOINT: $LLM_ENDPOINT
+    LLM_MODEL: $LLM_MODEL
+    LLM_TOKEN: $LLM_TOKEN
+    GIT_DEPTH: "0"   # required for diff with the base branch
+  script:
+    - go build -o /tmp/dev ./cmd/dev
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
+        /tmp/dev check ai --branch="$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      else
+        /tmp/dev check ai --commit=1
+      fi
+```
+
+Store `LLM_ENDPOINT`, `LLM_MODEL` and `LLM_TOKEN` as masked CI/CD variables in Settings → CI/CD → Variables. `GIT_DEPTH: "0"` disables shallow cloning so that `origin/<base branch>` is available for the diff.
 
 ## Optional Requirements
 

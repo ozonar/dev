@@ -1,6 +1,7 @@
 package check
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,17 +12,24 @@ import (
 	"dev/internal/i18n"
 )
 
+// Ошибки, означающие, что AI-ревью не пройдено.
+var (
+	// ErrCriticalFindings — модель обнаружила критические проблемы.
+	ErrCriticalFindings = errors.New("AI review found critical issues")
+	// ErrVerdictUnknown — модель не сообщила вердикт, поэтому гарантировать
+	// отсутствие критических проблем нельзя.
+	ErrVerdictUnknown = errors.New("AI review did not report a verdict")
+)
+
 // RunAI выполняет AI-код-ревью изменённого кода.
 // info — уже определённая информация о проекте (детекция и принудительный
 // язык из флагов выполняются на уровне команд перед вызовом).
+// Возвращает ErrCriticalFindings или ErrVerdictUnknown, если ревью не пройдено.
 func RunAI(info *detector.ProjectInfo, opts Options, instruction string) error {
 	i18n.Green("Project: %s (%s)", info.Language, info.Framework)
 
 	// Определяем объём проверки.
-	scope, err := resolveScopeForAI(opts)
-	if err != nil {
-		return err
-	}
+	scope := resolveScopeForAI(opts)
 
 	// Формируем текст для отправки на ревью в зависимости от объёма.
 	text := scope.GetChanges()
@@ -39,24 +47,32 @@ func RunAI(info *detector.ProjectInfo, opts Options, instruction string) error {
 		text = ai.ClampToChars(text, ai.MaxReviewTotalChars)
 	}
 
-	if _, err := ai.RunCodeReview(text, instruction); err != nil {
+	result, err := ai.RunCodeReview(text, instruction)
+	if err != nil {
 		return fmt.Errorf(i18n.T("AI review failed: %v"), err)
 	}
 
-	return nil
+	switch result.Verdict {
+	case ai.VerdictOK:
+		return nil
+	case ai.VerdictCritical:
+		return ErrCriticalFindings
+	default:
+		return ErrVerdictUnknown
+	}
 }
 
 // resolveScopeForAI определяет объём для AI-ревью: явный Scope из флагов,
 // интерактивный выбор без варианта "весь код", либо default.
-func resolveScopeForAI(opts Options) (Scope, error) {
+func resolveScopeForAI(opts Options) Scope {
 	if opts.Scope != nil {
-		return *opts.Scope, nil
+		return *opts.Scope
 	}
 	if opts.Interactive {
-		return promptScopeForAI(), nil
+		return promptScopeForAI()
 	}
 	// Без интерактивности берём default (изменённый код или всё, если нет git).
-	return ScopeDefault(), nil
+	return ScopeDefault()
 }
 
 // readScopeFiles читает содержимое файлов из списка и объединяет его в текст.

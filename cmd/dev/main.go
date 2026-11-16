@@ -902,7 +902,10 @@ func init() {
 // Неинтерактивные флаги имеют приоритет; при их отсутствии — интерактивный выбор.
 func runCheck(opts check.Options) {
 	cwd, _ := os.Getwd()
-	applyCheckScopeFlags(&opts)
+	if err := applyCheckScopeFlags(&opts); err != nil {
+		i18n.Red("Error: %v", err)
+		os.Exit(1)
+	}
 
 	info, err := detectProject(cwd)
 	if err != nil {
@@ -916,25 +919,30 @@ func runCheck(opts check.Options) {
 // runCheckAI запускает AI-код-ревью изменённого кода.
 // Использует те же флаги выбора объёма, что и обычный dev check.
 // text — необязательная инструкция пользователя к ревью.
+// Любой непройденный исход завершает процесс с кодом 1, чтобы CI падал.
 func runCheckAI(text string) {
 	cwd, _ := os.Getwd()
 	opts := check.Options{}
-	applyCheckScopeFlags(&opts)
+	if err := applyCheckScopeFlags(&opts); err != nil {
+		i18n.Red("Error: %v", err)
+		os.Exit(1)
+	}
 
 	info, err := detectProject(cwd)
 	if err != nil {
 		i18n.Red("Error detecting project: %v", err)
-		return
+		os.Exit(1)
 	}
 
 	if err := check.RunAI(info, opts, text); err != nil {
 		i18n.Red("AI check failed: %v", err)
+		os.Exit(1)
 	}
 }
 
 // applyCheckScopeFlags заполняет Options в зависимости от флагов:
 // --all, --commit=N, --branch=NAME. Если ни один не задан — интерактивный выбор.
-func applyCheckScopeFlags(opts *check.Options) {
+func applyCheckScopeFlags(opts *check.Options) error {
 	switch {
 	case checkAll:
 		s := check.ScopeAll()
@@ -943,7 +951,10 @@ func applyCheckScopeFlags(opts *check.Options) {
 		s := check.ScopeCommits(checkCommit)
 		opts.Scope = &s
 	case checkBranch != "":
-		s := check.ScopeDiff(checkBranch)
+		s, err := check.ScopeDiff(checkBranch)
+		if err != nil {
+			return fmt.Errorf("invalid --branch: %w", err)
+		}
 		opts.Scope = &s
 	case checkCode:
 		s := check.ScopeChanged()
@@ -951,6 +962,7 @@ func applyCheckScopeFlags(opts *check.Options) {
 	default:
 		opts.Interactive = true
 	}
+	return nil
 }
 
 // runRoot обрабатывает вызовы корневой команды.
