@@ -12,40 +12,32 @@ permissions:
 jobs:
   ai-review:
     runs-on: ubuntu-latest
-    # Параметры LLM передаются в окружение процесса: dev читает их как
-    # значения конфига. Токен хранится только в secrets, не в репозитории.
     env:
-      LLM_ENDPOINT: ${{ vars.LLM_ENDPOINT }}
-      LLM_MODEL: ${{ vars.LLM_MODEL }}
-      LLM_TOKEN: ${{ secrets.LLM_TOKEN }}
+      LLM_ENDPOINT: https://3qa.ru/api/v1/chat/completions
+      LLM_MODEL: deepseek/deepseek-v4.1-flash
+      LLM_TOKEN: ${{ secrets.LLM_REVIEW_TOKEN }}
     steps:
-      # Без настроенных параметров ревью невозможно: job пропускается,
-      # чтобы не падать в форках, где secrets недоступны.
+      # Без токена ревью невозможно: падаем, чтобы ошибка конфигурации
+      # не маскировалась зелёным статусом job.
       - name: Check AI credentials
-        id: creds
         run: |
-          if [ -z "$LLM_ENDPOINT" ] || [ -z "$LLM_TOKEN" ] || [ -z "$LLM_MODEL" ]; then
-            echo "AI review skipped: set LLM_ENDPOINT and LLM_MODEL repository variables and the LLM_TOKEN secret."
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          if [ -z "$LLM_TOKEN" ]; then
+            echo "::error::Set the LLM_REVIEW_TOKEN secret."
+            exit 1
           fi
 
       - name: Checkout code
-        if: steps.creds.outputs.enabled == 'true'
         uses: actions/checkout@v4
         with:
           # Полная история нужна для diff с базовой веткой.
           fetch-depth: 0
 
       - name: Set up Go
-        if: steps.creds.outputs.enabled == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: '1.27.3'
 
       - name: Build dev
-        if: steps.creds.outputs.enabled == 'true'
         run: go build -trimpath -o "$RUNNER_TEMP/dev" ./cmd/dev
 
       # PR: проверяются изменения относительно базовой ветки.
@@ -53,7 +45,6 @@ jobs:
       # Команда завершается с кодом 1 при критических проблемах, поэтому
       # job падает и блокирует merge.
       - name: Run AI review
-        if: steps.creds.outputs.enabled == 'true'
         shell: bash
         run: |
           set -o pipefail
@@ -65,7 +56,7 @@ jobs:
           "$RUNNER_TEMP/dev" review ai $SCOPE 2>&1 | tee "$RUNNER_TEMP/ai-review.log"
 
       - name: Publish AI review summary
-        if: always() && steps.creds.outputs.enabled == 'true'
+        if: always()
         shell: bash
         run: |
           if [ -f "$RUNNER_TEMP/ai-review.log" ]; then

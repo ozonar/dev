@@ -274,7 +274,7 @@ The scope is selected with the same flags as `dev check`: `--code`, `--commit=N`
 
 ### GitHub Actions
 
-A ready-to-use workflow is provided in `.github/workflows/ai-review.yml`. Minimal version:
+A ready-to-use workflow is provided in `.github/workflows/ai-review.yml`. The same recipe works in any repository: install the `dev` binary from the release assets and pass the LLM credentials.
 
 ```yaml
 name: AI Review
@@ -292,13 +292,19 @@ jobs:
       LLM_MODEL: ${{ vars.LLM_MODEL }}
       LLM_TOKEN: ${{ secrets.LLM_TOKEN }}
     steps:
+      - name: Check LLM token
+        run: |
+          if [ -z "$LLM_TOKEN" ]; then
+            echo "::error::Set the LLM_TOKEN secret."
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # required for diff with the base branch
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.27.3'
-      - run: go build -o "$RUNNER_TEMP/dev" ./cmd/dev
+      - name: Install dev
+        run: |
+          curl -fsSL "https://github.com/ozonar/dev/releases/latest/download/dev-linux-amd64" -o "$RUNNER_TEMP/dev"
+          chmod +x "$RUNNER_TEMP/dev"
       - name: AI review (pull request)
         if: github.event_name == 'pull_request'
         run: '"$RUNNER_TEMP/dev" check ai --branch=${{ github.base_ref }}'
@@ -307,7 +313,7 @@ jobs:
         run: '"$RUNNER_TEMP/dev" check ai --commit=1'
 ```
 
-Store `LLM_ENDPOINT` and `LLM_MODEL` under Settings → Secrets and variables → Actions → Variables, and `LLM_TOKEN` under Secrets. If credentials are not configured, the workflow skips the review with a warning instead of failing, so pull requests from forks are not blocked.
+Store `LLM_ENDPOINT` and `LLM_MODEL` under Settings → Secrets and variables → Actions → Variables → Repository variables, and `LLM_TOKEN` under Settings → Secrets and variables → Actions → Secrets → Repository secrets. The workflow validates `LLM_TOKEN` and exits with code 1 when it is missing, so a misconfigured repository fails instead of reporting a green run.
 
 ### GitLab CI
 
@@ -323,7 +329,13 @@ ai-review:
     LLM_TOKEN: $LLM_TOKEN
     GIT_DEPTH: "0"   # required for diff with the base branch
   script:
-    - go build -o /tmp/dev ./cmd/dev
+    - |
+      if [ -z "$LLM_TOKEN" ]; then
+        echo "LLM_TOKEN is not set" >&2
+        exit 1
+      fi
+    - curl -fsSL "https://github.com/ozonar/dev/releases/latest/download/dev-linux-amd64" -o /tmp/dev
+    - chmod +x /tmp/dev
     - |
       if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
         /tmp/dev check ai --branch="$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
@@ -332,7 +344,7 @@ ai-review:
       fi
 ```
 
-Store `LLM_ENDPOINT`, `LLM_MODEL` and `LLM_TOKEN` as masked CI/CD variables in Settings → CI/CD → Variables. `GIT_DEPTH: "0"` disables shallow cloning so that `origin/<base branch>` is available for the diff.
+Store `LLM_TOKEN` as a masked CI/CD variable in Settings → CI/CD → Variables; `LLM_ENDPOINT` and `LLM_MODEL` may be plain variables. `GIT_DEPTH: "0"` disables shallow cloning so that `origin/<base branch>` is available for the diff.
 
 ## Optional Requirements
 
