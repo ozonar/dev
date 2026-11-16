@@ -1059,8 +1059,8 @@ func main() {
 	}
 
 	// PersistentPreRun выполняется после парсинга флагов: язык берётся из
-	// конфигурации приложения (ключ LANGUAGE в main.conf); при его отсутствии
-	// определяется из окружения (LC_ALL/LC_MESSAGES/LANG).
+	// конфигурации приложения (ключ INTERFACE_LANG в main.conf); при его
+	// отсутствии определяется из окружения (LC_ALL/LC_MESSAGES/LANG).
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		i18n.SetLang(ai.LanguageFromConfig())
 	}

@@ -22,8 +22,6 @@ type Config struct {
 	Endpoint string
 	Token    string
 	Model    string
-	// Language — язык вывода приложения (ключ LANGUAGE в конфиге).
-	// Пустое значение означает автоопределение из окружения (LC_ALL/LANG).
 	Language string
 }
 
@@ -71,10 +69,10 @@ type configParam struct {
 // По этой таблице и читается файл, и накладывается окружение, поэтому
 // отдельного списка переменных окружения не существует.
 var configParams = []configParam{
-	{"LLM_ENDPOINT", func(c *Config) *string { return &c.Endpoint }},
-	{"LLM_TOKEN", func(c *Config) *string { return &c.Token }},
-	{"LLM_MODEL", func(c *Config) *string { return &c.Model }},
-	{"LANGUAGE", func(c *Config) *string { return &c.Language }},
+	{key: "LLM_ENDPOINT", field: func(c *Config) *string { return &c.Endpoint }},
+	{key: "LLM_TOKEN", field: func(c *Config) *string { return &c.Token }},
+	{key: "LLM_MODEL", field: func(c *Config) *string { return &c.Model }},
+	{key: "INTERFACE_LANG", field: func(c *Config) *string { return &c.Language }},
 }
 
 // readConfigFile читает файл конфига в набор "ключ → значение".
@@ -134,39 +132,33 @@ func (c *Config) complete() bool {
 
 // LoadConfig загружает параметры конфига. Значения берутся из файла
 // (~/dev-config/main.conf, затем /etc/dev-command/main.conf) и окружения:
-// переменная с именем ключа приоритетнее файла. Если файла нет, параметры
-// могут быть полностью заданы окружением (CI).
+// переменная с именем ключа приоритетнее файла.
 func LoadConfig() (*Config, error) {
-	var lastErr error
 	for _, p := range ConfigPaths() {
 		fileValues, err := readConfigFile(p)
 		if err != nil {
-			lastErr = err
 			continue
 		}
 
 		cfg := &Config{}
 		cfg.applyValues(resolveValues(fileValues))
-		if !cfg.complete() {
-			lastErr = fmt.Errorf(i18n.T("incomplete config at %s: need ENDPOINT, TOKEN, MODEL"), p)
-			continue
+		if cfg.complete() {
+			return cfg, nil
 		}
-		return cfg, nil
 	}
 
-	// Файла нет: параметры могут быть заданы только окружением.
+	// Ни один файл не дал полного набора: параметры могут быть заданы
+	// окружением (CI).
 	cfg := &Config{}
 	cfg.applyValues(resolveValues(nil))
 	if cfg.complete() {
 		return cfg, nil
 	}
 
-	return nil, fmt.Errorf(i18n.T("config file not found: %w"), lastErr)
+	return nil, errors.New(i18n.T("incomplete config"))
 }
 
-// LanguageFromConfig возвращает язык интерфейса: LANGUAGE из окружения
-// или из первого существующего конфига. Пустая строка означает
-// автоопределение из окружения (LC_ALL/LANG).
+// LanguageFromConfig возвращает язык интерфейса из параметров конфига.
 func LanguageFromConfig() string {
 	var fileValues map[string]string
 	for _, p := range ConfigPaths() {
@@ -177,7 +169,7 @@ func LanguageFromConfig() string {
 		fileValues = values
 		break
 	}
-	return resolveValues(fileValues)["LANGUAGE"]
+	return resolveValues(fileValues)["INTERFACE_LANG"]
 }
 
 // EditConfig открывает конфиг на редактирование, создавая при необходимости.
@@ -195,8 +187,8 @@ func EditConfig() error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		defaultCfg := `# dev command configuration
 
-# Output language: auto (from LC_ALL/LANG), en, ru
-LANGUAGE=auto
+# Interface language: auto, en, ru
+INTERFACE_LANG=auto
 
 # OpenAI-compatible API endpoint (e.g. https://3qa.ru/api/v1/chat/completions)
 LLM_ENDPOINT=

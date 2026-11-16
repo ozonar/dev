@@ -21,16 +21,16 @@ func writeHomeConfig(t *testing.T, content string) {
 }
 
 func TestLanguageFromConfig(t *testing.T) {
-	t.Setenv("LANGUAGE", "")
-	writeHomeConfig(t, "# комментарий\nLANGUAGE=ru\nLLM_ENDPOINT=x\n")
+	t.Setenv("INTERFACE_LANG", "")
+	writeHomeConfig(t, "# комментарий\nINTERFACE_LANG=ru\nLLM_ENDPOINT=x\n")
 	if got := LanguageFromConfig(); got != "ru" {
 		t.Errorf("LanguageFromConfig() = %q, want ru", got)
 	}
 }
 
 func TestLanguageFromConfigAuto(t *testing.T) {
-	// Конфиг есть, но ключа LANGUAGE нет — автоопределение (пустая строка).
-	t.Setenv("LANGUAGE", "")
+	// Конфиг есть, но ключа INTERFACE_LANG нет — автоопределение (пустая строка).
+	t.Setenv("INTERFACE_LANG", "")
 	writeHomeConfig(t, "LLM_ENDPOINT=x\n")
 	if got := LanguageFromConfig(); got != "" {
 		t.Errorf("LanguageFromConfig() = %q, want empty (auto)", got)
@@ -40,7 +40,7 @@ func TestLanguageFromConfigAuto(t *testing.T) {
 func TestLanguageFromConfigMissing(t *testing.T) {
 	// HOME без конфига — пустая строка (автоопределение),
 	// если нет и системного конфига в /etc/dev-command.
-	t.Setenv("LANGUAGE", "")
+	t.Setenv("INTERFACE_LANG", "")
 	t.Setenv("HOME", t.TempDir())
 	if got := LanguageFromConfig(); got != "" {
 		t.Errorf("LanguageFromConfig() = %q, want empty", got)
@@ -68,6 +68,10 @@ func TestLoadConfigFromEnv(t *testing.T) {
 // приоритетнее файла, остальные значения берутся из файла.
 func TestLoadConfigEnvOverridesFile(t *testing.T) {
 	writeHomeConfig(t, "LLM_ENDPOINT=file-e\nLLM_TOKEN=file-t\nLLM_MODEL=file-m\n")
+	// Переменные, которые должны прийти из файла, очищаем: тест не должен
+	// зависеть от окружения, в котором запущен.
+	t.Setenv("LLM_ENDPOINT", "")
+	t.Setenv("LLM_MODEL", "")
 	t.Setenv("LLM_TOKEN", "env-token")
 
 	cfg, err := LoadConfig()
@@ -99,12 +103,42 @@ func TestLoadConfigIncompleteEnv(t *testing.T) {
 }
 
 func TestLoadConfigParsesLanguage(t *testing.T) {
-	writeHomeConfig(t, "LANGUAGE=en\nLLM_ENDPOINT=e\nLLM_TOKEN=t\nLLM_MODEL=m\n")
+	writeHomeConfig(t, "INTERFACE_LANG=en\nLLM_ENDPOINT=e\nLLM_TOKEN=t\nLLM_MODEL=m\n")
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig() error: %v", err)
 	}
 	if cfg.Language != "en" {
 		t.Errorf("cfg.Language = %q, want en", cfg.Language)
+	}
+}
+
+// TestLoadConfigInterfaceLang проверяет, что системная переменная LANGUAGE
+// не переопределяет язык интерфейса из конфига.
+func TestLoadConfigInterfaceLang(t *testing.T) {
+	writeHomeConfig(t, "INTERFACE_LANG=ru\nLLM_ENDPOINT=e\nLLM_TOKEN=t\nLLM_MODEL=m\n")
+	t.Setenv("LANGUAGE", "en")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error: %v", err)
+	}
+	if cfg.Language != "ru" {
+		t.Errorf("Language = %q, want ru from config file", cfg.Language)
+	}
+}
+
+// TestLoadConfigInterfaceLangEnv проверяет переопределение языка переменной
+// окружения INTERFACE_LANG.
+func TestLoadConfigInterfaceLangEnv(t *testing.T) {
+	writeHomeConfig(t, "INTERFACE_LANG=ru\nLLM_ENDPOINT=e\nLLM_TOKEN=t\nLLM_MODEL=m\n")
+	t.Setenv("INTERFACE_LANG", "en")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error: %v", err)
+	}
+	if cfg.Language != "en" {
+		t.Errorf("Language = %q, want en from environment", cfg.Language)
 	}
 }

@@ -411,7 +411,7 @@ func TestBuildScope_NoGit(t *testing.T) {
 
 	kinds := []scopeKind{scopeChanged, scopeFiles, scopeCommit1, scopeCommit2, scopeCommit3}
 	for _, kind := range kinds {
-		scope := buildScope(kind)
+		scope := buildScope(scopeOption{kind: kind})
 		if scope.kind != scopeAll {
 			t.Errorf("buildScope(kind=%d) outside git kind = %d, want scopeAll", kind, scope.kind)
 		}
@@ -420,9 +420,10 @@ func TestBuildScope_NoGit(t *testing.T) {
 		}
 	}
 
-	// Diff с веткой вне git также приводится к полному коду.
-	if scope := buildBranchScope("main"); scope.kind != scopeAll {
-		t.Errorf("buildBranchScope outside git kind = %d, want scopeAll", scope.kind)
+	// Ветка вне git недоступна: ScopeDiff возвращает ошибку, а не подменяет
+	// объём проверки.
+	if _, err := ScopeDiff("main"); err == nil {
+		t.Error("ScopeDiff outside git should return an error")
 	}
 
 	// Подсказки меню не должны показывать размер для объёма, который вне git
@@ -654,7 +655,7 @@ func TestBuildScope_FiltersVendorDiff(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(oldDir) }()
 
-	scope := buildScope(scopeChanged)
+	scope := buildScope(scopeOption{kind: scopeChanged})
 
 	// Файл вендора не должен попасть в список файлов.
 	for _, f := range scope.Files {
@@ -728,7 +729,7 @@ func TestBuildScope_AllCodeExcludesVendor(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(oldDir) }()
 
-	scope := buildScope(scopeAll)
+	scope := buildScope(scopeOption{kind: scopeAll})
 
 	if scope.Name != "all code" {
 		t.Errorf("scopeAll name = %q, want %q", scope.Name, "all code")
@@ -854,7 +855,7 @@ func TestBuildScope_DeletedFilesFiltered(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(oldDir) }()
 
-	scope := buildScope(scopeChanged)
+	scope := buildScope(scopeOption{kind: scopeChanged})
 
 	for _, f := range scope.Files {
 		if f == "old.go" {

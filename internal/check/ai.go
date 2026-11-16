@@ -47,12 +47,12 @@ func RunAI(info *detector.ProjectInfo, opts Options, instruction string) error {
 		text = ai.ClampToChars(text, ai.MaxReviewTotalChars)
 	}
 
-	result, err := ai.RunCodeReview(text, instruction)
+	verdict, err := ai.RunCodeReview(text, instruction)
 	if err != nil {
 		return fmt.Errorf(i18n.T("AI review failed: %v"), err)
 	}
 
-	switch result.Verdict {
+	switch verdict {
 	case ai.VerdictOK:
 		return nil
 	case ai.VerdictCritical:

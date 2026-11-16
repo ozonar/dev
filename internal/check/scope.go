@@ -122,11 +122,15 @@ func defaultScopeKind() scopeKind {
 	return scopeAll
 }
 
-// buildScope формирует Scope для заданного вида. Файлы из папок вендоров
+// buildScope формирует Scope по выбранному варианту. Файлы из папок вендоров
 // исключаются как из списка файлов, так и из текста diff.
-// Вне git история изменений недоступна, поэтому любой вид объёма означает
-// весь код: иначе проверять было бы нечего.
-func buildScope(kind scopeKind) Scope {
+// Вне git история изменений недоступна, поэтому любой вид без базовой ветки
+// означает весь код: иначе проверять было бы нечего.
+func buildScope(opt scopeOption) Scope {
+	if opt.kind == scopeBranch {
+		return buildBranchScope(opt.branch)
+	}
+	kind := opt.kind
 	if !hasGit() {
 		kind = scopeAll
 	}
@@ -146,10 +150,6 @@ func buildScope(kind scopeKind) Scope {
 	case scopeCommit3:
 		files := filesSinceCommit(3)
 		return makeScope(kind, i18n.T("changed code + 3 commits"), files, diffSinceCommitText(3, files))
-	case scopeBranch:
-		// Базовая ветка — параметр объёма, поэтому такой Scope строится
-		// только через buildBranchScope.
-		panic("check: scopeBranch must be built via buildBranchScope")
 	default:
 		files := existingFiles(projectFiles())
 		return Scope{
@@ -162,21 +162,9 @@ func buildScope(kind scopeKind) Scope {
 }
 
 // buildBranchScope формирует объём "разница текущей ветки с branch".
-// Вне git история изменений недоступна, поэтому проверяется весь код.
 func buildBranchScope(branch string) Scope {
-	if !hasGit() {
-		return buildScope(scopeAll)
-	}
 	files := diffWithBranch(branch)
 	return makeScope(scopeBranch, i18n.T("Diff with %s", branch), files, diffBranchText(branch, files))
-}
-
-// buildScopeOption строит Scope по выбранному варианту меню.
-func buildScopeOption(opt scopeOption) Scope {
-	if opt.kind == scopeBranch {
-		return buildBranchScope(opt.branch)
-	}
-	return buildScope(opt.kind)
 }
 
 // makeScope собирает Scope из файлов и текста изменений, вычисляя
@@ -310,12 +298,12 @@ func diffBranchText(branch string, paths []string) string {
 
 // ScopeAll возвращает объём "весь код".
 func ScopeAll() Scope {
-	return buildScope(scopeAll)
+	return buildScope(scopeOption{kind: scopeAll})
 }
 
 // ScopeChanged возвращает объём "изменённый код".
 func ScopeChanged() Scope {
-	return buildScope(scopeChanged)
+	return buildScope(scopeOption{kind: scopeChanged})
 }
 
 // ScopeCommits возвращает объём "изменённый код + N последних коммитов".
@@ -323,7 +311,7 @@ func ScopeCommits(n int) Scope {
 	if n <= 0 {
 		n = 1
 	}
-	return buildScope(scopeKindFromCommits(n))
+	return buildScope(scopeOption{kind: scopeKindFromCommits(n)})
 }
 
 // scopeKindFromCommits возвращает вид объёма для N коммитов.
@@ -346,13 +334,13 @@ func ScopeDiff(branch string) (Scope, error) {
 	if _, ok := branchRef(branch); !ok {
 		return Scope{}, fmt.Errorf("branch %q not found", branch)
 	}
-	return buildBranchScope(branch), nil
+	return buildScope(scopeOption{kind: scopeBranch, branch: branch}), nil
 }
 
 // ScopeDefault возвращает объём по умолчанию: изменённый код, если есть
 // незакоммиченные изменения, иначе весь код.
 func ScopeDefault() Scope {
-	return buildScope(defaultScopeKind())
+	return buildScope(scopeOption{kind: defaultScopeKind()})
 }
 
 // hasGit проверяет, что текущая директория находится в git-репозитории.
@@ -618,7 +606,7 @@ func promptScopeWithOptions(options []scopeOption, defaultKind scopeKind, hint f
 			idx = n - 1
 		}
 	}
-	return buildScopeOption(options[idx])
+	return buildScope(options[idx])
 }
 
 // parseInt разбирает число из строки.
@@ -636,7 +624,7 @@ func scopeSizeHint(opt scopeOption) string {
 	if opt.kind == scopeAll {
 		return ""
 	}
-	scope := buildScopeOption(opt)
+	scope := buildScope(opt)
 	if scope.kind == scopeAll {
 		return ""
 	}
@@ -654,7 +642,7 @@ func scopeFileHint(opt scopeOption) string {
 	if opt.kind == scopeAll {
 		return ""
 	}
-	scope := buildScopeOption(opt)
+	scope := buildScope(opt)
 	if scope.kind == scopeAll {
 		return ""
 	}

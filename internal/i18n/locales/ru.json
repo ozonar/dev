@@ -307,8 +307,6 @@
   "AI review verdict: CRITICAL": "Вердикт AI-ревью: CRITICAL",
   "AI review verdict: OK": "Вердикт AI-ревью: OK",
   "AI review verdict: unknown (the model did not report a verdict)": "Вердикт AI-ревью: неизвестен (модель не сообщила вердикт)",
-  "AI review found critical issues": "AI-ревью обнаружило критические проблемы",
-  "AI review did not report a verdict": "AI-ревью не сообщило вердикт",
 
   "=== internal/migrate ===": "",
   "migrations for framework %s are not supported": "Миграции для фреймворка %s не поддерживаются",
@@ -440,8 +438,7 @@
   "failed to start command: %w": "Не удалось запустить команду: %w",
   "error reading command output: %w": "Ошибка чтения вывода команды: %w",
   "command failed (exit code %d)": "Команда завершилась ошибкой (код выхода %d)",
-  "incomplete config at %s: need ENDPOINT, TOKEN, MODEL": "Неполная конфигурация в %s: нужны ENDPOINT, TOKEN, MODEL",
-  "config file not found: %w": "Файл конфигурации не найден: %w",
+  "incomplete config": "Неполный конфиг",
   "Config file not found or incomplete at %s": "Файл конфигурации не найден или неполон: %s",
   "Open config in editor? [Y/n]: ": "Открыть конфигурацию в редакторе? [Y/n]: ",
   "config required": "Требуется конфигурация",

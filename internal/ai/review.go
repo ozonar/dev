@@ -22,12 +22,6 @@ const (
 	VerdictCritical
 )
 
-// ReviewResult — результат AI-ревью.
-type ReviewResult struct {
-	Text    string  // полный текст ответа модели
-	Verdict Verdict // итог по критическим проблемам
-}
-
 // verdictRe ищет строку вердикта в ответе модели. Маркер запрашивается
 // промптом на английском и не зависит от языка текста ревью.
 var verdictRe = regexp.MustCompile(`(?mi)^\s*VERDICT\s*:\s*(CRITICAL|OK)\s*$`)
@@ -40,14 +34,10 @@ func parseVerdict(review string) Verdict {
 	if len(matches) == 0 {
 		return VerdictUnknown
 	}
-	switch strings.ToUpper(matches[len(matches)-1][1]) {
-	case "CRITICAL":
+	if strings.EqualFold(matches[len(matches)-1][1], "CRITICAL") {
 		return VerdictCritical
-	case "OK":
-		return VerdictOK
-	default:
-		return VerdictUnknown
 	}
+	return VerdictOK
 }
 
 // printVerdict выводит итог ревью по критическим проблемам.
@@ -88,7 +78,6 @@ func buildReviewPrompt(text string) string {
 Обязательное завершение ответа — отдельная последняя строка с вердиктом:
 VERDICT: CRITICAL — если обнаружена хотя бы одна критическая проблема;
 VERDICT: OK — если критических проблем нет.
-После строки вердикта ничего не пиши.
 
 === Код для ревью ===
 %s`, text)
@@ -139,18 +128,18 @@ func replaceInline(s, marker string, wrap func(string) string) string {
 	return sb.String()
 }
 
-// RunCodeReview выполняет AI-код-ревью переданного кода.
+// RunCodeReview выполняет AI-код-ревью переданного кода и возвращает вердикт.
 // text — строка с изменениями (diff) либо полным содержимым изменённых файлов.
-func RunCodeReview(text, instruction string) (*ReviewResult, error) {
+func RunCodeReview(text, instruction string) (Verdict, error) {
 	cfg, err := LoadConfig()
 	if err != nil {
 		i18n.Red("Config error: %v", err)
 		if err := InteractiveEditConfig(); err != nil {
-			return nil, err
+			return VerdictUnknown, err
 		}
 		cfg, err = LoadConfig()
 		if err != nil {
-			return nil, fmt.Errorf(i18n.T("config still invalid after edit: %w"), err)
+			return VerdictUnknown, fmt.Errorf(i18n.T("config still invalid after edit: %w"), err)
 		}
 	}
 
@@ -163,7 +152,7 @@ func RunCodeReview(text, instruction string) (*ReviewResult, error) {
 	i18n.Cyan("Sending code to LLM for review...")
 	review, err := queryReviewText(cfg, history)
 	if err != nil {
-		return nil, err
+		return VerdictUnknown, err
 	}
 
 	fmt.Println()
@@ -171,7 +160,7 @@ func RunCodeReview(text, instruction string) (*ReviewResult, error) {
 	fmt.Println(renderMarkdown(review))
 	fmt.Println()
 
-	result := &ReviewResult{Text: review, Verdict: parseVerdict(review)}
-	printVerdict(result.Verdict)
-	return result, nil
+	verdict := parseVerdict(review)
+	printVerdict(verdict)
+	return verdict, nil
 }

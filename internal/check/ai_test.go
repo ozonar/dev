@@ -1,12 +1,17 @@
 package check
 
 import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"dev/internal/ai"
+	"dev/internal/detector"
 )
 
 // TestReadScopeFiles_SkipsLargeFiles проверяет, что файлы, размер которых
@@ -91,5 +96,43 @@ func TestReadScopeFiles_SkipsBinary(t *testing.T) {
 	}
 	if strings.Contains(text, "icon.png") {
 		t.Errorf("binary file should be skipped from review text, got: %q", text)
+	}
+}
+
+// TestRunAI_Verdicts проверяет, что вердикт модели превращается в результат
+// ревью: OK — успех, CRITICAL и отсутствие вердикта — ошибки, на которых
+// основан ненулевой код возврата в CI.
+func TestRunAI_Verdicts(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    error
+	}{
+		{"ok", "Проблем нет.\nVERDICT: OK", nil},
+		{"critical", "Найден баг.\nVERDICT: CRITICAL", ErrCriticalFindings},
+		{"unknown", "Ответ без вердикта", ErrVerdictUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := tt.content
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"choices": []any{
+						map[string]any{"message": map[string]any{"content": content}},
+					},
+				})
+			}))
+			defer srv.Close()
+
+			t.Setenv("LLM_ENDPOINT", srv.URL)
+			t.Setenv("LLM_TOKEN", "test-token")
+			t.Setenv("LLM_MODEL", "test-model")
+
+			scope := Scope{Name: "test", Changes: "package a\n", kind: scopeChanged}
+			err := RunAI(&detector.ProjectInfo{Language: "go", Framework: "go"}, Options{Scope: &scope}, "")
+			if !errors.Is(err, tt.want) {
+				t.Errorf("RunAI() error = %v, want %v", err, tt.want)
+			}
+		})
 	}
 }
