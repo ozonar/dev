@@ -6,8 +6,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"time"
 )
+
+// phpStaticReleasesURL — листинг статических сборок PHP (static-php-cli).
+const phpStaticReleasesURL = "https://dl.static-php.dev/static-php-cli/common/"
+
+// phpVersionRe — шаблон имени файла статической сборки PHP для macOS,
+// например "php-8.4.23-cli-macos-aarch64.tar.gz".
+var phpVersionRe = regexp.MustCompile(`php-(\d+\.\d+\.\d+)-cli-macos-(x86_64|aarch64)\.tar\.gz`)
 
 // darwinDelivery — общие правила доставки macOS, не зависящие от архитектуры.
 type darwinDelivery struct{}
