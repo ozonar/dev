@@ -15,7 +15,7 @@ import (
 	"github.com/fatih/color"
 
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -250,12 +250,8 @@ func connectDB(dbInfo detector.DatabaseInfo) (*sql.DB, error) {
 
 	switch dbInfo.Type {
 	case "postgresql":
-		driver = "postgres"
-		// Remove query parameters from URL as lib/pq doesn't support them
+		driver = "pgx"
 		dsn = dbInfo.URL
-		if idx := strings.Index(dsn, "?"); idx != -1 {
-			dsn = dsn[:idx]
-		}
 	case "mysql":
 		driver = "mysql"
 		// Convert URL to MySQL DSN (user:pass@tcp(host:port)/dbname)
@@ -483,8 +479,7 @@ func getLastRows(db *sql.DB, dbType, tableName string, limit int) ([]map[string]
 	switch dbType {
 	case "postgresql":
 		// Явно получаем список колонок через information_schema,
-		// чтобы избежать системных колонок (ctid, oid и т.д.),
-		// которые lib/pq может возвращать при SELECT *
+		// чтобы не включать системные колонки (ctid, oid и т.д.) в SELECT *
 		cols, err := getColumnNames(db, tableName)
 		if err != nil {
 			return nil, fmt.Errorf(i18n.T("error getting column names: %w"), err)

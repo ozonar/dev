@@ -16,7 +16,7 @@ import (
 
 	"github.com/fatih/color"
 	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // DBType тип базы данных
@@ -223,7 +223,7 @@ func findDBProcess(status *MigrationStatus, dbInfo *detector.DatabaseInfo) {
 		return
 	}
 
-	driver := "postgres"
+	driver := "pgx"
 	if dbInfo.Type == "mysql" {
 		driver = "mysql"
 	}
@@ -431,7 +431,7 @@ func analyzeLocks(status *MigrationStatus, dbInfo *detector.DatabaseInfo) {
 		return
 	}
 
-	driver := "postgres"
+	driver := "pgx"
 	if dbInfo.Type == "mysql" {
 		driver = "mysql"
 	}
@@ -632,7 +632,7 @@ func getDoctrineMigrationInfo(status *MigrationStatus, dbInfo *detector.Database
 		return
 	}
 
-	driver := "postgres"
+	driver := "pgx"
 	if dbInfo.Type == "mysql" {
 		driver = "mysql"
 	}
@@ -1018,7 +1018,7 @@ func getDBVersion(dbInfo *detector.DatabaseInfo) string {
 		return ""
 	}
 
-	driver := "postgres"
+	driver := "pgx"
 	if dbInfo.Type == "mysql" {
 		driver = "mysql"
 	}
@@ -1105,11 +1105,7 @@ func buildDSN(dbInfo *detector.DatabaseInfo) string {
 
 	// PostgreSQL
 	if dbInfo.URL != "" {
-		dsn := dbInfo.URL
-		if idx := strings.Index(dsn, "?"); idx != -1 {
-			dsn = dsn[:idx]
-		}
-		return dsn
+		return dbInfo.URL
 	}
 
 	return fmt.Sprintf("postgres://%s:%s/%s?sslmode=disable", host, port, dbname)

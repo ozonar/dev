@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // discoverPostgresDSN находит строку подключения к PostgreSQL из окружения
@@ -52,7 +52,7 @@ func collectPostgres(prev *Report) *Category {
 		return cat
 	}
 
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		cat.Present = false
 		return cat
