@@ -70,22 +70,31 @@ func getFreePort(t *testing.T) int {
 // TestIsPortOccupiedFree проверяет, что свободный порт определяется как незанятый.
 func TestIsPortOccupiedFree(t *testing.T) {
 	port := getFreePort(t)
-	occupied, _ := IsPortOccupied(port)
+	occupied, _, err := IsPortOccupied(port)
+	if err != nil {
+		t.Fatalf("IsPortOccupied(%d) вернул ошибку: %v", port, err)
+	}
 	if occupied {
 		t.Errorf("IsPortOccupied(%d) = true для свободного порта", port)
 	}
 }
 
-// TestIsPortOccupiedBusy проверяет, что занятый порт определяется как занятый.
+// TestIsPortOccupiedBusy проверяет, что занятый порт определяется как занятый
+// и что владелец порта найден.
 func TestIsPortOccupiedBusy(t *testing.T) {
 	port := getFreePort(t)
 	startHelperServer(t, port)
 
-	occupied, info := IsPortOccupied(port)
+	occupied, info, err := IsPortOccupied(port)
+	if err != nil {
+		t.Fatalf("IsPortOccupied(%d) вернул ошибку: %v", port, err)
+	}
 	if !occupied {
 		t.Errorf("IsPortOccupied(%d) = false для занятого порта", port)
 	}
-	_ = info
+	if info == "" {
+		t.Error("IsPortOccupied не вернул информацию о процессе-владельце")
+	}
 }
 
 // TestKillProcessOnPort проверяет, что KillProcessOnPort убивает процесс на порту.
@@ -94,7 +103,9 @@ func TestKillProcessOnPort(t *testing.T) {
 	cmd := startHelperServer(t, port)
 
 	// Убеждаемся, что порт занят
-	if occupied, _ := IsPortOccupied(port); !occupied {
+	if occupied, _, err := IsPortOccupied(port); err != nil {
+		t.Fatalf("IsPortOccupied(%d) вернул ошибку: %v", port, err)
+	} else if !occupied {
 		t.Fatalf("порт %d должен быть занят перед KillProcessOnPort", port)
 	}
 
@@ -110,7 +121,10 @@ func TestKillProcessOnPort(t *testing.T) {
 	// Проверяем, что порт освободился
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		occupied, _ := IsPortOccupied(port)
+		occupied, _, err := IsPortOccupied(port)
+		if err != nil {
+			t.Fatalf("IsPortOccupied(%d) вернул ошибку: %v", port, err)
+		}
 		if !occupied {
 			return
 		}

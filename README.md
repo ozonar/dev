@@ -71,7 +71,8 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 - **`dev db`** – Interactive database explorer: analyze databases in the project, connect, list tables, and view data.
 
 - **`dev port <address>`** – Check if a port is occupied and show detailed process information:
-  - Uses `fuser`, `ss`, `lsof` for local port detection
+  - Detects the listening process natively via `/proc` on Linux
+  - Falls back to `lsof` on platforms without `/proc` (macOS)
   - Offers `nmap` scan for service detection
   - Supports remote hosts (auto‑runs nmap)
   - Formats: `127.0.0.1:1000`, `:8080`, `8080`
@@ -375,8 +376,9 @@ dev/
 │   ├── logs/                # Log discovery
 │   ├── migrate/             # Database migrations
 │   ├── migrate/status.go    # Migration status & lock analysis
-│   ├── port/                # Port checking (fuser, ss, lsof, nmap)
+│   ├── port/                # Port checking (native /proc, lsof fallback, nmap)
 │   ├── prepare/             # Environment preparation
+│   ├── procfs/              # Native process & socket inspection (/proc)
 │   ├── prod/                # Production server health diagnostics
 │   ├── release/             # Release management (release.yml, symlinks)
 │   ├── run/                 # Project runner

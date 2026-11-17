@@ -174,7 +174,10 @@ func debugDir(target string) string {
 // висящим процессом (например, от предыдущего запуска отладчика), предлагает
 // убить его, чтобы избежать ошибки "address already in use".
 func ensureDebugPortFree(portNum int) error {
-	occupied, info := port.IsPortOccupied(portNum)
+	occupied, info, err := port.IsPortOccupied(portNum)
+	if err != nil {
+		return fmt.Errorf(i18n.T("could not check port %d: %v"), portNum, err)
+	}
 	if !occupied {
 		return nil
 	}
@@ -275,7 +278,7 @@ func runPHP(opts Options) error {
 		"-dxdebug.client_host=127.0.0.1",
 		"-dxdebug.client_port=9003",
 	}
-	os.Setenv("XDEBUG_MODE", "debug")
+	_ = os.Setenv("XDEBUG_MODE", "debug")
 	i18n.Cyan("Xdebug debug mode enabled. Start 'Listening for PHP Debug Connections' in your IDE (port 9003), then open the site.")
 
 	return run.RunProjectWithOptions(opts.Framework, "php", run.RunOptions{

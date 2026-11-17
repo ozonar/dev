@@ -25,8 +25,8 @@ func withFakeBinary(t *testing.T, name string) {
 		t.Fatal(err)
 	}
 	oldPath := os.Getenv("PATH")
-	os.Setenv("PATH", dir+string(os.PathListSeparator)+oldPath)
-	t.Cleanup(func() { os.Setenv("PATH", oldPath) })
+	_ = os.Setenv("PATH", dir+string(os.PathListSeparator)+oldPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", oldPath) })
 }
 
 // TestFindGoMainRun проверяет поиск main файлов (аналогично build, но своя реализация)

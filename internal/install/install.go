@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"dev/internal/i18n"
+	"dev/internal/procfs"
 )
 
 // checkPathDirs возвращает список директорий для выбора установки.
@@ -171,11 +171,9 @@ func Install(sourceFile string) error {
 		return fmt.Errorf(i18n.T("Attempting to install %[1]s into itself.\n"), targetPath)
 	}
 
-	// Убиваем процесс, использующий целевой файл (если такой есть).
-	// Вывод fuser не показываем, чтобы не засорять консоль после промпта выбора.
-	// На macOS fuser отсутствует — вызов безопасно пропускается.
-	if _, err := exec.LookPath("fuser"); err == nil {
-		_ = exec.Command("fuser", "-k", targetPath).Run()
+	// Убиваем процессы, удерживающие целевой файл (если такие есть).
+	if err := procfs.KillFile(targetPath); err != nil {
+		return fmt.Errorf(i18n.T("could not release %s: %v"), targetPath, err)
 	}
 
 	// Копируем файл
@@ -192,9 +190,11 @@ func Install(sourceFile string) error {
 	if err != nil {
 		return fmt.Errorf(i18n.T("could not create target file %s: %v"), targetPath, err)
 	}
-	defer dstFile.Close()
-
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		_ = dstFile.Close()
+		return fmt.Errorf(i18n.T("copy failed: %v"), err)
+	}
+	if err := dstFile.Close(); err != nil {
 		return fmt.Errorf(i18n.T("copy failed: %v"), err)
 	}
 
