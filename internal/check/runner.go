@@ -226,7 +226,7 @@ return (new PhpCsFixer\Config())
 // ensurePhpCsFixerConfig возвращает путь к конфигу php-cs-fixer.
 // Сначала ищется стандартный конфиг в проекте (dir) — он приоритетен, чтобы
 // уважать настройки проекта. Если конфига в проекте нет, генерируется файл
-// .php-cs-fixer.php в папке девконфига (~/dev-config)
+// .php-cs-fixer.php в папке девконфига (~/dev-command)
 // (без конфига возникает ошибка "For multiple paths config parameter is required").
 func ensurePhpCsFixerConfig(dir string) string {
 	for _, name := range phpCsFixerConfigNames {
@@ -240,7 +240,7 @@ func ensurePhpCsFixerConfig(dir string) string {
 	if err != nil {
 		return ""
 	}
-	devDir := filepath.Join(home, "dev-config")
+	devDir := filepath.Join(home, "dev-command")
 	if err := os.MkdirAll(devDir, 0o755); err != nil {
 		return ""
 	}

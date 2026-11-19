@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// writeHomeConfig создаёт временный HOME с файлом ~/dev-config/main.conf.
+// writeHomeConfig создаёт временный HOME с файлом ~/dev-command/main.conf.
 func writeHomeConfig(t *testing.T, content string) {
 	t.Helper()
 	home := t.TempDir()
-	dir := filepath.Join(home, "dev-config")
+	dir := filepath.Join(home, "dev-command")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}

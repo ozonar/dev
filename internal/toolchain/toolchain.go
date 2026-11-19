@@ -1,5 +1,5 @@
 // Пакет toolchain инкапсулирует механизм скачивания и хранения внешних
-// инструментов (go, php, lnav, линтеры) в папке ~/dev-config/tools.
+// инструментов (go, php, lnav, линтеры) в папке ~/dev-command/tools.
 //
 // Разные версии одной программы хранятся в разных подпапках, поэтому версии
 // не пересекаются. Скачивание выполняется лениво: фабрики (PhpProgram,
@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-// DirName — имя подпапки внутри dev-config, куда скачиваются программы.
+// DirName — имя подпапки внутри dev-command, куда скачиваются программы.
 const DirName = "tools"
 
 // Program описывает программу с фиксированной версией (lnav, линтеры).
@@ -57,7 +57,7 @@ type Manager struct {
 	dir string
 }
 
-// NewManager создаёт менеджер инструментов с папкой ~/dev-config/tools.
+// NewManager создаёт менеджер инструментов с папкой ~/dev-command/tools.
 // Возвращает ошибку, если домашнюю директорию определить не удалось.
 func NewManager() (*Manager, error) {
 	home, err := os.UserHomeDir()
@@ -65,7 +65,7 @@ func NewManager() (*Manager, error) {
 		return nil, fmt.Errorf("failed to determine home directory: %v", err)
 	}
 	return &Manager{
-		dir: filepath.Join(home, "dev-config", DirName),
+		dir: filepath.Join(home, "dev-command", DirName),
 	}, nil
 }
 

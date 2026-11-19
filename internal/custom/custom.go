@@ -34,17 +34,22 @@ const configPath = "~/dev-command/custom.yml"
 const localFileName = ".custom"
 
 // Context содержит параметры, пробрасываемые в пользовательскую команду:
-// текущий путь, язык и фреймворк проекта.
+// текущий путь, язык и фреймворк проекта, а также позиционные аргументы.
 type Context struct {
 	Dir       string // текущий путь
 	Language  string // язык проекта
 	Framework string // фреймворк проекта
+	// Args — позиционные аргументы, доступные в подкомандах как $1..$N.
+	// Заполняются только рецептами; обычные custom-команды их не получают.
+	Args []string
 }
 
 // Command описывает одну пользовательскую команду — список подкоманд.
 // Path ограничивает доступность команды: она выполняется только когда текущая
 // директория находится внутри указанного пути (пустая строка — без ограничений).
 type Command struct {
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
 	Subcommands []string `yaml:"subcommands"`
 	// Path — путь, внутри которого команда доступна. Абсолютный путь либо "~"
 	// резолвятся как есть; относительный путь считается относительно текущей
@@ -224,7 +229,10 @@ func (c *Config) RunCommand(name string, ctx Context) (bool, error) {
 		line := Expand(raw, ctx)
 		color.Cyan("> %s", line)
 
-		sh := exec.Command("sh", "-c", line)
+		// Аргументы передаются позиционно после текста скрипта: в нём они
+		// доступны как $1..$N и не участвуют в разборе shell-синтаксиса.
+		argv := append([]string{"-c", line, name}, ctx.Args...)
+		sh := exec.Command("sh", argv...)
 		sh.Dir = ctx.Dir
 		sh.Stdin = os.Stdin
 		sh.Stdout = os.Stdout

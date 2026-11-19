@@ -121,18 +121,18 @@ func Virus(path string) error {
 		return err
 	}
 
-	// Копируем все конфиги из папки ~/dev-config на удалённый сервер.
-	if err := copyDevConfig(username, host, remotePath); err != nil {
-		i18n.Printf("Warning: could not copy dev-config files: %v\n", err)
+	// Копируем все конфиги из папки ~/dev-command на удалённый сервер.
+	if err := copyDevCommand(username, host, remotePath); err != nil {
+		i18n.Printf("Warning: could not copy dev-command files: %v\n", err)
 	}
 
 	i18n.Printf("Successfully copied to %s:%s\n", host, remotePath)
 	return nil
 }
 
-// copyDevConfig копирует всё содержимое локальной папки ~/dev-config
-// в одноимённую папку dev-config в домашнем каталоге удалённого пользователя.
-func copyDevConfig(username, host, remotePath string) error {
+// copyDevCommand копирует всё содержимое локальной папки ~/dev-command
+// в одноимённую папку dev-command в домашнем каталоге удалённого пользователя.
+func copyDevCommand(username, host, remotePath string) error {
 	// Определяем домашнюю директорию текущего пользователя.
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -140,9 +140,9 @@ func copyDevConfig(username, host, remotePath string) error {
 	}
 
 	// Путь к локальной папке с конфигами.
-	localConfigDir := filepath.Join(home, "dev-config")
+	localConfigDir := filepath.Join(home, "dev-command")
 
-	// Целевой путь на удалённом сервере: <remotePath>/dev-config.
-	remoteConfigDir := filepath.Join(remotePath, "dev-config")
+	// Целевой путь на удалённом сервере: <remotePath>/dev-command.
+	remoteConfigDir := filepath.Join(remotePath, "dev-command")
 	return scpDir(localConfigDir, username, host, remoteConfigDir)
 }

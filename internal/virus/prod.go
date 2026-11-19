@@ -164,7 +164,7 @@ func stageWithoutReports(src string) (string, error) {
 
 // copyLLMConfig переносит LLM-конфиг на удалённый сервер. Источник выбирается
 // с тем же приоритетом, что и при загрузке конфига командой prod llm:
-// сначала ~/dev-config/main.conf, затем /etc/dev-command/main.conf.
+// сначала ~/dev-command/main.conf, затем /etc/dev-command/main.conf.
 func copyLLMConfig(username, host string) error {
 	src := resolveFirstExisting(ai.ConfigPaths())
 	if src == "" {

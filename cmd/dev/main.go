@@ -23,6 +23,7 @@ import (
 	"dev/internal/migrate"
 	"dev/internal/port"
 	"dev/internal/prepare"
+	"dev/internal/recipe"
 	"dev/internal/run"
 	"dev/internal/unit"
 	"dev/internal/update"
@@ -782,7 +783,7 @@ and then the temporary file is removed.`,
 var selfConfigCmd = &cobra.Command{
 	Use:   "self-config",
 	Short: "Open AI configuration file for editing",
-	Long: `Open the AI configuration file (~/dev-config/main.conf) for editing.
+	Long: `Open the AI configuration file (~/dev-command/main.conf) for editing.
 Creates the file with default empty parameters if it doesn't exist.
 Uses $EDITOR or nano by default.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -805,6 +806,31 @@ Uses $EDITOR or nano by default.`,
 	},
 }
 
+// recipeForce — принудительно обновить индекс и файл рецепта из репозитория.
+var recipeForce bool
+
+var recipeCmd = &cobra.Command{
+	Use:   "recipe [name]",
+	Short: "List and run recipes from the recipe repository",
+	Long: `List recipes stored in the recipe git repository or run one by name.
+
+Without arguments the command downloads repository.yml from the repository
+root and prints all recipe names with descriptions.
+
+With a recipe name the command downloads the recipe into the local cache,
+prints its name, description and cache time, and asks whether to run it.
+Use --force to refresh a cached recipe from the repository.
+
+The repository is configured with the recipe-repo key in the dev self-config
+file. The default is https://github.com/ozonar/dev-recipe.git.`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := recipe.Run(args, recipeForce); err != nil {
+			i18n.Red("Error: %v", err)
+		}
+	},
+}
+
 var aiCmd = &cobra.Command{
 	Use:   "ai <text>",
 	Short: "Ask AI to generate and execute commands",
@@ -814,7 +840,7 @@ a list of terminal commands based on your description.
 The AI analyzes the current project context and suggests commands.
 You can then choose to execute them one by one or refine the request.
 
-Configuration is stored in ~/dev-config/main.conf (user config)
+Configuration is stored in ~/dev-command/main.conf (user config)
 or /etc/dev-command/main.conf (system fallback).
 Use 'dev self-config' to set up your API endpoint, token, and model.`,
 	Args: cobra.MinimumNArgs(1),
@@ -890,6 +916,7 @@ Use the same scope flags as 'dev review':
 }
 
 func init() {
+	recipeCmd.Flags().BoolVarP(&recipeForce, "force", "f", false, "Force refresh the recipe index and recipe from the repository")
 	// PersistentFlags — подкоманды fix/ai наследуют эти флаги.
 	checkCmd.PersistentFlags().BoolVar(&checkAll, "all", false, "Check all code")
 	checkCmd.PersistentFlags().IntVar(&checkCommit, "commit", 0, "Check changed code plus last N commits")
@@ -1044,6 +1071,7 @@ func main() {
 	rootCmd.AddCommand(selfUpdateCmd)
 	rootCmd.AddCommand(selfConfigCmd)
 	rootCmd.AddCommand(selfCommandCmd)
+	rootCmd.AddCommand(recipeCmd)
 	rootCmd.AddCommand(aiCmd)
 	rootCmd.AddCommand(checkCmd)
 	checkCmd.AddCommand(checkFixCmd)

@@ -369,7 +369,7 @@ func runLLM(rep *prod.Report) {
 	cfg, err := ai.LoadConfig()
 	if err != nil {
 		fmt.Println(colors.Red("LLM config error: " + err.Error()))
-		fmt.Println(colors.Yellow("Configure ~/dev-config/main.conf or /etc/dev-command/main.conf (LLM_ENDPOINT, LLM_TOKEN, LLM_MODEL)"))
+		fmt.Println(colors.Yellow("Configure ~/dev-command/main.conf or /etc/dev-command/main.conf (LLM_ENDPOINT, LLM_TOKEN, LLM_MODEL)"))
 		return
 	}
 	fmt.Println(colors.Cyan("Sending report to LLM (" + cfg.Model + ")..."))

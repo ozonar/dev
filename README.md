@@ -86,7 +86,7 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 - **`dev ai <text>`** – Send a request to an AI model (OpenAI-compatible API) to generate and execute terminal commands:
   - AI analyzes the current project context and suggests commands
   - Interactive loop: execute commands one by one or refine the request
-  - Configuration via `~/dev-config/main.conf` or `/etc/dev-command/main.conf`
+  - Configuration via `~/dev-command/main.conf` or `/etc/dev-command/main.conf`
 
 - **`dev self-config`** – Open AI configuration file for editing:
   - Creates the file with default empty parameters if it doesn't exist
@@ -96,7 +96,7 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 - **`dev check`** – Run static code analysis with linters for the detected language/framework:
   - Go: `golangci-lint`
   - PHP: `phpstan` (with `--level=5`, `--memory-limit=1G`) and `php-cs-fixer`
-  - Downloads required tools (and php runtime) to `~/dev-config/check` if not present
+  - Downloads required tools (and php runtime) to `~/dev-command/check` if not present
   - Interactive selection of the check scope (changed code, changed code + N commits, all code, diff with master/develop)
   - Runs by default in **dry-run** mode; output is streamed to the console
   - Subcommands: `dev check fix` (auto-fix issues), `dev check ai` (AI code review)
@@ -111,7 +111,7 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 
 - **`prod virus [user@ip_addr]`** – Copy the prod executable to a remote server via SCP and install the production configuration there:
   - `/etc/prod-command` config files (e.g. `deps.conf`; the `reports` history is not copied) — installed via `sudo` for non-root users
-  - LLM config (`~/dev-config/main.conf` or `/etc/dev-command/main.conf`) so `prod llm` works right away
+  - LLM config (`~/dev-command/main.conf` or `/etc/dev-command/main.conf`) so `prod llm` works right away
   - Supports `user@host` or just `ip` formats (SSH key auth only)
 
 - **`prod service [--since 6h]`** – Show systemd services status:
@@ -185,6 +185,9 @@ dev port :8080          # check if port is occupied
 dev curl example.com    # make HTTP request
 dev ai "install npm"    # ask AI to generate commands
 dev self-config         # configure AI settings
+dev recipe              # list recipes from the recipe repository
+dev recipe <name>       # run a recipe by name (downloaded on first use)
+dev recipe --force <name>  # refresh a cached recipe and run it
 dev check               # run static code analysis (dry-run)
 dev check fix           # run analysis and auto-fix issues
 dev check ai            # AI code review of the changed code
@@ -206,7 +209,7 @@ prod self-update        # update prod to latest version
 
 ### AI Configuration
 
-The AI feature requires configuration in `~/dev-config/main.conf`:
+The AI feature requires configuration in `~/dev-command/main.conf`:
 
 ```ini
 LLM_ENDPOINT=https://api.openai.com/v1/chat/completions
@@ -239,6 +242,25 @@ commands:
 
 Available variables in subcommands: `$(current_dir)`, `$(language)`, `$(framework)`.
 
+### Recipes
+
+Recipes are reusable command sets stored in a separate recipe repository.
+`dev recipe` reads `repository.yml` from the repository root and prints all
+recipe names with descriptions. `dev recipe <name>` reads the recipe file,
+caches it in `~/dev-command/recipes`, prints its name, description and cache
+time, and asks whether to run it. Use `--force` to refresh a cached recipe.
+
+The repository is configured in `~/dev-command/main.conf`:
+
+```ini
+# Local path or HTTP(S) base URL.
+RECIPE_REPO=https://raw.githubusercontent.com/ozonar/dev-recipe/main
+```
+
+The default is `https://raw.githubusercontent.com/ozonar/dev-recipe/main`.
+No git client is required: files are read from the local path or downloaded
+over HTTP.
+
 ### Project Detection
 
 No configuration files are required for project detection. The tool automatically detects your project based on common file patterns.
@@ -263,7 +285,7 @@ or
 VERDICT: CRITICAL
 ```
 
-LLM parameters are read from `~/dev-config/main.conf` or from environment variables. The environment wins, so no config file is needed on a runner:
+LLM parameters are read from `~/dev-command/main.conf` or from environment variables. The environment wins, so no config file is needed on a runner:
 
 | Variable | Where to store it |
 |----------|-------------------|
@@ -362,7 +384,7 @@ dev/
 ├── cmd/dev/main.go          # CLI entry point
 ├── internal/
 │   ├── ai/                  # AI integration (OpenAI-compatible API)
-│   ├── ai/config.go         # AI configuration management
+│   ├── ai/config.go         # AI parameters (LLM keys)
 │   ├── build/               # Project building
 │   ├── cache/               # Cache clearing
 │   ├── check/               # Static code analysis
@@ -380,8 +402,10 @@ dev/
 │   ├── prepare/             # Environment preparation
 │   ├── procfs/              # Native process & socket inspection (/proc)
 │   ├── prod/                # Production server health diagnostics
+│   ├── recipe/              # Recipe repository, cache and runner
 │   ├── release/             # Release management (release.yml, symlinks)
 │   ├── run/                 # Project runner
+│   ├── selfconfig/          # Shared main.conf paths, read and edit
 │   ├── unit/                # Unit test running
 │   ├── update/              # Self-update logic (dev/prod)
 │   ├── version/             # Version information

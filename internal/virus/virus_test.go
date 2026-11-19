@@ -13,7 +13,7 @@ func TestScpDirMissingDir(t *testing.T) {
 	// Несуществующий путь к папке конфигов
 	missingDir := filepath.Join(t.TempDir(), "не-существующая-папка")
 
-	err := scpDir(missingDir, "user", "127.0.0.1", "/home/user/dev-config")
+	err := scpDir(missingDir, "user", "127.0.0.1", "/home/user/dev-command")
 	if err != nil {
 		t.Errorf("ожидался nil при отсутствии папки конфигов, получена ошибка: %v", err)
 	}
@@ -23,12 +23,12 @@ func TestScpDirMissingDir(t *testing.T) {
 // возвращается ошибка.
 func TestScpDirNotDir(t *testing.T) {
 	// Создаём файл вместо папки
-	filePath := filepath.Join(t.TempDir(), "dev-config")
+	filePath := filepath.Join(t.TempDir(), "dev-command")
 	if err := os.WriteFile(filePath, []byte("не папка"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	err := scpDir(filePath, "user", "127.0.0.1", "/home/user/dev-config")
+	err := scpDir(filePath, "user", "127.0.0.1", "/home/user/dev-command")
 	if err == nil {
 		t.Error("ожидалась ошибка, когда путь не является папкой")
 	}
