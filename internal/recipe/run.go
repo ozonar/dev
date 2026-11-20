@@ -42,7 +42,7 @@ func Run(args []string, force bool) error {
 		i18n.Yellow("Skipped.")
 		return nil
 	}
-	return execute(prepared, cwd)
+	return execute(prepared, cwd, args[1:])
 }
 
 // printNotFound выводит отсутствующий рецепт и совпадения по подстроке.
@@ -99,8 +99,9 @@ func readLine(in io.Reader) string {
 
 // execute выполняет рецепт в контексте текущего проекта.
 // Детекция нужна только для подстановок $(language) и $(framework).
-func execute(prepared *Prepared, cwd string) error {
-	ctx := custom.Context{Dir: cwd}
+// params передаются рецепту как позиционные аргументы $1..$N.
+func execute(prepared *Prepared, cwd string, params []string) error {
+	ctx := custom.Context{Dir: cwd, Args: params}
 	if info, err := detector.DetectProject(cwd); err == nil {
 		ctx.Language = info.Language
 		ctx.Framework = info.Framework

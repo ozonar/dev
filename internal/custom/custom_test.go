@@ -107,6 +107,60 @@ func TestRunCommandStopsOnFailure(t *testing.T) {
 	}
 }
 
+func TestRunCommandPassesArgsPositionally(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.txt")
+
+	cfg := &Config{Commands: map[string]Command{
+		"echoargs": {Subcommands: []string{`printf '%s|%s' "$1" "$2" > ` + out}},
+	}}
+	ctx := testContext(dir)
+	ctx.Args = []string{"8000", "hello world"}
+
+	found, err := cfg.RunCommand("echoargs", ctx)
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if !found {
+		t.Error("RunCommand() found = false, want true")
+	}
+
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read out: %v", err)
+	}
+	if string(got) != "8000|hello world" {
+		t.Errorf("args = %q, want %q", string(got), "8000|hello world")
+	}
+}
+
+func TestRunCommandArgsAreNotShellInterpreted(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.txt")
+	hacked := filepath.Join(dir, "hacked.txt")
+
+	cfg := &Config{Commands: map[string]Command{
+		"echoargs": {Subcommands: []string{`printf '%s' "$1" > ` + out}},
+	}}
+	ctx := testContext(dir)
+	arg := "8000; touch " + hacked
+	ctx.Args = []string{arg}
+
+	if _, err := cfg.RunCommand("echoargs", ctx); err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if _, err := os.Stat(hacked); err == nil {
+		t.Error("argument must not be interpreted by the shell")
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read out: %v", err)
+	}
+	if string(got) != arg {
+		t.Errorf("arg = %q, want %q", string(got), arg)
+	}
+}
+
 func TestRunCommandCurrentDirAndCd(t *testing.T) {
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "sub")

@@ -216,6 +216,30 @@ func TestValidateRelPathRejectsTraversal(t *testing.T) {
 	}
 }
 
+func TestExecutePassesArgs(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "arg.txt")
+	prepared := &Prepared{
+		Name: "echoarg",
+		Command: custom.Command{
+			Name:        "echoarg",
+			Subcommands: []string{`printf '%s' "$1" > ` + out},
+		},
+	}
+
+	err := Execute(prepared, custom.Context{Dir: dir, Args: []string{"8000"}})
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read arg: %v", err)
+	}
+	if string(got) != "8000" {
+		t.Errorf("arg = %q, want %q", string(got), "8000")
+	}
+}
+
 func TestReadLineKeepsRemainingInput(t *testing.T) {
 	in := strings.NewReader("1\n2\n")
 

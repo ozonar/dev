@@ -810,9 +810,9 @@ Uses $EDITOR or nano by default.`,
 var recipeForce bool
 
 var recipeCmd = &cobra.Command{
-	Use:   "recipe [name]",
+	Use:   "recipe [name] [args...]",
 	Short: "List and run recipes from the recipe repository",
-	Long: `List recipes stored in the recipe git repository or run one by name.
+	Long: `List recipes stored in the recipe repository or run one by name.
 
 Without arguments the command downloads repository.yml from the repository
 root and prints all recipe names with descriptions.
@@ -821,9 +821,10 @@ With a recipe name the command downloads the recipe into the local cache,
 prints its name, description and cache time, and asks whether to run it.
 Use --force to refresh a cached recipe from the repository.
 
-The repository is configured with the recipe-repo key in the dev self-config
-file. The default is https://github.com/ozonar/dev-recipe.git.`,
-	Args: cobra.MaximumNArgs(1),
+Extra arguments after the recipe name are passed to the recipe as positional
+parameters $1, $2, ... For example:
+	 dev recipe frpc 8000`,
+	Args: cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := recipe.Run(args, recipeForce); err != nil {
 			i18n.Red("Error: %v", err)

@@ -261,6 +261,25 @@ The default is `https://raw.githubusercontent.com/ozonar/dev-recipe/main`.
 No git client is required: files are read from the local path or downloaded
 over HTTP.
 
+Extra arguments after the recipe name are passed to the recipe as positional
+parameters `$1`, `$2`, ...:
+
+```bash
+dev recipe frpc 8000
+```
+
+Inside the recipe use them with quotes:
+
+```yaml
+commands:
+  frpc:
+    subcommands:
+      - docker run --rm frp/frpc -l "$1"
+```
+
+Arguments are passed to the shell separately, so they are never interpreted as
+shell syntax.
+
 ### Project Detection
 
 No configuration files are required for project detection. The tool automatically detects your project based on common file patterns.
