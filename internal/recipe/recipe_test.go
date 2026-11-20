@@ -2,12 +2,16 @@ package recipe
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"dev/internal/custom"
+	"dev/internal/i18n"
+
+	"github.com/fatih/color"
 )
 
 // writeFile создаёт файл с содержимым, создавая родительские папки.
@@ -286,6 +290,94 @@ func TestConfirmDoesNotConsumeNextLine(t *testing.T) {
 	}
 	if got := readLine(in); got != "1" {
 		t.Errorf("input after confirm = %q, want %q", got, "1")
+	}
+}
+
+// captureOutput перехватывает stdout и color.Output на время fn и
+// возвращает напечатанный текст. Язык фиксируется английским, чтобы
+// проверки заголовков не зависели от окружения.
+func captureOutput(t *testing.T, fn func()) string {
+	t.Helper()
+
+	i18n.SetLang("en")
+	t.Cleanup(func() { i18n.SetLang("") })
+
+	oldStdout := os.Stdout
+	oldColorOutput := color.Output
+	oldNoColor := color.NoColor
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	color.Output = w
+	color.NoColor = true
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+		color.Output = oldColorOutput
+		color.NoColor = oldNoColor
+	})
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read pipe: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("close pipe reader: %v", err)
+	}
+	return string(data)
+}
+
+func TestPrintNotFoundPrintsSingleHeader(t *testing.T) {
+	out := captureOutput(t, func() {
+		printNotFound(&NotFoundError{
+			Query:   "run",
+			Matches: []ListItem{{Name: "ci.github.run"}, {Name: "ci.gitlab.run"}},
+		})
+	})
+
+	if strings.Count(out, "Matching recipes:") != 1 {
+		t.Errorf("output must contain exactly one \"Matching recipes:\" header:\n%s", out)
+	}
+	if strings.Contains(out, "Available recipes:") {
+		t.Errorf("output must not contain \"Available recipes:\":\n%s", out)
+	}
+	for _, name := range []string{"ci.github.run", "ci.gitlab.run"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("output does not list %q:\n%s", name, out)
+		}
+	}
+}
+
+func TestPrintNotFoundWithoutMatches(t *testing.T) {
+	out := captureOutput(t, func() {
+		printNotFound(&NotFoundError{Query: "run"})
+	})
+
+	if !strings.Contains(out, `No recipes match "run".`) {
+		t.Errorf("output does not contain the no-match message:\n%s", out)
+	}
+	if strings.Contains(out, "Matching recipes:") || strings.Contains(out, "Available recipes:") {
+		t.Errorf("output must not contain list headers when there are no matches:\n%s", out)
+	}
+}
+
+func TestPrintListPrintsSingleHeader(t *testing.T) {
+	out := captureOutput(t, func() {
+		printList([]ListItem{{Name: "deploy", Description: "Deploy the project"}})
+	})
+
+	if strings.Count(out, "Available recipes:") != 1 {
+		t.Errorf("output must contain exactly one \"Available recipes:\" header:\n%s", out)
+	}
+	if !strings.Contains(out, "deploy") || !strings.Contains(out, "Deploy the project") {
+		t.Errorf("output does not list the recipe with its description:\n%s", out)
 	}
 }
 

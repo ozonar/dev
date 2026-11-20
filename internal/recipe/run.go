@@ -50,7 +50,7 @@ func printNotFound(notFound *NotFoundError) {
 	i18n.Red("Recipe %q not found.", notFound.Query)
 	if len(notFound.Matches) > 0 {
 		i18n.Yellow("Matching recipes:")
-		printList(notFound.Matches)
+		printItems(notFound.Matches)
 		return
 	}
 	i18n.Yellow("No recipes match %q.", notFound.Query)
@@ -109,13 +109,18 @@ func execute(prepared *Prepared, cwd string, params []string) error {
 	return Execute(prepared, ctx)
 }
 
-// printList выводит имена и описания рецептов.
+// printList выводит заголовок и список рецептов.
 func printList(items []ListItem) {
 	if len(items) == 0 {
 		i18n.Yellow("No recipes found.")
 		return
 	}
 	i18n.Cyan("Available recipes:")
+	printItems(items)
+}
+
+// printItems выводит имена и описания рецептов без заголовка.
+func printItems(items []ListItem) {
 	for _, item := range items {
 		if item.Description != "" {
 			i18n.Printf("  %-20s %s\n", item.Name, item.Description)
