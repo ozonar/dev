@@ -1,11 +1,19 @@
 package common
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"dev/internal/i18n"
 )
 
 // SkipDirs — список директорий, которые нужно пропускать при рекурсивном обходе,
@@ -116,7 +124,7 @@ type FindGoMainOptions struct {
 	OnlyMainGo       bool     // искать только файлы с именем main.go (иначе все .go файлы)
 }
 
-// FindGoMain ищет Go файлы, содержащие package main и func main.
+// FindGoMain ищет Go файлы, объявляющие пакет main с функцией main.
 // Возвращает пути к найденным файлам относительно корня проекта.
 func FindGoMain(root string, opts FindGoMainOptions) ([]string, error) {
 	var mains []string
@@ -140,6 +148,15 @@ func FindGoMain(root string, opts FindGoMainOptions) ([]string, error) {
 		return false
 	}
 
+	// collect добавляет файл в результат, если он объявляет точку входа.
+	collect := func(path string, info os.FileInfo) {
+		if !isGoMainFile(info.Name(), path) {
+			return
+		}
+		rel, _ := filepath.Rel(root, path)
+		mains = append(mains, rel)
+	}
+
 	// Шаг 1: поиск в cmd/ если включено
 	if opts.SearchInCmdFirst {
 		cmdDir := filepath.Join(root, "cmd")
@@ -148,17 +165,7 @@ func FindGoMain(root string, opts FindGoMainOptions) ([]string, error) {
 				if err != nil {
 					return nil
 				}
-				if strings.HasSuffix(info.Name(), ".go") {
-					data, err := os.ReadFile(path)
-					if err != nil {
-						return nil
-					}
-					content := string(data)
-					if strings.Contains(content, "package main") && strings.Contains(content, "func main") {
-						rel, _ := filepath.Rel(root, path)
-						mains = append(mains, rel)
-					}
-				}
+				collect(path, info)
 				return nil
 			}, skipFn)
 			if err != nil {
@@ -179,22 +186,128 @@ func FindGoMain(root string, opts FindGoMainOptions) ([]string, error) {
 		if opts.OnlyMainGo && info.Name() != "main.go" {
 			return nil
 		}
-		if !strings.HasSuffix(info.Name(), ".go") {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-		content := string(data)
-		if strings.Contains(content, "package main") && strings.Contains(content, "func main") {
-			rel, _ := filepath.Rel(root, path)
-			mains = append(mains, rel)
-		}
+		collect(path, info)
 		return nil
 	}, skipFn)
 	if err != nil {
 		return nil, err
 	}
 	return mains, nil
+}
+
+// isGoMainFile сообщает, объявляет ли файл пакет main с функцией main.
+// Тестовые файлы пропускаются: они не являются точкой входа приложения.
+func isGoMainFile(name, path string) bool {
+	if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+		return false
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+	if err != nil || file.Name == nil || file.Name.Name != "main" {
+		return false
+	}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv != nil || fn.Name == nil {
+			continue
+		}
+		if fn.Name.Name == "main" {
+			return true
+		}
+	}
+	return false
+}
+
+// FindGoMainPackages ищет пакеты main в проекте и возвращает директории этих
+// пакетов без дублей. Это единая точка поиска для сборки и запуска.
+func FindGoMainPackages(root string) ([]string, error) {
+	mainFiles, err := FindGoMain(root, FindGoMainOptions{
+		SearchInCmdFirst: true,
+		ExcludeDirs:      []string{"vendor/", ".git/"},
+		OnlyMainGo:       false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	dirs := make([]string, 0, len(mainFiles))
+	for _, f := range mainFiles {
+		dirs = append(dirs, filepath.Dir(f))
+	}
+	return Unique(dirs), nil
+}
+
+// GoPackageArg приводит директорию пакета к аргументу go build/go run:
+// относительный путь без префикса "." получает "./", иначе go трактует
+// его как import path.
+func GoPackageArg(dir string) string {
+	if filepath.IsAbs(dir) || dir == "." ||
+		strings.HasPrefix(dir, "./") || strings.HasPrefix(dir, "../") {
+		return dir
+	}
+	return "./" + dir
+}
+
+// ResolveGoPackageTarget приводит явно указанную цель к аргументу
+// go build/go run. Существующий .go-файл заменяется директорией пакета:
+// при указании одного файла go не подхватывает остальные файлы пакета.
+// Несуществующий путь считается import path и передаётся как есть.
+func ResolveGoPackageTarget(target string) (string, error) {
+	info, err := os.Stat(target)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return target, nil
+		}
+		return "", fmt.Errorf(i18n.T("error accessing %s: %v"), target, err)
+	}
+	dir := target
+	if !info.IsDir() {
+		if !strings.HasSuffix(target, ".go") {
+			return "", fmt.Errorf(i18n.T("target must be a .go file or a package directory: %s"), target)
+		}
+		dir = filepath.Dir(target)
+	}
+	return GoPackageArg(dir), nil
+}
+
+// SelectGoTarget возвращает цель сборки/запуска Go: явно указанную
+// пользователем либо выбранную из найденных пакетов main.
+// promptMsgid — ключ i18n подсказки выбора номера пакета.
+func SelectGoTarget(explicit, promptMsgid string) (string, error) {
+	if explicit != "" {
+		return ResolveGoPackageTarget(explicit)
+	}
+	dirs, err := FindGoMainPackages(".")
+	if err != nil {
+		return "", fmt.Errorf(i18n.T("error finding main files: %v"), err)
+	}
+	if len(dirs) == 0 {
+		return "", errors.New(i18n.T("no Go main package found"))
+	}
+	if len(dirs) == 1 {
+		return GoPackageArg(dirs[0]), nil
+	}
+	dir, err := promptGoTarget(dirs, promptMsgid)
+	if err != nil {
+		return "", err
+	}
+	return GoPackageArg(dir), nil
+}
+
+// promptGoTarget предлагает пользователю выбрать директорию пакета по номеру.
+func promptGoTarget(dirs []string, promptMsgid string) (string, error) {
+	i18n.Printf("Multiple main packages found:\n")
+	for i, d := range dirs {
+		fmt.Printf("  %d) %s\n", i+1, d)
+	}
+	i18n.Printf(promptMsgid)
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return dirs[0], nil
+	}
+	idx, err := strconv.Atoi(input)
+	if err != nil || idx < 1 || idx > len(dirs) {
+		return "", errors.New(i18n.T("invalid selection"))
+	}
+	return dirs[idx-1], nil
 }

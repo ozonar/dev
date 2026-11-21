@@ -66,24 +66,34 @@ var logsCmd = &cobra.Command{
 }
 
 var runCmd = &cobra.Command{
-	Use:     "run [port]",
+	Use:     "run [target]",
 	Aliases: []string{"start"},
 	Short:   "Run the project",
-	Long:    "Run the project's dev server. Optionally specify a port number as an argument or use --port flag.",
-	Args:    cobra.MaximumNArgs(1),
+	Long: `Run the project's dev server.
+
+For Go projects target is an optional path to run: a .go file, a package
+directory or an import path. Without target the main package is detected
+automatically; if several packages are found you will be asked to choose one.
+Use --port/-p to set the dev server port.
+
+Examples:
+  dev run
+  dev run ./cmd/prod
+  dev run cmd/prod/main.go
+  dev run -p 8000`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Если передан позиционный аргумент — используем его как порт
 		if len(args) > 0 {
-			p, err := strconv.Atoi(args[0])
-			if err == nil {
-				runPort = p
-			}
+			runTarget = args[0]
 		}
 		runRun()
 	},
 }
 
 var runPort int
+
+// runTarget — явно указанная цель запуска Go: .go-файл, директория или import path.
+var runTarget string
 
 // Флаги принудительного выбора языка для команд run/build/review.
 // Позволяют запустить/собрать/проверить код указанного языка, игнорируя
@@ -247,10 +257,26 @@ var virusCmd = &cobra.Command{
 }
 
 var buildCmd = &cobra.Command{
-	Use:   "build",
+	Use:   "build [target]",
 	Short: "Build the project",
+	Long: `Build the project.
+
+For Go projects target is an optional path to build: a .go file, a package
+directory or an import path. Without target the main package is detected
+automatically; if several packages are found you will be asked to choose one.
+
+Examples:
+  dev build
+  dev build cmd/prod/main.go
+  dev build ./cmd/prod
+  dev build -o server ./cmd/prod`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runBuild()
+		var target string
+		if len(args) > 0 {
+			target = args[0]
+		}
+		runBuild(target)
 	},
 }
 
@@ -578,7 +604,12 @@ func runRun() {
 	}
 
 	i18n.Green("Running project: %s (%s)", info.Framework, info.Language)
-	opts := run.RunOptions{Port: runPort, PublicDir: info.PublicDir, Version: info.LanguageVersion}
+	opts := run.RunOptions{
+		Port:      runPort,
+		PublicDir: info.PublicDir,
+		Version:   info.LanguageVersion,
+		Target:    runTarget,
+	}
 	err = run.RunProjectWithOptions(info.Framework, info.Language, opts)
 	if err != nil {
 		i18n.Red("Failed to run project: %v", err)
@@ -630,7 +661,7 @@ func runVirus(path string) {
 	i18n.Green("Copy successful.")
 }
 
-func runBuild() {
+func runBuild(target string) {
 	cwd, _ := os.Getwd()
 	info, err := detectProject(cwd)
 	if err != nil {
@@ -639,7 +670,7 @@ func runBuild() {
 	}
 
 	i18n.Green("Building project: %s (%s)", info.Framework, info.Language)
-	err = build.BuildProject(info.Framework, info.Language, info.LanguageVersion, buildOutput)
+	err = build.BuildProject(info.Framework, info.Language, info.LanguageVersion, buildOutput, target)
 	if err != nil {
 		i18n.Red("Build failed: %v", err)
 		return

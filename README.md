@@ -21,13 +21,13 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 
 - **`dev logs`** – Find log files and Docker container logs, then open them in `lnav` (interactive selection)
 
-- **`dev run [port]`** – Start the project with the appropriate runner:
+- **`dev run [target]`** – Start the project with the appropriate runner:
   - Symfony: `symfony serve`
   - Laravel: `php artisan serve`
-  - Go: `go run` (auto‑detects main files)
+  - Go: `go run` (auto‑detects main)
   - Node.js: `npm run dev`
   - Python: `python manage.py runserver` or simple HTTP server
-  - Supports `--port` flag or positional port argument (default: 8000)
+  - Supports `--port`/`-p` flag (default: 8000)
 
 - **`dev dcr`** – Run `docker-compose up -d` and report running services
 
@@ -42,8 +42,8 @@ A command-line tool to assist with development tasks: analyze projects, clear ca
 
 - **`dev virus [user:pass@ip_addr]`** – Copy the dev executable to a remote server via SCP (supports `user@host` or `user:pass@ip` formats). Automatically sets execute permissions.
 
-- **`dev build`** – Build the project according to its language:
-  - Go: detects main files, offers selection, builds executable (`-o/--output` sets the output file name)
+- **`dev build [target]`** – Build the project according to its language:
+  - Go: builds the package as a whole. `target` may be a `.go` file, a package directory or an import path (e.g. `dev build cmd/prod/main.go`, `dev build ./cmd/prod`). Without `target` main packages are detected automatically and you are asked to choose one if several are found. `-o/--output` sets the output file name
   - Node.js: runs `npm run build`
   - Other languages: no‑op (informs that building is not required)
 
@@ -168,13 +168,15 @@ dev                     # analyze project
 dev cache               # clear cache
 dev logs                # show logs
 dev run                 # run project
-dev run 8080            # run project on port 8080
+dev run -p 8080         # run project on port 8080
+dev run <file> -p 8080  # run a specific entry point on port 8080
 dev dcr                 # start docker-compose
 dev prepare             # prepare environment
 dev install             # install dev to system
 dev self-update         # update dev to latest version
 dev virus user@host     # copy dev to remote server
-dev build               # build project
+dev build               # build project (auto-detect main package)
+dev build ./cmd/prod    # build a specific package
 dev unit                # run unit tests
 dev unit ./internal/... # run unit tests for specific packages
 dev migrate             # run database migrations

@@ -1,7 +1,6 @@
 package build
 
 import (
-	"bufio"
 	"dev/internal/common"
 	"dev/internal/i18n"
 	"dev/internal/toolchain"
@@ -10,15 +9,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
 // BuildProject выполняет сборку проекта в зависимости от фреймворка и языка.
-func BuildProject(framework, language, version, output string) error {
+// target — необязательный явно указанный путь к конкретному файлу
+// или директории. При пустом значении цель определяется
+// автоматически по main-файлам проекта.
+func BuildProject(framework, language, version, output, target string) error {
 	switch language {
 	case "go":
-		return buildGo(version, output)
+		return buildGo(version, output, target)
 	case "javascript":
 		return buildNode()
 	default:
@@ -27,51 +28,19 @@ func BuildProject(framework, language, version, output string) error {
 	}
 }
 
-// buildGo собирает Go проект
-func buildGo(version, output string) error {
+// buildGo собирает Go проект.
+func buildGo(version, output, target string) error {
 	runtimePath, err := toolchain.ResolveRuntime("go", version)
 	if err != nil {
 		return err
 	}
-	// Ищем все main файлы
-	mainFiles, err := common.FindGoMain(".", common.FindGoMainOptions{
-		SearchInCmdFirst: true,
-		ExcludeDirs:      []string{"vendor/", "internal/", ".git/"},
-		OnlyMainGo:       false,
-	})
+
+	target, err = common.SelectGoTarget(target, "Select number to build [1]: ")
 	if err != nil {
-		return fmt.Errorf(i18n.T("error finding main files: %v"), err)
-	}
-	if len(mainFiles) == 0 {
-		return errors.New(i18n.T("no Go main file found"))
+		return err
 	}
 
-	var target string
-	if len(mainFiles) == 1 {
-		target = mainFiles[0]
-	} else {
-		// Показываем список для выбора пользователем
-		i18n.Printf("Multiple main files found:\n")
-		for i, f := range mainFiles {
-			fmt.Printf("  %d) %s\n", i+1, f)
-		}
-		i18n.Printf("Select number to build [1]: ")
-		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-		if input == "" {
-			target = mainFiles[0]
-			i18n.Printf("Building %s\n", target)
-		} else {
-			idx, err := strconv.Atoi(input)
-			if err != nil || idx < 1 || idx > len(mainFiles) {
-				return errors.New(i18n.T("invalid selection"))
-			}
-			target = mainFiles[idx-1]
-		}
-	}
-
-	// Имя исполняемого файла: явно заданное через -o, либо выведенное из пути
+	// Имя исполняемого файла: явно заданное через -o, либо выведенное из цели
 	output = resolveOutput(target, output)
 
 	i18n.Printf("Build %s to %s...\n", target, output)
@@ -103,8 +72,12 @@ func buildNode() error {
 	return cmd.Run()
 }
 
-// outputName возвращает имя выходного файла на основе пути к main.go
+// outputName возвращает имя выходного файла на основе цели сборки.
 func outputName(target string) string {
+	// Сборка пакета в корне проекта: имя бинарника по умолчанию.
+	if filepath.Clean(target) == "." {
+		return "main"
+	}
 	// Если путь содержит cmd/, берём поддиректорию внутри cmd
 	if strings.Contains(target, "cmd/") {
 		parts := strings.Split(target, "/")
@@ -121,7 +94,7 @@ func outputName(target string) string {
 }
 
 // resolveOutput возвращает имя выходного файла: явно заданное через -o,
-// либо выведенное из пути к main-файлу.
+// либо выведенное из цели сборки.
 func resolveOutput(target, output string) string {
 	if output != "" {
 		return output

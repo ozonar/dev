@@ -25,6 +25,7 @@ type RunOptions struct {
 	Port      int    // Порт для dev-сервера (0 = использовать порт по умолчанию)
 	PublicDir string // Публичная директория проекта (передаётся из детектора)
 	Version   string // Требуемая версия языка (из детектора), например "8.3"
+	Target    string // Target — цель запуска (файл, директория или import path).
 	// ExtraPhpArgs — дополнительные аргументы php
 	// добавляются в начало команды запуска PHP-сервера.
 	ExtraPhpArgs []string
@@ -53,100 +54,140 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 	case "symfony":
 		return runSymfony(opts, port, runtimePath)
 	case "laravel":
-		// Check if artisan exists
-		if _, err := os.Stat("artisan"); err == nil {
-			args := append([]string{}, opts.ExtraPhpArgs...)
-			args = append(args, "artisan", "serve")
-			if opts.Port != 0 {
-				args = append(args, "--port", strconv.Itoa(opts.Port))
-			}
-			return runAndHandlePortError(runtimePath, args, port)
-		}
-		return errors.New(i18n.T("artisan not found"))
+		return runLaravel(opts, port, runtimePath)
 	case "yii":
-		addr := fmt.Sprintf("localhost:%d", port)
-		args := append([]string{}, opts.ExtraPhpArgs...)
-		if opts.PublicDir != "" {
-			args = append(args, "-S", addr, "-t", opts.PublicDir)
-		} else {
-			args = append(args, "-S", addr)
-		}
-		return runAndHandlePortError(runtimePath, args, port)
+		return runPHP(opts, port, runtimePath)
 	case "go":
-		// Find main.go in cmd/ or root
-		mainFiles, err := common.FindGoMain(".", common.FindGoMainOptions{
-			SearchInCmdFirst: false,
-			ExcludeDirs:      []string{},
-			OnlyMainGo:       false,
-		})
-		if err != nil {
-			return fmt.Errorf(i18n.T("error finding main files: %v"), err)
-		}
-		if len(mainFiles) == 0 {
-			return errors.New(i18n.T("no Go main files found"))
-		}
-		var target string
-		if len(mainFiles) == 1 {
-			target = mainFiles[0]
-		} else {
-			// Показываем список для выбора пользователем
-			i18n.Printf("Multiple main files found:\n")
-			for i, f := range mainFiles {
-				fmt.Printf("  %d) %s\n", i+1, f)
-			}
-			i18n.Printf("Select number to run [1]: ")
-			reader := bufio.NewReader(os.Stdin)
-			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(input)
-			if input == "" {
-				target = mainFiles[0]
-				i18n.Printf("Running %s\n", target)
-			} else {
-				idx, err := strconv.Atoi(input)
-				if err != nil || idx < 1 || idx > len(mainFiles) {
-					return errors.New(i18n.T("invalid selection"))
-				}
-				target = mainFiles[idx-1]
-			}
-		}
-		cmd := exec.Command(runtimePath, "run", target)
-		cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+		return runGo(opts, runtimePath)
 	case "node":
-		// Выбираем npm-скрипт: при нескольких вариантах в package.json
-		// пользователю предлагается выбрать нужный (по умолчанию dev).
-		script, err := chooseNpmScript("package.json")
-		if err != nil {
-			return err
-		}
-		cmd := exec.Command(runtimePath, "run", script)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+		return runNode(opts, runtimePath)
 	case "python":
-		// Try to run Django or Flask
-		if _, err := os.Stat("manage.py"); err == nil {
-			args := []string{"manage.py", "runserver"}
-			if opts.Port != 0 {
-				args = append(args, strconv.Itoa(opts.Port))
-			}
-			return runAndHandlePortError(runtimePath, args, port)
-		}
-		// Fallback to simple HTTP server
-		addr := strconv.Itoa(port)
-		return runAndHandlePortError(runtimePath, []string{"-m", "http.server", addr}, port)
+		return runPython(opts, port, runtimePath)
 	default:
-		// Generic PHP server
 		if language == "php" {
-			addr := fmt.Sprintf("localhost:%d", port)
-			args := append([]string{}, opts.ExtraPhpArgs...)
-			args = append(args, "-S", addr)
-			return runAndHandlePortError(runtimePath, args, port)
+			return runPHP(opts, port, runtimePath)
 		}
 		return fmt.Errorf(i18n.T("unsupported framework: %s"), framework)
 	}
+}
+
+// runPHP запускает встроенный PHP-сервер. Docroot — явно заданная цель
+// запуска, иначе публичная директория из детектора.
+func runPHP(opts RunOptions, port int, phpPath string) error {
+	docroot := opts.Target
+	if docroot == "" {
+		docroot = opts.PublicDir
+	}
+	args := append([]string{}, opts.ExtraPhpArgs...)
+	args = append(args, "-S", fmt.Sprintf("localhost:%d", port))
+	if docroot != "" {
+		args = append(args, "-t", docroot)
+	}
+	return runAndHandlePortError(phpPath, args, port)
+}
+
+// runLaravel запускает Laravel-проект: при явной цели — встроенный
+// PHP-сервер с указанным docroot, иначе artisan serve.
+func runLaravel(opts RunOptions, port int, phpPath string) error {
+	if opts.Target != "" {
+		return runPHP(opts, port, phpPath)
+	}
+	if _, err := os.Stat("artisan"); err != nil {
+		return errors.New(i18n.T("artisan not found"))
+	}
+	args := append([]string{}, opts.ExtraPhpArgs...)
+	args = append(args, "artisan", "serve")
+	if opts.Port != 0 {
+		args = append(args, "--port", strconv.Itoa(opts.Port))
+	}
+	return runAndHandlePortError(phpPath, args, port)
+}
+
+// runGo запускает Go-проект: цель — пакет (.go-файл, директория или import
+// path); без цели пакет main определяется автоматически.
+func runGo(opts RunOptions, goPath string) error {
+	target, err := common.SelectGoTarget(opts.Target, "Select number to run [1]: ")
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(goPath, "run", target)
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// runNode запускает npm-скрипт проекта. Цель — имя скрипта; без цели
+// скрипт выбирается из package.json.
+func runNode(opts RunOptions, npmPath string) error {
+	script := opts.Target
+	if script == "" {
+		var err error
+		script, err = chooseNpmScript("package.json")
+		if err != nil {
+			return err
+		}
+	} else if err := validateNpmScript("package.json", script); err != nil {
+		return err
+	}
+	cmd := exec.Command(npmPath, "run", script)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// runPython запускает Django/Flask проект либо простой HTTP-сервер.
+// Для http.server цель — обслуживаемая директория.
+func runPython(opts RunOptions, port int, pythonPath string) error {
+	if _, err := os.Stat("manage.py"); err == nil {
+		if opts.Target != "" {
+			return fmt.Errorf(i18n.T("target is not supported for %s projects"), "Django")
+		}
+		args := []string{"manage.py", "runserver"}
+		if opts.Port != 0 {
+			args = append(args, strconv.Itoa(opts.Port))
+		}
+		return runAndHandlePortError(pythonPath, args, port)
+	}
+	docroot := opts.Target
+	if docroot == "" {
+		docroot = opts.PublicDir
+	}
+	args := []string{"-m", "http.server", strconv.Itoa(port)}
+	if docroot != "" {
+		args = append(args, "--directory", docroot)
+	}
+	return runAndHandlePortError(pythonPath, args, port)
+}
+
+// readNpmScripts читает имена скриптов из package.json.
+func readNpmScripts(pkgPath string) (map[string]string, error) {
+	data, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return nil, errors.New(i18n.T("package.json not found"))
+	}
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return nil, fmt.Errorf(i18n.T("error parsing package.json: %v"), err)
+	}
+	if len(pkg.Scripts) == 0 {
+		return nil, errors.New(i18n.T("No npm scripts found in package.json"))
+	}
+	return pkg.Scripts, nil
+}
+
+// validateNpmScript проверяет, что указанный скрипт объявлен в package.json.
+func validateNpmScript(pkgPath, name string) error {
+	scripts, err := readNpmScripts(pkgPath)
+	if err != nil {
+		return err
+	}
+	if _, ok := scripts[name]; !ok {
+		return fmt.Errorf(i18n.T("npm script not found: %s"), name)
+	}
+	return nil
 }
 
 // chooseNpmScript читает package.json и возвращает имя npm-скрипта для запуска
@@ -154,19 +195,13 @@ func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 // спрашивает пользователя; по умолчанию выбирается dev, если он есть,
 // иначе первый скрипт в алфавитном порядке.
 func chooseNpmScript(pkgPath string) (string, error) {
-	data, err := os.ReadFile(pkgPath)
+	scripts, err := readNpmScripts(pkgPath)
 	if err != nil {
-		return "", errors.New(i18n.T("package.json not found"))
-	}
-	var pkg struct {
-		Scripts map[string]string `json:"scripts"`
-	}
-	if err := json.Unmarshal(data, &pkg); err != nil || len(pkg.Scripts) == 0 {
-		return "", errors.New(i18n.T("No npm scripts found in package.json"))
+		return "", err
 	}
 
-	names := make([]string, 0, len(pkg.Scripts))
-	for name := range pkg.Scripts {
+	names := make([]string, 0, len(scripts))
+	for name := range scripts {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -204,17 +239,21 @@ func chooseNpmScript(pkgPath string) (string, error) {
 // если она недоступна — использует php -S с публичной директорией проекта.
 // phpPath — путь к рантайму PHP (системный или скачанный в dev-command).
 func runSymfony(opts RunOptions, port int, phpPath string) error {
-	// При отладке (ExtraPhpArgs) используем встроенный PHP-сервер напрямую:
-	// Symfony CLI сама управляет процессом php и не передаёт ему наши -d-флаги.
-	if len(opts.ExtraPhpArgs) > 0 || !isBinaryAvailable("symfony") {
-		if len(opts.ExtraPhpArgs) == 0 {
+	// При отладке (ExtraPhpArgs) или явно заданной цели используем встроенный
+	// PHP-сервер напрямую: Symfony CLI сама управляет процессом php и не
+	// передаёт ему наши -d-флаги, а цель запуска у неё задаётся иначе.
+	if opts.Target != "" || len(opts.ExtraPhpArgs) > 0 || !isBinaryAvailable("symfony") {
+		if opts.Target == "" && len(opts.ExtraPhpArgs) == 0 {
 			i18n.Yellow("Symfony CLI not found. Falling back to built-in PHP server (php -S).")
 		}
-		addr := fmt.Sprintf("0.0.0.0:%d", port)
+		docroot := opts.Target
+		if docroot == "" {
+			docroot = opts.PublicDir
+		}
 		args := append([]string{}, opts.ExtraPhpArgs...)
-		args = append(args, "-S", addr)
-		if opts.PublicDir != "" {
-			args = append(args, "-t", opts.PublicDir)
+		args = append(args, "-S", fmt.Sprintf("0.0.0.0:%d", port))
+		if docroot != "" {
+			args = append(args, "-t", docroot)
 		}
 		return runAndHandlePortError(phpPath, args, port)
 	}

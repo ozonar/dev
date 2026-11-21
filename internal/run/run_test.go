@@ -303,3 +303,53 @@ func TestChooseNpmScript(t *testing.T) {
 		t.Error("chooseNpmScript(no file) должен вернуть ошибку")
 	}
 }
+
+// TestValidateNpmScript проверяет проверку существования npm-скрипта.
+func TestValidateNpmScript(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	writePackageJSON(t, map[string]string{"dev": "vite"})
+	if err := validateNpmScript("package.json", "dev"); err != nil {
+		t.Errorf("validateNpmScript(dev) вернула ошибку: %v", err)
+	}
+	if err := validateNpmScript("package.json", "missing"); err == nil {
+		t.Error("validateNpmScript(missing) ожидалась ошибка")
+	}
+}
+
+// TestRunPythonTargetUnsupported проверяет, что Django-раннер не принимает
+// цель запуска: artisan/manage.py-подобные команды docroot не поддерживают.
+func TestRunPythonTargetUnsupported(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("manage.py", []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = runPython(RunOptions{Target: "public"}, 8000, "python3")
+	if err == nil {
+		t.Fatal("runPython(Django, target) ожидалась ошибка")
+	}
+	if !strings.Contains(err.Error(), "target is not supported") {
+		t.Errorf("сообщение об ошибке должно содержать 'target is not supported', получили: %v", err)
+	}
+}
