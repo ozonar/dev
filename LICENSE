@@ -1,0 +1,82 @@
+Dev CLI Tool License
+Version 1.0
+
+Copyright (c) 2026 The Dev CLI Tool Authors
+
+This license governs the use of the Dev CLI Tool ("the Software"), including
+its source code, documentation and any compiled binaries built from it
+("the Executable"). By using, copying or distributing the Software or the
+Executable, you accept all terms of this license.
+
+1. DEFINITIONS
+
+1.1 "Software" means the source code, build scripts, configuration files and
+    documentation of the Dev CLI Tool.
+1.2 "Executable" means any compiled binary produced from the Software.
+1.3 "You" means any individual or legal entity exercising rights under this
+    license.
+1.4 "Commercial use" means use in connection with a business activity
+    intended to generate revenue, including internal business operations and
+    delivery of services to paying clients.
+
+2. PERMITTED USE OF THE EXECUTABLE
+
+2.1 You may use, run and copy the Executable, in whole and unmodified, for
+    personal purposes free of charge.
+2.2 You may use, run and copy the Executable, in whole and unmodified, for
+    commercial purposes free of charge, including internal use by a company
+    and use while providing services to clients.
+2.3 You may redistribute the Executable, in whole and unmodified, free of
+    charge, provided that this license accompanies the redistribution and
+    that no fee is charged for the Executable itself.
+
+2A. PERMITTED USE OF THE SOFTWARE
+
+2A.1 You may view, copy and compile the Software for personal and
+     non-commercial purposes, and for security auditing within a company,
+     free of charge.
+2A.2 You may modify the Software solely for your own personal
+     non-commercial needs, or to submit your changes as pull requests to
+     the official repository of the authors.
+2A.3 Rights granted in this section do not extend to the restrictions of
+     Section 3 and do not permit any use listed there.
+
+3. RESTRICTIONS
+
+3.1 No sale. You may not sell, rent, lease, sublicense or otherwise charge
+    any fee for the Software or the Executable, and you may not include the
+    Software or the Executable in a paid product or paid offering where the
+    payment is primarily for the Software or the Executable.
+3.2 No AI training. You may not use the Software, in whole or in part, to
+    train, fine-tune, distill, evaluate or otherwise develop any machine
+    learning or artificial intelligence model, and you may not include the
+    Software in any dataset used for those purposes.
+3.3 No commercial reuse of parts. You may not extract, copy, modify or reuse
+    any part of the Software (including source code, modules, algorithms,
+    interfaces or documentation) in order to create, extend or improve
+    another product, service or codebase that is primarily used or
+    distributed for commercial purposes.
+3.4 No sublicensing. You may not grant third parties any rights to the
+    Software or the Executable beyond those granted by this license.
+3.5 This license grants no rights to the names, logos or trademarks of the
+    Dev CLI Tool Authors.
+
+4. NO WARRANTY
+
+THE SOFTWARE AND THE EXECUTABLE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+5. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE, THE
+EXECUTABLE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE OR THE EXECUTABLE.
+
+6. TERMINATION
+
+6.1 Any use that violates this license terminates your rights under it
+    automatically.
+6.2 Upon termination you must stop using the Software and the Executable and
+    destroy all copies in your possession or control.

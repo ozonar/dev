@@ -443,4 +443,10 @@ dev/
 
 ## License
 
-CC-BY-NC-4.0
+Custom license, see [LICENSE](LICENSE) for the full text.
+
+- **Executable:** may be used free of charge for personal and commercial purposes.
+- **No sale:** selling, renting or otherwise charging for the program is not allowed.
+- **No AI training:** using the source code to train, fine-tune or otherwise develop AI/ML models is not allowed.
+- **No commercial reuse of parts:** extracting or reusing parts of the program in another product or service that is primarily commercial is not allowed.
+- **Source code:** may be viewed, copied and compiled for personal/non-commercial use and for security auditing; modification is allowed for personal non-commercial use or for pull requests to the official repository.
