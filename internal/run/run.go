@@ -126,11 +126,11 @@ func runNode(opts RunOptions, npmPath string) error {
 	script := opts.Target
 	if script == "" {
 		var err error
-		script, err = chooseNpmScript("package.json")
+		script, err = chooseNpmScript(common.PackageFile)
 		if err != nil {
 			return err
 		}
-	} else if err := validateNpmScript("package.json", script); err != nil {
+	} else if err := validateNpmScript(common.PackageFile, script); err != nil {
 		return err
 	}
 	cmd := exec.Command(npmPath, "run", script)
@@ -285,7 +285,7 @@ func isBinaryAvailable(name string) bool {
 // Создаёт новый exec.Cmd при каждом запуске, чтобы избежать "exec: already started".
 func runAndHandlePortError(name string, args []string, portNum int) error {
 	// Проактивно освобождаем порт от висящего сервера перед запуском
-	if err := ensurePortFree(portNum); err != nil {
+	if err := port.EnsureFree(portNum); err != nil {
 		return err
 	}
 
@@ -318,39 +318,6 @@ func runAndHandlePortError(name string, args []string, portNum int) error {
 		return cmd2.Run()
 	}
 	return err
-}
-
-// ensurePortFree проверяет, занят ли порт, и при необходимости предлагает
-// убить висящий процесс перед запуском сервера.
-func ensurePortFree(portNum int) error {
-	occupied, info, err := port.IsPortOccupied(portNum)
-	if err != nil {
-		return fmt.Errorf(i18n.T("could not check port %d: %v"), portNum, err)
-	}
-	if !occupied {
-		return nil
-	}
-
-	i18n.Yellow("⚠ Port %d is already in use.", portNum)
-	if info != "" {
-		fmt.Println(info)
-	}
-	i18n.Printf("Do you want to kill the process using port %d? [Y/n]: ", portNum)
-
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input == "n" || input == "N" || input == "no" || input == "NO" {
-		return fmt.Errorf(i18n.T("port %d is already in use"), portNum)
-	}
-
-	if err := port.KillProcessOnPort(portNum); err != nil {
-		color.Yellow("  %v", err)
-	}
-
-	i18n.Green("Process on port %d killed.", portNum)
-	return nil
 }
 
 // isPortInUseError проверяет, содержит ли ошибка сообщение о занятом порте

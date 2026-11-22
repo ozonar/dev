@@ -12,9 +12,8 @@ import (
 // (major.minor). Пустое требование или "latest" берут самую свежую из всех.
 // Возвращает "" если подходящей версии нет.
 func pickStaticPhpVersion(versions []string, required string) string {
-	required = strings.TrimSpace(required)
-	if required != "" && required != "latest" {
-		prefix := required + "."
+	if !IsLatestRequirement(required) {
+		prefix := strings.TrimSpace(required) + "."
 		for _, v := range versions {
 			if strings.HasPrefix(v, prefix) {
 				return v

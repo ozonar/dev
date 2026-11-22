@@ -1,9 +1,20 @@
 package toolchain
 
 import (
+	"dev/internal/common"
 	"strconv"
 	"strings"
 )
+
+// LatestVersion — маркер «последняя доступная версия».
+const LatestVersion = "latest"
+
+// IsLatestRequirement сообщает, что требование к версии не задано или
+// означает последнюю доступную версию.
+func IsLatestRequirement(required string) bool {
+	required = strings.TrimSpace(required)
+	return required == "" || required == LatestVersion
+}
 
 // compareMajorMinor сравнивает две версии, учитывая только major и minor
 // компоненты (например "1.22.2" и "1.22" считаются равными, так как major и
@@ -28,19 +39,10 @@ func compareMajorMinor(a, b string) int {
 // посторонние символы ("go1.22") — учитываются только первые две числовые
 // части. Версии без второй части (например "8") получают minor = 0.
 func parseMajorMinor(v string) [2]int {
-	parts := strings.Split(v, ".")
+	parts := common.NumericParts(v)
 	var res [2]int
-	idx := 0
-	for _, part := range parts {
-		n, err := strconv.Atoi(strings.TrimSpace(part))
-		if err != nil {
-			continue
-		}
-		res[idx] = n
-		idx++
-		if idx == 2 {
-			break
-		}
+	for i := 0; i < len(parts) && i < 2; i++ {
+		res[i] = parts[i]
 	}
 	return res
 }

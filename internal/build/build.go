@@ -61,7 +61,7 @@ func buildGo(version, output, target string) error {
 
 // buildNode собирает Node.js проект
 func buildNode() error {
-	if _, err := os.Stat("package.json"); err != nil {
+	if _, err := os.Stat(common.PackageFile); err != nil {
 		return errors.New(i18n.T("package.json not found"))
 	}
 	// Проверяем, есть ли скрипт build

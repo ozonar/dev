@@ -48,7 +48,7 @@ func DetectProject(root string) (*ProjectInfo, error) {
 	info.LanguageVersion = detectLanguageVersion(root, lang)
 
 	// Проверяем наличие .env.
-	info.HasEnv = common.FileExists(filepath.Join(root, ".env"))
+	info.HasEnv = common.FileExists(filepath.Join(root, common.EnvFile))
 
 	// Проверяем наличие вендорных зависимостей (vendor, node_modules и т.п.).
 	info.HasVendor = checkVendor(root, framework)
@@ -116,7 +116,7 @@ func detectPublicDir(root, framework string) string {
 
 func detectLangFramework(root string) (string, string) {
 	// composer.json -> PHP.
-	if common.FileExists(filepath.Join(root, "composer.json")) {
+	if common.FileExists(filepath.Join(root, common.ComposerFile)) {
 		// Пытаемся определить фреймворк по маркерным файлам.
 		if common.FileExists(filepath.Join(root, "artisan")) {
 			return "php", "laravel"
@@ -133,11 +133,11 @@ func detectLangFramework(root string) (string, string) {
 		return "php", "generic"
 	}
 	// go.mod -> Go.
-	if common.FileExists(filepath.Join(root, "go.mod")) {
+	if common.FileExists(filepath.Join(root, common.GoModFile)) {
 		return "go", "go"
 	}
 	// package.json -> Node.js.
-	if common.FileExists(filepath.Join(root, "package.json")) {
+	if common.FileExists(filepath.Join(root, common.PackageFile)) {
 		return "javascript", "node"
 	}
 	// Gemfile -> Ruby (Rails).
@@ -148,7 +148,7 @@ func detectLangFramework(root string) (string, string) {
 		return "ruby", "generic"
 	}
 	// requirements.txt или pyproject.toml -> Python.
-	if common.FileExists(filepath.Join(root, "requirements.txt")) || common.FileExists(filepath.Join(root, "pyproject.toml")) {
+	if common.FileExists(filepath.Join(root, common.RequirementsFile)) || common.FileExists(filepath.Join(root, common.PyProjectFile)) {
 		if common.FileExists(filepath.Join(root, "manage.py")) {
 			return "python", "django"
 		}
@@ -163,26 +163,51 @@ func detectLangFramework(root string) (string, string) {
 	return "unknown", ""
 }
 
+// extensionLanguages — сопоставление расширения файла с языком проекта.
+var extensionLanguages = map[string]string{
+	".py":   "python",
+	".go":   "go",
+	".rb":   "ruby",
+	".php":  "php",
+	".twig": "php",
+	".html": "php",
+	".htm":  "php",
+	".js":   "javascript",
+	".jsx":  "javascript",
+	".mjs":  "javascript",
+	".cjs":  "javascript",
+	".ts":   "javascript",
+	".tsx":  "javascript",
+}
+
+// nonCodeExtensions — расширения, которые участвуют в детекции языка проекта,
+// но не являются исходным кодом для линтеров.
+var nonCodeExtensions = map[string]bool{
+	".html": true,
+	".htm":  true,
+	".twig": true,
+}
+
+// LanguageByExtension определяет язык по расширению файла.
+func LanguageByExtension(ext string) (string, bool) {
+	lang, ok := extensionLanguages[strings.ToLower(ext)]
+	return lang, ok
+}
+
+// LintLanguageByExtension определяет язык, для которого существуют линтеры.
+// Расширения шаблонов и разметки исключаются.
+func LintLanguageByExtension(ext string) (string, bool) {
+	ext = strings.ToLower(ext)
+	if nonCodeExtensions[ext] {
+		return "", false
+	}
+	return LanguageByExtension(ext)
+}
+
 // detectLangByExtension пытается определить язык проекта по расширениям
 // файлов, лежащих непосредственно в корне (без рекурсивного обхода).
 // Возвращает язык и true, если какой-то из маркерных файлов найден.
 func detectLangByExtension(root string) (string, bool) {
-	// Карта расширение -> язык.
-	extLang := map[string]string{
-		".py":   "python",
-		".go":   "go",
-		".rb":   "ruby",
-		".php":  "php",
-		".twig": "php",
-		".html": "php",
-		".htm":  "php",
-		".js":   "javascript",
-		".jsx":  "javascript",
-		".mjs":  "javascript",
-		".ts":   "javascript",
-		".tsx":  "javascript",
-	}
-
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return "", false
@@ -191,8 +216,7 @@ func detectLangByExtension(root string) (string, bool) {
 		if entry.IsDir() {
 			continue
 		}
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if lang, ok := extLang[ext]; ok {
+		if lang, ok := LanguageByExtension(filepath.Ext(entry.Name())); ok {
 			return lang, true
 		}
 	}
@@ -226,7 +250,7 @@ func detectLanguageVersion(root, language string) string {
 
 // phpVersionFromComposer извлекает версию PHP из composer.json (require.php).
 func phpVersionFromComposer(root string) string {
-	data, err := os.ReadFile(filepath.Join(root, "composer.json"))
+	data, err := os.ReadFile(filepath.Join(root, common.ComposerFile))
 	if err != nil {
 		return ""
 	}
@@ -241,7 +265,7 @@ func phpVersionFromComposer(root string) string {
 
 // goVersionFromMod извлекает версию Go из go.mod (директива go).
 func goVersionFromMod(root string) string {
-	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	data, err := os.ReadFile(filepath.Join(root, common.GoModFile))
 	if err != nil {
 		return ""
 	}
@@ -256,7 +280,7 @@ func goVersionFromMod(root string) string {
 
 // nodeVersionFromPackage извлекает версию Node из package.json (engines.node).
 func nodeVersionFromPackage(root string) string {
-	data, err := os.ReadFile(filepath.Join(root, "package.json"))
+	data, err := os.ReadFile(filepath.Join(root, common.PackageFile))
 	if err != nil {
 		return ""
 	}
@@ -272,7 +296,7 @@ func nodeVersionFromPackage(root string) string {
 // pythonVersion определяет версию Python из pyproject.toml (requires-python)
 // или из .python-version.
 func pythonVersion(root string) string {
-	data, err := os.ReadFile(filepath.Join(root, "pyproject.toml"))
+	data, err := os.ReadFile(filepath.Join(root, common.PyProjectFile))
 	if err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			trimmed := strings.TrimSpace(line)
@@ -318,22 +342,23 @@ func normalizeMajorMinor(constraint string) string {
 		trimmed = trimmed[:idx]
 	}
 
-	// Берём первые две числовые части major.minor.
-	parts := strings.SplitN(trimmed, ".", 3)
-	if len(parts) == 0 || parts[0] == "" {
-		return ""
+	// Вторая часть, если она задана, должна быть числовой: "8.x" не является
+	// конкретной версией, в отличие от "8.4.*".
+	rawParts := strings.SplitN(trimmed, ".", 3)
+	if len(rawParts) >= 2 {
+		if _, err := strconv.Atoi(strings.TrimSpace(rawParts[1])); err != nil {
+			return ""
+		}
 	}
-	if _, err := strconv.Atoi(parts[0]); err != nil {
+	parts := common.NumericParts(trimmed)
+	if len(parts) == 0 {
 		return ""
 	}
 	if len(parts) == 1 {
 		// Только major-версия (например "18") — дополняем минорную нулём.
-		return parts[0] + ".0"
+		return strconv.Itoa(parts[0]) + ".0"
 	}
-	if _, err := strconv.Atoi(parts[1]); err != nil {
-		return ""
-	}
-	return parts[0] + "." + parts[1]
+	return strconv.Itoa(parts[0]) + "." + strconv.Itoa(parts[1])
 }
 
 func checkVendor(root, framework string) bool {
@@ -341,7 +366,7 @@ func checkVendor(root, framework string) bool {
 	case "laravel", "symfony", "generic":
 		return common.FileExists(filepath.Join(root, "vendor"))
 	case "go":
-		return common.FileExists(filepath.Join(root, "go.sum"))
+		return common.FileExists(filepath.Join(root, common.GoSumFile))
 	case "node":
 		return common.FileExists(filepath.Join(root, "node_modules"))
 	default:
@@ -362,7 +387,7 @@ func findDockerServices(root string) []string {
 }
 
 func parseMakefile(root string) []string {
-	makePath := filepath.Join(root, "Makefile")
+	makePath := filepath.Join(root, common.MakefileName)
 	if !common.FileExists(makePath) {
 		return nil
 	}
@@ -409,7 +434,7 @@ func detectDatabases(root string) []DatabaseInfo {
 	var databases []DatabaseInfo
 
 	// Проверяем .env файл.
-	envPath := filepath.Join(root, ".env")
+	envPath := filepath.Join(root, common.EnvFile)
 	if common.FileExists(envPath) {
 		data, err := os.ReadFile(envPath)
 		if err == nil {

@@ -25,8 +25,6 @@ import (
 	"dev/internal/port"
 	"dev/internal/run"
 	"dev/internal/toolchain"
-
-	"github.com/fatih/color"
 )
 
 // DefaultDAPPort — порт DAP-сервера Delve по умолчанию для отладки Go.
@@ -88,7 +86,7 @@ func runGo(opts Options) error {
 	if dapPort == 0 {
 		dapPort = DefaultDAPPort
 	}
-	if err := ensureDebugPortFree(dapPort); err != nil {
+	if err := port.EnsureFree(dapPort); err != nil {
 		return err
 	}
 	dapAddr := fmt.Sprintf("localhost:%d", dapPort)
@@ -171,38 +169,6 @@ func debugDir(target string) string {
 	// т.к. filepath.Clean("./x") схлопывается обратно в "x".
 	dir = strings.TrimPrefix(dir, "./")
 	return "./" + dir
-}
-
-// ensureDebugPortFree проверяет, что DAP-порт свободен. Если он занят
-// висящим процессом (например, от предыдущего запуска отладчика), предлагает
-// убить его, чтобы избежать ошибки "address already in use".
-func ensureDebugPortFree(portNum int) error {
-	occupied, info, err := port.IsPortOccupied(portNum)
-	if err != nil {
-		return fmt.Errorf(i18n.T("could not check port %d: %v"), portNum, err)
-	}
-	if !occupied {
-		return nil
-	}
-
-	i18n.Yellow("Port %d is already in use.", portNum)
-	if info != "" {
-		fmt.Println(info)
-	}
-	i18n.Printf("Kill the process using port %d? [Y/n]: ", portNum)
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-	if strings.EqualFold(input, "n") || strings.EqualFold(input, "no") {
-		return fmt.Errorf(i18n.T("port %d is already in use"), portNum)
-	}
-
-	if err := port.KillProcessOnPort(portNum); err != nil {
-		color.Yellow("  %v", err)
-	}
-
-	i18n.Green("Process on port %d killed.", portNum)
-	return nil
 }
 
 // installDlv гарантирует доступность Delve и возвращает путь к его бинарю.

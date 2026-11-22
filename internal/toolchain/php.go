@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -70,8 +69,7 @@ func (p *Php) resolveDownload() (resolved, url, archive string, err error) {
 
 // resolvePhpVersion определяет major.minor версию PHP по требованию проекта.
 func resolvePhpVersion(required string) (string, error) {
-	required = strings.TrimSpace(required)
-	if required != "" && required != "latest" {
+	if !IsLatestRequirement(required) {
 		v := parseMajorMinor(required)
 		return fmt.Sprintf("%d.%d", v[0], v[1]), nil
 	}
@@ -133,8 +131,7 @@ func sortVersionsDesc(versions []string) []string {
 // но major обязан совпадать. Например php 8.3 подходит под требование 8.2,
 // а php 9.0 — нет. Пустое требование или "latest" подходят любой версии.
 func (p *Php) Satisfies(installed, required string) bool {
-	required = strings.TrimSpace(required)
-	if required == "" || required == "latest" {
+	if IsLatestRequirement(required) {
 		return true
 	}
 	a := parseMajorMinor(installed)

@@ -872,7 +872,7 @@ func TestBuildScope_DeletedFilesFiltered(t *testing.T) {
 }
 
 // TestCodeExtensionsFor проверяет единый источник кодовых расширений:
-// extToLanguage отвечает за определение языков, а цели для линтеров
+// язык определяется detector.LintLanguageByExtension, а цели для линтеров
 // берутся только из codeExtensionsFor.
 func TestCodeExtensionsFor(t *testing.T) {
 	got := codeExtensionsFor("javascript")

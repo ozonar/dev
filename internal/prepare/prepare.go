@@ -115,7 +115,7 @@ func buildActions(framework, language string) []Action {
 	// 1. Composer install / npm install / go mod tidy / pip install
 	switch framework {
 	case "laravel", "symfony", "generic":
-		if _, err := os.Stat("composer.json"); err == nil {
+		if _, err := os.Stat(common.ComposerFile); err == nil {
 			hasVendor := common.FileExists("vendor")
 			actions = append(actions, Action{
 				Name:        "composer install",
@@ -141,7 +141,7 @@ func buildActions(framework, language string) []Action {
 			})
 		}
 	case "node":
-		if _, err := os.Stat("package.json"); err == nil {
+		if _, err := os.Stat(common.PackageFile); err == nil {
 			hasModules := common.FileExists("node_modules")
 			actions = append(actions, Action{
 				Name:        "npm install",
@@ -168,7 +168,7 @@ func buildActions(framework, language string) []Action {
 			},
 		})
 	case "python":
-		if _, err := os.Stat("requirements.txt"); err == nil {
+		if _, err := os.Stat(common.RequirementsFile); err == nil {
 			pipCmd := findPip()
 			actions = append(actions, Action{
 				Name:        "pip install",
@@ -178,7 +178,7 @@ func buildActions(framework, language string) []Action {
 					if pipCmd == "" {
 						return errors.New(i18n.T("pip not found. Activate a virtual environment or install pip"))
 					}
-					cmd := exec.Command(pipCmd, "install", "-r", "requirements.txt")
+					cmd := exec.Command(pipCmd, "install", "-r", common.RequirementsFile)
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					return cmd.Run()

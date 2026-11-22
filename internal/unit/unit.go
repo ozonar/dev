@@ -13,14 +13,14 @@
 package unit
 
 import (
+	"dev/internal/common"
+	"dev/internal/toolchain"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"dev/internal/toolchain"
 )
 
 // Options содержит параметры запуска юнит-тестов.
@@ -176,8 +176,8 @@ func detectPackageManager(dir string) string {
 	if fileExists(filepath.Join(dir, "yarn.lock")) {
 		return "yarn"
 	}
-	if fileExists(filepath.Join(dir, "package-lock.json")) ||
-		fileExists(filepath.Join(dir, "package.json")) {
+	if fileExists(filepath.Join(dir, common.PackageLockFile)) ||
+		fileExists(filepath.Join(dir, common.PackageFile)) {
 		return "npm"
 	}
 	return ""
@@ -188,7 +188,7 @@ func hasNpmTestScript(dir string) bool {
 	var cfg struct {
 		Scripts map[string]interface{} `json:"scripts"`
 	}
-	if err := readJSON(filepath.Join(dir, "package.json"), &cfg); err != nil {
+	if err := readJSON(filepath.Join(dir, common.PackageFile), &cfg); err != nil {
 		return false
 	}
 	_, ok := cfg.Scripts["test"]
@@ -200,7 +200,7 @@ func hasComposerTestScript(dir string) bool {
 	var cfg struct {
 		Scripts map[string]interface{} `json:"scripts"`
 	}
-	if err := readJSON(filepath.Join(dir, "composer.json"), &cfg); err != nil {
+	if err := readJSON(filepath.Join(dir, common.ComposerFile), &cfg); err != nil {
 		return false
 	}
 	_, ok := cfg.Scripts["test"]

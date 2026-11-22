@@ -4,25 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
-	"strings"
 
+	"dev/internal/detector"
 	"dev/internal/toolchain"
 )
-
-// extToLanguage сопоставляет расширение файла с языком, под который
-// в dev review существуют проверки. Расширения, для которых проверок нет
-// (например .css, .md), в карту не попадают — такие файлы игнорируются.
-var extToLanguage = map[string]string{
-	".go":  "go",
-	".php": "php",
-	".js":  "javascript",
-	".jsx": "javascript",
-	".mjs": "javascript",
-	".cjs": "javascript",
-	".ts":  "javascript",
-	".tsx": "javascript",
-	".py":  "python",
-}
 
 // languageOrder — фиксированный порядок запуска проверок по языкам,
 // чтобы вывод был стабильным независимо от порядка файлов в scope.
@@ -35,7 +20,7 @@ var languageOrder = []string{"go", "php", "javascript", "python"}
 func languagesInFiles(files []string) []string {
 	present := make(map[string]bool)
 	for _, f := range files {
-		if lang, ok := extToLanguage[strings.ToLower(filepath.Ext(f))]; ok {
+		if lang, ok := detector.LintLanguageByExtension(filepath.Ext(f)); ok {
 			present[lang] = true
 		}
 	}
@@ -49,9 +34,8 @@ func languagesInFiles(files []string) []string {
 }
 
 // codeExtensionsFor возвращает расширения кода языка, файлы которых реально
-// передаются линтерам этого языка. Это единый источник правды для целей
-// проверки: языковая карта extToLanguage отвечает только за определение
-// языков по расширениям, а цели для линтеров берутся отсюда.
+// передаются линтерам этого языка. Язык определяется общим правилом
+// detector.LintLanguageByExtension, а цели для линтеров берутся отсюда.
 func codeExtensionsFor(language string) []string {
 	switch language {
 	case "go":
@@ -101,16 +85,18 @@ func goLinter(goRT toolchain.Executable) toolchain.Executable {
 // (php), чтобы избежать сетевого запроса при построении линтера.
 // Скачивается как phar-файл с GitHub releases, запускается через скачанный php.
 func phpStanLinter(php toolchain.Executable) toolchain.Executable {
-	url := "https://github.com/phpstan/phpstan/releases/download/1.12.0/phpstan.phar"
-	return toolchain.NewProgram("phpstan", "1.12.0", "phpstan.phar", url, "", "{php} {phpstan}", php)
+	const version = "1.12.0"
+	url := fmt.Sprintf("https://github.com/phpstan/phpstan/releases/download/%s/phpstan.phar", version)
+	return toolchain.NewProgram("phpstan", version, "phpstan.phar", url, "", "{php} {phpstan}", php)
 }
 
 // phpCsFixerLinter описывает PHP CS Fixer. Требуемый php-рантайм передаётся
 // готовым (php), чтобы избежать сетевого запроса при построении линтера.
 // Скачивается как phar-файл с GitHub releases, запускается через скачанный php.
 func phpCsFixerLinter(php toolchain.Executable) toolchain.Executable {
-	url := "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/releases/download/v3.64.0/php-cs-fixer.phar"
-	return toolchain.NewProgram("php-cs-fixer", "3.64.0", "php-cs-fixer.phar", url, "", "{php} {php-cs-fixer}", php)
+	const version = "3.64.0"
+	url := fmt.Sprintf("https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/releases/download/v%s/php-cs-fixer.phar", version)
+	return toolchain.NewProgram("php-cs-fixer", version, "php-cs-fixer.phar", url, "", "{php} {php-cs-fixer}", php)
 }
 
 // biomeLinter описывает Biome — анализатор для JavaScript/TypeScript,

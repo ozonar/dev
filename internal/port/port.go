@@ -10,6 +10,8 @@ import (
 
 	"dev/internal/i18n"
 	"dev/internal/procfs"
+
+	"github.com/fatih/color"
 )
 
 // isLocalHost проверяет, является ли хост локальным
@@ -46,6 +48,38 @@ func IsPortOccupied(port int) (bool, string, error) {
 // Свободный порт — не ошибка.
 func KillProcessOnPort(port int) error {
 	return procfs.KillPort(port)
+}
+
+// EnsureFree проверяет, свободен ли порт, и при занятости предлагает убить
+// процесс, слушающий его.
+func EnsureFree(portNum int) error {
+	occupied, info, err := IsPortOccupied(portNum)
+	if err != nil {
+		return fmt.Errorf(i18n.T("could not check port %d: %v"), portNum, err)
+	}
+	if !occupied {
+		return nil
+	}
+
+	i18n.Yellow("⚠ Port %d is already in use.", portNum)
+	if info != "" {
+		fmt.Println(info)
+	}
+	i18n.Printf("Do you want to kill the process using port %d? [Y/n]: ", portNum)
+
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	if strings.EqualFold(input, "n") || strings.EqualFold(input, "no") {
+		return fmt.Errorf(i18n.T("port %d is already in use"), portNum)
+	}
+
+	if err := KillProcessOnPort(portNum); err != nil {
+		color.Yellow("  %v", err)
+	}
+
+	i18n.Green("Process on port %d killed.", portNum)
+	return nil
 }
 
 // CheckPort проверяет, занят ли указанный адрес:порт, и если да — показывает

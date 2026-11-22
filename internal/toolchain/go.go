@@ -116,7 +116,7 @@ func fetchGoReleases() ([]goRelease, error) {
 // версии к старейшей.
 func findGoRelease(releases []goRelease, version string) (goRelease, error) {
 	version = strings.TrimSpace(version)
-	if version == "" || version == "latest" {
+	if IsLatestRequirement(version) {
 		for _, r := range releases {
 			if r.Stable {
 				return r, nil
@@ -158,8 +158,7 @@ func findGoArchive(release goRelease, goos, goarch string) (goReleaseFile, error
 // подходит под требование 1.22, даже если он новее. Пустое требование или
 // "latest" подходят любой версии.
 func (g *Go) Satisfies(installed, required string) bool {
-	required = strings.TrimSpace(required)
-	if required == "" || required == "latest" {
+	if IsLatestRequirement(required) {
 		return true
 	}
 	return compareMajorMinor(installed, required) == 0

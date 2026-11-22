@@ -1,6 +1,7 @@
 package check
 
 import (
+	"dev/internal/common"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,7 +26,7 @@ func findGoModuleRoot(dir string) (string, bool) {
 		return "", false
 	}
 	for d := abs; ; d = filepath.Dir(d) {
-		if info, err := os.Stat(filepath.Join(d, "go.mod")); err == nil && !info.IsDir() {
+		if info, err := os.Stat(filepath.Join(d, common.GoModFile)); err == nil && !info.IsDir() {
 			return d, true
 		}
 		parent := filepath.Dir(d)
