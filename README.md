@@ -260,8 +260,7 @@ RECIPE_REPO=https://raw.githubusercontent.com/ozonar/dev-recipe/main
 ```
 
 The default is `https://raw.githubusercontent.com/ozonar/dev-recipe/main`.
-No git client is required: files are read from the local path or downloaded
-over HTTP.
+Files are read from the local path or downloaded over HTTP.
 
 Extra arguments after the recipe name are passed to the recipe as positional
 parameters `$1`, `$2`, ...:
@@ -282,10 +281,6 @@ commands:
 Arguments are passed to the shell separately, so they are never interpreted as
 shell syntax.
 
-### Project Detection
-
-No configuration files are required for project detection. The tool automatically detects your project based on common file patterns.
-
 ## AI Code Review in CI
 
 `dev check ai` can be used as a quality gate. The command exits with code 1 when:
@@ -293,18 +288,6 @@ No configuration files are required for project detection. The tool automaticall
 - the AI finds critical issues;
 - the model does not return a verdict;
 - the review itself fails (network, configuration, token).
-
-To make the result machine-readable, the model must end its answer with a verdict line:
-
-```
-VERDICT: OK
-```
-
-or
-
-```
-VERDICT: CRITICAL
-```
 
 LLM parameters are read from `~/dev-command/main.conf` or from environment variables. The environment wins, so no config file is needed on a runner:
 
