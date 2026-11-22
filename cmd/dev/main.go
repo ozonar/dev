@@ -105,6 +105,7 @@ var forcedVersion string
 
 func init() {
 	runCmd.Flags().IntVarP(&runPort, "port", "p", 0, "Port for the dev server (default: 8000)")
+	installCmd.Flags().BoolVarP(&installYes, "yes", "y", false, "Non interactive mode")
 	addLanguageFlags(runCmd, false)
 	addLanguageFlags(buildCmd, false)
 	addLanguageFlags(debugCmd, false)
@@ -231,6 +232,9 @@ var prepareCmd = &cobra.Command{
 	},
 }
 
+// installYes отключает интерактивный выбор директории установки.
+var installYes bool
+
 var installCmd = &cobra.Command{
 	Use:   "install [file]",
 	Short: "Install dev (or specified file) to system",
@@ -243,7 +247,7 @@ You will be prompted to choose installation directory: /usr/local/bin (default) 
 		if len(args) > 0 {
 			file = args[0]
 		}
-		runInstall(file)
+		runInstall(file, installYes)
 	},
 }
 
@@ -641,9 +645,9 @@ func runPrepare() {
 	i18n.Green("Project prepared successfully.")
 }
 
-func runInstall(file string) {
+func runInstall(file string, nonInteractive bool) {
 	i18n.Cyan("Installing dev...")
-	err := install.Install(file)
+	err := install.Install(file, install.Options{NonInteractive: nonInteractive})
 	if err != nil {
 		i18n.Red("Install failed: %v", err)
 		return

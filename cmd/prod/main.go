@@ -265,7 +265,7 @@ func runVirus(path string) {
 // бинарник) в выбранную системную директорию.
 func runInstall(file string) {
 	fmt.Println(colors.Cyan("Installing prod..."))
-	if err := install.Install(file); err != nil {
+	if err := install.Install(file, install.Options{}); err != nil {
 		fmt.Println(colors.Red("Install failed: " + err.Error()))
 		return
 	}

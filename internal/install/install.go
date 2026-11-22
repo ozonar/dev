@@ -91,13 +91,24 @@ func checkPathDirs() ([]string, error) {
 	return allDirs, nil
 }
 
+// Options управляет поведением установки.
+type Options struct {
+	NonInteractive bool
+}
+
 // chooseInstallDir возвращает директорию для установки на основе checkPathDirs.
 //
-// Если больше, показывает интерактивный выбор.
-func chooseInstallDir() (string, error) {
+// Если кандидатов больше одного и не задан неинтерактивный режим,
+// показывает интерактивный выбор.
+func chooseInstallDir(nonInteractive bool) (string, error) {
 	candidates, err := checkPathDirs()
 	if err != nil {
 		return "", err
+	}
+
+	// Неинтерактивный режим: берём первый кандидат — он же вариант по умолчанию.
+	if nonInteractive {
+		return candidates[0], nil
 	}
 
 	// Показываем список для выбора
@@ -122,7 +133,7 @@ func chooseInstallDir() (string, error) {
 
 // Install устанавливает указанный файл (или текущий исполняемый) в выбранную директорию.
 // Если sourceFile == "", используется os.Executable().
-func Install(sourceFile string) error {
+func Install(sourceFile string, opts Options) error {
 	// Определяем исходный файл
 	var srcPath string
 	if sourceFile == "" {
@@ -143,7 +154,7 @@ func Install(sourceFile string) error {
 	baseName := filepath.Base(srcPath)
 
 	// Выбираем директорию установки
-	targetDir, err := chooseInstallDir()
+	targetDir, err := chooseInstallDir(opts.NonInteractive)
 	if err != nil {
 		return err
 	}
@@ -181,10 +192,10 @@ func Install(sourceFile string) error {
 	if err != nil {
 		return fmt.Errorf(i18n.T("could not open source file %s: %v"), srcPath, err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	// Пытаемся удалить существующий файл
-	os.Remove(targetPath)
+	_ = os.Remove(targetPath)
 
 	dstFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
