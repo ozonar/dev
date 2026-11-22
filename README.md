@@ -262,24 +262,34 @@ RECIPE_REPO=https://raw.githubusercontent.com/ozonar/dev-recipe/main
 The default is `https://raw.githubusercontent.com/ozonar/dev-recipe/main`.
 Files are read from the local path or downloaded over HTTP.
 
-Extra arguments after the recipe name are passed to the recipe as positional
-parameters `$1`, `$2`, ...:
-
-```bash
-dev recipe frpc 8000
-```
-
-Inside the recipe use them with quotes:
+A recipe may declare named parameters with a description and an optional
+default value:
 
 ```yaml
 commands:
   frpc:
+    params:
+      - name: LISTEN_PORT
+        description: Local port to expose
+        default: "8000"
     subcommands:
-      - docker run --rm frp/frpc -l "$1"
+      - docker run --rm frp/frpc -l "$LISTEN_PORT"
 ```
 
-Arguments are passed to the shell separately, so they are never interpreted as
-shell syntax.
+Values come from a `NAME=value` argument, the environment, or an interactive
+prompt, and fall back to the declared default:
+
+```bash
+dev recipe frpc LISTEN_PORT=9000
+```
+
+Parameters without a default are required. Extra arguments that are not
+declared parameters are passed positionally as `$1`, `$2`, ... and are never
+interpreted as shell syntax:
+
+```bash
+dev recipe frpc 8000
+```
 
 ## AI Code Review in CI
 
