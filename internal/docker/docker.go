@@ -1,27 +1,26 @@
 package docker
 
 import (
+	"dev/internal/colors"
+	"dev/internal/compose"
+	"dev/internal/i18n"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-
-	"dev/internal/colors"
-	"dev/internal/i18n"
 )
 
 // GetServiceStatuses возвращает карту статусов сервисов Docker Compose.
 // Ключ - имя сервиса, значение - сырой статус (например, "Up", "Exited", "Failed").
 func GetServiceStatuses() (map[string]string, error) {
-	if _, err := os.Stat("docker-compose.yml"); os.IsNotExist(err) {
-		return nil, nil // нет docker-compose.yml - нет сервисов
+	if _, err := os.Stat(compose.FileName); os.IsNotExist(err) {
+		return nil, nil // нет compose-файла - нет сервисов
 	}
 
 	// Получаем имя текущего проекта Docker Compose (по умолчанию - имя текущей директории)
-	projectName, err := getComposeProjectName()
+	projectName, err := compose.ProjectName()
 	if err != nil {
 		// Если не удалось определить проект, возвращаем пустую карту
 		return map[string]string{}, nil
@@ -71,23 +70,6 @@ func extractServiceFromLabels(labels string) string {
 	return ""
 }
 
-// getComposeProjectName возвращает имя проекта Docker Compose.
-// По умолчанию используется имя текущей директории в нижнем регистре (как делает docker-compose).
-func getComposeProjectName() (string, error) {
-	// Можно также учесть переменную окружения COMPOSE_PROJECT_NAME
-	if project := os.Getenv("COMPOSE_PROJECT_NAME"); project != "" {
-		return project, nil
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	project := filepath.Base(wd)
-	// Docker Compose преобразует имя проекта в нижний регистр и заменяет неалфавитно-цифровые символы на дефисы
-	// Для простоты приводим к нижнему регистру, как это делает docker-compose по умолчанию
-	return strings.ToLower(project), nil
-}
-
 // ColorizeStatus возвращает цветную строку статуса согласно правилам:
 // - Зеленый: активен (статус содержит "Up") или запускается ("Starting", "Restarting")
 // - Синий: неактивен ("Created", "Paused")
@@ -108,8 +90,8 @@ func ColorizeStatus(status string) string {
 }
 
 func ComposeUp() error {
-	// Check if docker-compose.yml exists
-	if _, err := os.Stat("docker-compose.yml"); os.IsNotExist(err) {
+	// Check if compose file exists
+	if _, err := os.Stat(compose.FileName); os.IsNotExist(err) {
 		return errors.New(i18n.T("docker-compose.yml not found"))
 	}
 

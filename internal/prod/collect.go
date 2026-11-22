@@ -15,20 +15,11 @@ func Collect(prev *Report) *Report {
 		Hostname:  hostname,
 	}
 
-	cats := []*Category{
-		collectCPU(prev),
-		collectMemory(prev),
-		collectDisk(prev),
-		collectFD(prev),
-		collectNetwork(prev),
-		collectPHPFPM(prev),
-		collectPostgres(prev),
-		collectRedis(prev),
-		collectExternal(prev),
-		collectRecent(prev),
-	}
-
-	for _, c := range cats {
+	for _, def := range categoryDefs {
+		if def.collect == nil {
+			continue
+		}
+		c := def.collect(prev)
 		// Скрываем категории: не обнаруженные, либо не давшие ни одного симптома
 		// (пустые — напр. Recent changes без деплоя, External без зависимостей).
 		if !c.Present || len(c.Symptoms) == 0 {

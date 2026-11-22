@@ -37,10 +37,10 @@ type configParam struct {
 // По этой таблице и читается файл, и накладывается окружение, поэтому
 // отдельного списка переменных окружения не существует.
 var configParams = []configParam{
-	{key: "LLM_ENDPOINT", field: func(c *Config) *string { return &c.Endpoint }},
-	{key: "LLM_TOKEN", field: func(c *Config) *string { return &c.Token }},
-	{key: "LLM_MODEL", field: func(c *Config) *string { return &c.Model }},
-	{key: "INTERFACE_LANG", field: func(c *Config) *string { return &c.Language }},
+	{key: selfconfig.KeyLLMEndpoint, field: func(c *Config) *string { return &c.Endpoint }},
+	{key: selfconfig.KeyLLMToken, field: func(c *Config) *string { return &c.Token }},
+	{key: selfconfig.KeyLLMModel, field: func(c *Config) *string { return &c.Model }},
+	{key: selfconfig.KeyInterfaceLang, field: func(c *Config) *string { return &c.Language }},
 }
 
 // applyValues переносит разрешённые значения в поля структуры.

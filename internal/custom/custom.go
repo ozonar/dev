@@ -23,13 +23,14 @@ import (
 
 	"dev/internal/common"
 	"dev/internal/i18n"
+	"dev/internal/selfconfig"
 
 	"github.com/fatih/color"
 	"gopkg.in/yaml.v3"
 )
 
 // configPath — путь к файлу пользовательских команд (относительно home).
-const configPath = "~/dev-command/custom.yml"
+const configPath = "~/" + selfconfig.DirName + "/custom.yml"
 
 // localFileName — имя файла локальных пользовательских команд в директории
 // запуска команды dev.
@@ -92,24 +93,9 @@ commands:
       - echo "Hello from $(current_dir) [$(language)/$(framework)]"
 `
 
-// resolvePath заменяет "~" и префикс "~/" на домашнюю директорию пользователя.
-func resolvePath(path string) string {
-	if path != "~" && !strings.HasPrefix(path, "~/") {
-		return path
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return path
-	}
-	if path == "~" {
-		return home
-	}
-	return filepath.Join(home, path[2:])
-}
-
 // ConfigFilePath возвращает абсолютный путь к файлу custom.yml.
 func ConfigFilePath() string {
-	return resolvePath(configPath)
+	return common.ExpandHome(configPath)
 }
 
 // Load читает глобальный конфигурационный файл custom.yml (~/dev-command).
@@ -212,7 +198,7 @@ func (c Command) allowedByPath(dir string) bool {
 		return true
 	}
 
-	target := resolvePath(c.Path)
+	target := common.ExpandHome(c.Path)
 	if !filepath.IsAbs(target) {
 		target = filepath.Join(dir, target)
 	}
@@ -445,17 +431,9 @@ func Edit() error {
 	}
 
 	// Открываем в редакторе.
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "nano"
-	}
-
-	i18n.Cyan("Opening config in %s...", editor)
-	cmd := exec.Command(editor, path)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	editor := common.EditorCommand()
+	i18n.Cyan("Opening config in %s...", editor[0])
+	if err := common.OpenInEditor(path); err != nil {
 		return fmt.Errorf(i18n.T("editor failed: %w"), err)
 	}
 

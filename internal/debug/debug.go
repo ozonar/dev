@@ -29,6 +29,9 @@ import (
 	"github.com/fatih/color"
 )
 
+// DefaultDAPPort — порт DAP-сервера Delve по умолчанию для отладки Go.
+const DefaultDAPPort = 2345
+
 // Options описывает параметры запуска отладки проекта.
 type Options struct {
 	Framework string   // Фреймворк проекта (symfony, laravel, yii, generic, go)
@@ -36,7 +39,7 @@ type Options struct {
 	Version   string   // Требуемая версия языка (например "8.3" для PHP)
 	PublicDir string   // Публичная директория PHP-проекта
 	Params    []string // Дополнительные аргументы, переданные в команду {params}
-	Port      int      // Порт: для PHP — dev-сервер (0 = 8000), для Go — DAP-сервер Delve (0 = 2345)
+	Port      int      // Порт: для PHP — dev-сервер, для Go — DAP-сервер Delve (0 = значение по умолчанию)
 }
 
 // Run запускает отладку проекта в зависимости от языка.
@@ -83,7 +86,7 @@ func runGo(opts Options) error {
 
 	dapPort := opts.Port
 	if dapPort == 0 {
-		dapPort = 2345
+		dapPort = DefaultDAPPort
 	}
 	if err := ensureDebugPortFree(dapPort); err != nil {
 		return err

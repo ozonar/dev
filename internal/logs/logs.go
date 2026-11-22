@@ -2,9 +2,9 @@ package logs
 
 import (
 	"dev/internal/common"
+	"dev/internal/compose"
 	"dev/internal/detector"
 	"dev/internal/toolchain"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,8 +52,8 @@ func FindLogs(projectRoot string) ([]LogEntry, error) {
 
 func findDockerLogs() []LogEntry {
 	// Определяем имя проекта Docker Compose (по умолчанию — имя текущей директории)
-	projectName := getComposeProjectName()
-	if projectName == "" {
+	projectName, err := compose.ProjectName()
+	if err != nil || projectName == "" {
 		return nil
 	}
 
@@ -77,19 +77,11 @@ func findDockerLogs() []LogEntry {
 	return entries
 }
 
-// getComposeProjectName возвращает имя проекта Docker Compose.
-// По умолчанию используется имя текущей рабочей директории в нижнем регистре.
-func getComposeProjectName() string {
-	// Можно также учесть переменную окружения COMPOSE_PROJECT_NAME
-	if project := os.Getenv("COMPOSE_PROJECT_NAME"); project != "" {
-		return project
+func PHPFPMLogGlobs() []string {
+	return []string{
+		"/var/log/php*-fpm.log",
+		"/var/log/php-fpm/*.log",
 	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	project := filepath.Base(wd)
-	return strings.ToLower(project)
 }
 
 // OpenLogInLnav открывает лог в lnav. Для docker-контейнеров используется
@@ -141,13 +133,8 @@ func findPHPFPMLogs(projectRoot string) []LogEntry {
 		})
 	}
 
-	// 1. Системные пути PHP-FPM логов — ищем по шаблону /var/log/php*-fpm.log
-	//    и /var/log/php-fpm/*.log
-	systemGlobs := []string{
-		"/var/log/php*-fpm.log",
-		"/var/log/php-fpm/*.log",
-	}
-	for _, glob := range systemGlobs {
+	// 1. Системные пути PHP-FPM логов.
+	for _, glob := range PHPFPMLogGlobs() {
 		matches, err := filepath.Glob(glob)
 		if err != nil {
 			continue
@@ -157,52 +144,25 @@ func findPHPFPMLogs(projectRoot string) []LogEntry {
 		}
 	}
 
-	// 2. Docker контейнеры с PHP-FPM
-	// Проверяем, есть ли docker-compose.yml и ищем сервисы с php-fpm
-	composePath := filepath.Join(projectRoot, "docker-compose.yml")
-	if composeData, err := os.ReadFile(composePath); err == nil {
-		composeContent := string(composeData)
-		lines := strings.Split(composeContent, "\n")
-		inServices := false
-		currentService := ""
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "services:") {
-				inServices = true
-				continue
-			}
-			if !inServices || trimmed == "" {
-				continue
-			}
-			// Если строка не начинается с пробела — вышли из services
-			if len(line) > 0 && line[0] != ' ' && line[0] != '\t' {
-				if strings.Contains(trimmed, ":") && !strings.HasPrefix(trimmed, "#") {
-					// Это новый top-level ключ, выходим
-					break
-				}
-			}
-			// Определяем имя сервиса (строка с отступом 2 пробела, заканчивается на ":")
-			if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && strings.HasSuffix(trimmed, ":") {
-				currentService = strings.TrimSuffix(trimmed, ":")
-				continue
-			}
-			// Проверяем, использует ли сервис php-fpm образ
-			if strings.Contains(trimmed, "image:") && strings.Contains(strings.ToLower(trimmed), "php") && strings.Contains(strings.ToLower(trimmed), "fpm") {
-				if currentService != "" {
-					// Проверяем, запущен ли контейнер
-					cmd := exec.Command("docker", "ps", "--format", "{{.Names}}", "--filter", fmt.Sprintf("name=%s", currentService))
-					if out, err := cmd.Output(); err == nil {
-						containerName := strings.TrimSpace(string(out))
-						if containerName != "" {
-							entries = append(entries, LogEntry{
-								Path: containerName,
-								Type: "docker",
-							})
-						}
-					}
-				}
-			}
+	// 2. Docker контейнеры с PHP-FPM: сервисы compose, использующие образ php-fpm.
+	for _, svc := range compose.ReadServices(projectRoot) {
+		image := strings.ToLower(svc.Image)
+		if !strings.Contains(image, "php") || !strings.Contains(image, "fpm") {
+			continue
 		}
+		cmd := exec.Command("docker", "ps", "--format", "{{.Names}}", "--filter", "name="+svc.Name)
+		out, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+		containerName := strings.TrimSpace(string(out))
+		if containerName == "" {
+			continue
+		}
+		entries = append(entries, LogEntry{
+			Path: containerName,
+			Type: "docker",
+		})
 	}
 
 	return entries

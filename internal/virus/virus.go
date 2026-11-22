@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"dev/internal/i18n"
+	"dev/internal/selfconfig"
 )
 
 // parseTarget разбирает строку подключения "user@host" или просто "host".
@@ -133,16 +134,13 @@ func Virus(path string) error {
 // copyDevCommand копирует всё содержимое локальной папки ~/dev-command
 // в одноимённую папку dev-command в домашнем каталоге удалённого пользователя.
 func copyDevCommand(username, host, remotePath string) error {
-	// Определяем домашнюю директорию текущего пользователя.
-	home, err := os.UserHomeDir()
+	// Путь к локальной папке с конфигами.
+	localConfigDir, err := selfconfig.UserDir()
 	if err != nil {
 		return fmt.Errorf(i18n.T("could not determine home directory: %v"), err)
 	}
 
-	// Путь к локальной папке с конфигами.
-	localConfigDir := filepath.Join(home, "dev-command")
-
 	// Целевой путь на удалённом сервере: <remotePath>/dev-command.
-	remoteConfigDir := filepath.Join(remotePath, "dev-command")
+	remoteConfigDir := filepath.Join(remotePath, selfconfig.DirName)
 	return scpDir(localConfigDir, username, host, remoteConfigDir)
 }

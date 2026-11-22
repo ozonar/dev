@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"dev/internal/common"
 	"dev/internal/custom"
 	"dev/internal/i18n"
 	"dev/internal/selfconfig"
@@ -78,8 +79,8 @@ func (e *NotFoundError) Error() string {
 // из окружения или main.conf без учёта регистра. Если ключ не задан —
 // возвращается DefaultRepo.
 func RepoURL() string {
-	if v := selfconfig.Value("RECIPE_REPO"); v != "" {
-		return resolvePath(v)
+	if v := selfconfig.Value(selfconfig.KeyRecipeRepo); v != "" {
+		return common.ExpandHome(v)
 	}
 	return DefaultRepo
 }
@@ -89,18 +90,6 @@ func RepoURL() string {
 // при системном конфиге используется /etc/dev-command/recipes.
 func CacheDir() string {
 	return filepath.Join(selfconfig.Dir(), RecipesDir)
-}
-
-// resolvePath заменяет префикс "~/" на домашнюю директорию пользователя.
-func resolvePath(path string) string {
-	if !strings.HasPrefix(path, "~/") {
-		return path
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return path
-	}
-	return filepath.Join(home, path[2:])
 }
 
 // validateName проверяет, что имя рецепта безопасно использовать как имя
@@ -134,7 +123,7 @@ func isHTTP(source string) bool {
 
 // localPath приводит file:// и "~/" к локальному пути.
 func localPath(source string) string {
-	return resolvePath(strings.TrimPrefix(source, "file://"))
+	return common.ExpandHome(strings.TrimPrefix(source, "file://"))
 }
 
 // joinURL склеивает базовый URL и относительный путь.

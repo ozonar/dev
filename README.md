@@ -171,7 +171,7 @@ dev run                 # run project
 dev run -p 8080         # run project on port 8080
 dev run <file> -p 8080  # run a specific entry point on port 8080
 dev dcr                 # start docker-compose
-dev prepare             # prepare environment
+dev prepare             # list of prepare framework specific commands
 dev install             # install dev to system
 dev self-update         # update dev to latest version
 dev virus user@host     # copy dev to remote server

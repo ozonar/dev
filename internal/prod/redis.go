@@ -114,7 +114,7 @@ func parseRedisBytes(s string) (int64, bool) {
 	if len(s) < 2 {
 		return 0, false
 	}
-	mult := int64(1)
+	var mult int64
 	switch s[len(s)-1] {
 	case 'K', 'k':
 		mult = 1024

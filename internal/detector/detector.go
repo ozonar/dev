@@ -2,6 +2,7 @@ package detector
 
 import (
 	"dev/internal/common"
+	"dev/internal/compose"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -349,66 +350,13 @@ func checkVendor(root, framework string) bool {
 }
 
 func findDockerServices(root string) []string {
-	composePath := filepath.Join(root, "docker-compose.yml")
-	if !common.FileExists(composePath) {
+	parsed := compose.ReadServices(root)
+	if len(parsed) == 0 {
 		return nil
 	}
-	data, err := os.ReadFile(composePath)
-	if err != nil {
-		return nil
-	}
-	lines := strings.Split(string(data), "\n")
-	var services []string
-	inServices := false
-	servicesIndent := -1
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		// Определяем отступ (количество пробелов в начале строки)
-		indent := 0
-		for _, ch := range line {
-			switch ch {
-			case ' ':
-				indent++
-			case '\t':
-				indent += 4 // считаем таб как 4 пробела
-			default:
-				break
-			}
-		}
-		if strings.HasPrefix(trimmed, "services:") {
-			inServices = true
-			servicesIndent = indent
-			continue
-		}
-		if !inServices {
-			continue
-		}
-		// Если отступ меньше или равен отступу services: и строка не пустая,
-		// значит, мы вышли из блока services (например, volumes:, networks:)
-		if indent <= servicesIndent && trimmed != "" {
-			// Проверяем, не является ли это другим top-level ключом
-			if strings.Contains(trimmed, ":") {
-				break
-			}
-		}
-		// Игнорируем строки, которые начинаются с '-'
-		if strings.HasPrefix(trimmed, "-") {
-			continue
-		}
-		// Сервис должен иметь отступ ровно на 2 пробела больше, чем services:
-		// (обычно servicesIndent = 0, indent = 2)
-		expectedIndent := servicesIndent + 2
-		if indent == expectedIndent && strings.Contains(trimmed, ":") {
-			// Извлекаем имя сервиса (часть до двоеточия)
-			parts := strings.Split(trimmed, ":")
-			svc := strings.TrimSpace(parts[0])
-			if svc != "" {
-				services = append(services, svc)
-			}
-		}
+	services := make([]string, 0, len(parsed))
+	for _, svc := range parsed {
+		services = append(services, svc.Name)
 	}
 	return services
 }
@@ -518,7 +466,7 @@ func parseConnectionString(url, dbType string) *DatabaseInfo {
 
 	// Определяем местоположение.
 	location := LocationRemote
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+	if common.IsLocalHost(host) {
 		location = LocationLocal
 	} else if strings.Contains(host, "docker") || strings.Contains(host, "container") {
 		location = LocationDocker

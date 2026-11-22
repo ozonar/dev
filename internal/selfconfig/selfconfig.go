@@ -8,52 +8,76 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"dev/internal/common"
 	"dev/internal/i18n"
 )
 
 const (
+	// DirName — имя каталога конфигурации dev в домашней и системной директориях.
+	DirName = "dev-command"
+
 	// UserPath — пользовательский конфиг (высший приоритет).
-	UserPath = "~/dev-command/main.conf"
+	UserPath = "~/" + DirName + "/main.conf"
 	// EtcPath — системный конфиг (используется, если пользовательского нет).
-	EtcPath = "/etc/dev-command/main.conf"
+	EtcPath = "/etc/" + DirName + "/main.conf"
 )
 
-// defaultTemplate — содержимое main.conf, создаваемое при первом редактировании.
-// Шаблон обязан быть валидным INI-подобным файлом: строки "ключ=значение".
-const defaultTemplate = `# dev command configuration
+// Ключи параметров main.conf. Это единственное место, где заданы имена
+// параметров; остальные пакеты ссылаются на эти константы.
+const (
+	KeyInterfaceLang = "INTERFACE_LANG"
+	KeyLLMEndpoint   = "LLM_ENDPOINT"
+	KeyLLMToken      = "LLM_TOKEN"
+	KeyLLMModel      = "LLM_MODEL"
+	KeyRecipeRepo    = "RECIPE_REPO"
+)
 
-# Interface language: auto, en, ru
-INTERFACE_LANG=auto
+// Param описывает параметр main.conf: ключ, комментарий для шаблона и
+// значение по умолчанию.
+type Param struct {
+	Key     string
+	Comment string
+	Default string
+}
 
-# OpenAI-compatible API endpoint (e.g. https://3qa.ru/api/v1/chat/completions)
-LLM_ENDPOINT=
+// Params — единственный реестр параметров main.conf. Шаблон конфига
+// строится из этого списка, поэтому перечень ключей не дублируется.
+var Params = []Param{
+	{KeyInterfaceLang, "Interface language: auto, en, ru", "auto"},
+	{KeyLLMEndpoint, "OpenAI-compatible API endpoint (e.g. https://3qa.ru/api/v1/chat/completions)", ""},
+	{KeyLLMToken, "API token for LLM access", ""},
+	{KeyLLMModel, "Model name (e.g. deepseek/deepseek-v3.2)", ""},
+	{KeyRecipeRepo, "Recipe repository: local path or HTTP(S) base URL containing repository.yml and the recipes/ directory. Leave empty to use the built-in default repository.", ""},
+}
 
-# API token for LLM access
-LLM_TOKEN=
-
-# Model name (e.g. deepseek/deepseek-v3.2)
-LLM_MODEL=
-
-# Recipe repository: local path or HTTP(S) base URL containing
-# repository.yml and the recipes/ directory.
-# Default: https://raw.githubusercontent.com/ozonar/dev-recipe/main
-RECIPE_REPO=
-`
-
-// resolvePath заменяет "~" и префикс "~/" на домашнюю директорию пользователя.
-func resolvePath(path string) string {
-	if !strings.HasPrefix(path, "~/") {
-		return path
+// DefaultTemplate возвращает содержимое main.conf, создаваемое при первом
+// редактировании. Шаблон обязан быть валидным INI-подобным файлом:
+// строки "ключ=значение".
+func DefaultTemplate() string {
+	var b strings.Builder
+	b.WriteString("# dev command configuration\n")
+	for _, p := range Params {
+		b.WriteString("\n# " + p.Comment + "\n")
+		b.WriteString(p.Key + "=" + p.Default + "\n")
 	}
+	return b.String()
+}
+
+// UserDir возвращает путь к пользовательскому каталогу конфигурации dev.
+func UserDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return path
+		return "", err
 	}
-	return filepath.Join(home, path[2:])
+	return filepath.Join(home, DirName), nil
+}
+
+// EtcDir возвращает путь к системному каталогу конфигурации dev.
+func EtcDir() string {
+	return "/etc/" + DirName
 }
 
 // Paths возвращает пути к конфигу в порядке приоритета:
@@ -61,7 +85,7 @@ func resolvePath(path string) string {
 // 2. /etc/dev-command/main.conf
 func Paths() []string {
 	return []string{
-		resolvePath(UserPath),
+		common.ExpandHome(UserPath),
 		EtcPath,
 	}
 }
@@ -138,7 +162,7 @@ func Value(key string) string {
 
 // Language возвращает язык интерфейса из конфига.
 func Language() string {
-	return Value("INTERFACE_LANG")
+	return Value(KeyInterfaceLang)
 }
 
 // resolveConfigPath находит первый существующий конфиг или возвращает
@@ -171,24 +195,16 @@ func Edit() error {
 
 	// Создаём файл с шаблоном, если он не существует.
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := os.WriteFile(path, []byte(defaultTemplate), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(DefaultTemplate()), 0644); err != nil {
 			return fmt.Errorf(i18n.T("failed to create default config: %w"), err)
 		}
 		i18n.Yellow("Created default config at %s", path)
 	}
 
 	// Открываем в редакторе.
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "nano"
-	}
-
-	i18n.Cyan("Opening config in %s...", editor)
-	cmd := exec.Command(editor, path)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	editor := common.EditorCommand()
+	i18n.Cyan("Opening config in %s...", editor[0])
+	if err := common.OpenInEditor(path); err != nil {
 		return fmt.Errorf(i18n.T("editor failed: %w"), err)
 	}
 

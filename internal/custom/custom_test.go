@@ -677,20 +677,3 @@ func TestDefaultConfigTemplateIsValidYAML(t *testing.T) {
 		t.Fatalf("defaultConfigTemplate example subcommands = %v, want one", example.Subcommands)
 	}
 }
-
-func TestResolvePathTilde(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	if got := resolvePath("~"); got != home {
-		t.Fatalf("resolvePath(~) = %q, want %q", got, home)
-	}
-	want := filepath.Join(home, "projects", "app")
-	if got := resolvePath("~/projects/app"); got != want {
-		t.Fatalf("resolvePath(~/projects/app) = %q, want %q", got, want)
-	}
-	// Пути без тильды возвращаются без изменений.
-	if got := resolvePath("./backend"); got != "./backend" {
-		t.Fatalf("resolvePath(./backend) = %q, want unchanged", got)
-	}
-}

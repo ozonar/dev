@@ -20,6 +20,9 @@ import (
 	"github.com/fatih/color"
 )
 
+// DefaultPort — порт dev-сервера по умолчанию.
+const DefaultPort = 8000
+
 // RunOptions содержит опции для запуска проекта
 type RunOptions struct {
 	Port      int    // Порт для dev-сервера (0 = использовать порт по умолчанию)
@@ -40,7 +43,7 @@ func RunProject(framework, language string) error {
 func RunProjectWithOptions(framework, language string, opts RunOptions) error {
 	port := opts.Port
 	if port == 0 {
-		port = 8000
+		port = DefaultPort
 	}
 
 	// Определяем путь к рантайму до запуска: системный инструмент, либо

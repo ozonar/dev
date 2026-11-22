@@ -104,14 +104,16 @@ var forcedGo, forcedPHP, forcedJS, forcedPython bool
 var forcedVersion string
 
 func init() {
-	runCmd.Flags().IntVarP(&runPort, "port", "p", 0, "Port for the dev server (default: 8000)")
+	runCmd.Flags().IntVarP(&runPort, "port", "p", 0,
+		fmt.Sprintf("Port for the dev server (default: %d)", run.DefaultPort))
 	installCmd.Flags().BoolVarP(&installYes, "yes", "y", false, "Non interactive mode")
 	addLanguageFlags(runCmd, false)
 	addLanguageFlags(buildCmd, false)
 	addLanguageFlags(debugCmd, false)
 	addLanguageFlags(unitCmd, false)
 	buildCmd.Flags().StringVarP(&buildOutput, "output", "o", "", "Output file name for Go build (default: auto-derived from main path)")
-	debugCmd.Flags().IntVarP(&debugPort, "port", "p", 0, "Port for the PHP debug server (default: 8000)")
+	debugCmd.Flags().IntVarP(&debugPort, "port", "p", 0,
+		fmt.Sprintf("Port for the PHP debug server (default: %d)", run.DefaultPort))
 }
 
 // addLanguageFlags регистрирует флаги --go/--php/--js/--python на команде.

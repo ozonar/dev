@@ -17,6 +17,7 @@ import (
 
 	"dev/internal/colors"
 	"dev/internal/common"
+	"dev/internal/compose"
 	"dev/internal/i18n"
 )
 
@@ -427,7 +428,7 @@ func buildActions(framework, language string) []Action {
 	}
 
 	// 12. docker compose up -d
-	if common.FileExists("docker-compose.yml") {
+	if common.FileExists(compose.FileName) {
 		actions = append(actions, Action{
 			Name:        "docker compose up -d",
 			Description: i18n.T("Start Docker Compose services in background"),

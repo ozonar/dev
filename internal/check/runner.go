@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"dev/internal/i18n"
+	"dev/internal/selfconfig"
 	"dev/internal/toolchain"
 )
 
@@ -236,11 +237,10 @@ func ensurePhpCsFixerConfig(dir string) string {
 		}
 	}
 
-	home, err := os.UserHomeDir()
+	devDir, err := selfconfig.UserDir()
 	if err != nil {
 		return ""
 	}
-	devDir := filepath.Join(home, "dev-command")
 	if err := os.MkdirAll(devDir, 0o755); err != nil {
 		return ""
 	}

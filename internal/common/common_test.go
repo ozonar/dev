@@ -209,3 +209,47 @@ func TestSelectGoTargetExplicit(t *testing.T) {
 		t.Errorf("SelectGoTarget(%q) = %q, want %q", mainFile, got, pkgDir)
 	}
 }
+
+// TestExpandHome проверяет раскрытие "~" и "~/" в домашнюю директорию.
+func TestExpandHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if got := ExpandHome("~"); got != home {
+		t.Fatalf("ExpandHome(~) = %q, want %q", got, home)
+	}
+	want := filepath.Join(home, "projects", "app")
+	if got := ExpandHome("~/projects/app"); got != want {
+		t.Fatalf("ExpandHome(~/projects/app) = %q, want %q", got, want)
+	}
+	if got := ExpandHome("./backend"); got != "./backend" {
+		t.Fatalf("ExpandHome(./backend) = %q, want unchanged", got)
+	}
+}
+
+// TestIsLocalHost проверяет распознавание локальных хостов.
+func TestIsLocalHost(t *testing.T) {
+	for _, host := range []string{"localhost", "127.0.0.1", "::1", "0.0.0.0"} {
+		if !IsLocalHost(host) {
+			t.Errorf("IsLocalHost(%q) = false, want true", host)
+		}
+	}
+	for _, host := range []string{"db", "example.com", "10.0.0.1", ""} {
+		if IsLocalHost(host) {
+			t.Errorf("IsLocalHost(%q) = true, want false", host)
+		}
+	}
+}
+
+// TestEditorCommand проверяет выбор редактора и разбор значения с флагами.
+func TestEditorCommand(t *testing.T) {
+	t.Setenv("EDITOR", "")
+	if got := EditorCommand(); len(got) != 1 || got[0] != "nano" {
+		t.Fatalf("EditorCommand() = %v, want [nano]", got)
+	}
+
+	t.Setenv("EDITOR", "code --wait")
+	if got := EditorCommand(); len(got) != 2 || got[0] != "code" || got[1] != "--wait" {
+		t.Fatalf("EditorCommand() = %v, want [code --wait]", got)
+	}
+}

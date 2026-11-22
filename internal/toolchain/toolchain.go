@@ -9,6 +9,7 @@ package toolchain
 
 import (
 	"dev/internal/i18n"
+	"dev/internal/selfconfig"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,7 +66,7 @@ func NewManager() (*Manager, error) {
 		return nil, fmt.Errorf("failed to determine home directory: %v", err)
 	}
 	return &Manager{
-		dir: filepath.Join(home, "dev-command", DirName),
+		dir: filepath.Join(home, selfconfig.DirName, DirName),
 	}, nil
 }
 

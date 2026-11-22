@@ -6,12 +6,12 @@ package release
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"dev/internal/colors"
+	"dev/internal/common"
 	"dev/internal/i18n"
 
 	"gopkg.in/yaml.v3"
@@ -157,18 +157,7 @@ func EnsureConfig(dir string) (*Config, error) {
 // openInEditor открывает файл в редакторе из переменной $EDITOR
 // (по умолчанию nano) с передачей stdin/stdout терминала.
 func openInEditor(path string) error {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "nano"
-	}
-	// EDITOR может содержать флаги (например "code --wait") — разбиваем.
-	parts := strings.Fields(editor)
-	args := append(parts[1:], path)
-
-	fmt.Println(colors.Cyan(i18n.T("Opening %s in %s...", path, parts[0])))
-	cmd := exec.Command(parts[0], args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	editor := common.EditorCommand()
+	fmt.Println(colors.Cyan(i18n.T("Opening %s in %s...", path, editor[0])))
+	return common.OpenInEditor(path)
 }

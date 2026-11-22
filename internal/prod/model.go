@@ -53,36 +53,41 @@ const (
 	CatRecent   CategoryID = "recent"
 )
 
+// categoryDef — единое описание категории: идентификатор, отображаемое имя,
+// алиасы для CLI и функция сбора. collect == nil означает, что категория
+// участвует только в причинных весах и не собирается отдельно.
+type categoryDef struct {
+	id      CategoryID
+	title   string
+	aliases []string
+	collect func(*Report) *Category
+}
+
+// categoryDefs — единственный реестр категорий prod. Из него строятся
+// отображаемые имена, алиасы, список доступных категорий и порядок сбора.
+var categoryDefs = []categoryDef{
+	{id: CatCPU, title: "CPU", aliases: []string{"cpu"}, collect: collectCPU},
+	{id: CatMemory, title: "Memory", aliases: []string{"memory", "mem"}, collect: collectMemory},
+	{id: CatDisk, title: "Disk", aliases: []string{"disk"}, collect: collectDisk},
+	{id: CatFD, title: "File descriptors", aliases: []string{"fd", "file"}, collect: collectFD},
+	{id: CatNetwork, title: "Network", aliases: []string{"network", "net"}, collect: collectNetwork},
+	{id: CatPHPFPM, title: "PHP-FPM", aliases: []string{"php-fpm", "phpfpm", "fpm"}, collect: collectPHPFPM},
+	{id: CatPostgres, title: "Database", aliases: []string{"pgsql", "postgres", "postgresql", "database", "db"}, collect: collectPostgres},
+	{id: CatRedis, title: "Redis", aliases: []string{"redis"}, collect: collectRedis},
+	{id: CatExternal, title: "External dependencies", aliases: []string{"external", "deps"}, collect: collectExternal},
+	{id: CatDNS, title: "DNS", aliases: []string{"dns"}},
+	{id: CatHTTP, title: "HTTP", aliases: []string{"http"}},
+	{id: CatRecent, title: "Recent changes", aliases: []string{"recent"}, collect: collectRecent},
+}
+
 // Title возвращает отображаемое название категории.
 func (id CategoryID) Title() string {
-	switch id {
-	case CatCPU:
-		return "CPU"
-	case CatMemory:
-		return "Memory"
-	case CatDisk:
-		return "Disk"
-	case CatFD:
-		return "File descriptors"
-	case CatNetwork:
-		return "Network"
-	case CatPHPFPM:
-		return "PHP-FPM"
-	case CatPostgres:
-		return "Database"
-	case CatRedis:
-		return "Redis"
-	case CatExternal:
-		return "External dependencies"
-	case CatDNS:
-		return "DNS"
-	case CatHTTP:
-		return "HTTP"
-	case CatRecent:
-		return "Recent changes"
-	default:
-		return string(id)
+	for _, def := range categoryDefs {
+		if def.id == id {
+			return def.title
+		}
 	}
+	return string(id)
 }
 
 // Symptom представляет один выявленный симптом.
@@ -177,42 +182,29 @@ func (r *Report) OverallLevel() Level {
 }
 
 // CategoryByName сопоставляет строковое имя с идентификатором категории.
-// Поддерживает основные имена и алиасы.
+// Поддерживает основные имена и алиасы из реестра категорий.
 func CategoryByName(name string) (CategoryID, bool) {
 	n := strings.ToLower(strings.TrimSpace(name))
-	aliases := map[string]CategoryID{
-		"cpu":        CatCPU,
-		"memory":     CatMemory,
-		"mem":        CatMemory,
-		"disk":       CatDisk,
-		"fd":         CatFD,
-		"file":       CatFD,
-		"network":    CatNetwork,
-		"net":        CatNetwork,
-		"php-fpm":    CatPHPFPM,
-		"phpfpm":     CatPHPFPM,
-		"fpm":        CatPHPFPM,
-		"pgsql":      CatPostgres,
-		"postgres":   CatPostgres,
-		"postgresql": CatPostgres,
-		"database":   CatPostgres,
-		"db":         CatPostgres,
-		"redis":      CatRedis,
-		"external":   CatExternal,
-		"deps":       CatExternal,
-		"recent":     CatRecent,
+	for _, def := range categoryDefs {
+		if n == strings.ToLower(string(def.id)) {
+			return def.id, true
+		}
+		for _, alias := range def.aliases {
+			if n == alias {
+				return def.id, true
+			}
+		}
 	}
-	id, ok := aliases[n]
-	return id, ok
+	return "", false
 }
 
-// AvailableCategories возвращает список доступных категорий.
+// AvailableCategories возвращает список категорий, которые можно собрать.
 func AvailableCategories() string {
-	ids := []CategoryID{CatCPU, CatMemory, CatDisk, CatFD, CatNetwork,
-		CatPHPFPM, CatPostgres, CatRedis, CatExternal, CatRecent}
-	names := make([]string, 0, len(ids))
-	for _, id := range ids {
-		names = append(names, string(id))
+	names := make([]string, 0, len(categoryDefs))
+	for _, def := range categoryDefs {
+		if def.collect != nil {
+			names = append(names, string(def.id))
+		}
 	}
 	return strings.Join(names, ", ")
 }
