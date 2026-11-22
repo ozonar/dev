@@ -153,7 +153,11 @@ macOS (Apple Silicon):
 curl -L -o dev https://github.com/ozonar/dev/releases/latest/download/dev-darwin-arm64 && chmod +x dev && ./dev install -y; rm -f dev
 ```
 
-Windows: скачайте `dev-windows-amd64.exe` со страницы релиза.
+Android (arm64):
+
+```bash
+wget -O dev https://github.com/ozonar/dev/releases/latest/download/dev-android-arm64 && chmod +x dev && ./dev install -y; rm -f dev
+```
 
 ## Usage
 
