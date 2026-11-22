@@ -399,3 +399,147 @@ func TestExecuteRunsSubcommands(t *testing.T) {
 		t.Errorf("marker not created: %v", err)
 	}
 }
+
+// unsetenv убирает переменную окружения на время теста и восстанавливает её.
+func unsetenv(t *testing.T, key string) {
+	t.Helper()
+	old, ok := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("unset %s: %v", key, err)
+	}
+	t.Cleanup(func() {
+		if ok {
+			_ = os.Setenv(key, old)
+			return
+		}
+		_ = os.Unsetenv(key)
+	})
+}
+
+// cachedRecipe записывает файл рецепта в кэш пользователя.
+func cachedRecipe(t *testing.T, home, name, content string) {
+	t.Helper()
+	writeFile(t, filepath.Join(home, "dev-command", RecipesDir, name+".yml"), content)
+}
+
+func TestPrepareParsesParams(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cachedRecipe(t, home, "deploy", `commands:
+  deploy:
+    description: Deploy
+    params:
+      - name: DEPLOY_ENV
+        description: Target environment
+        default: staging
+      - name: PORT
+    subcommands:
+      - echo deploy
+`)
+
+	prepared, err := Prepare("deploy", false)
+	if err != nil {
+		t.Fatalf("Prepare() error: %v", err)
+	}
+	params := prepared.Command.Params
+	if len(params) != 2 {
+		t.Fatalf("Params = %+v, want 2 parameters", params)
+	}
+	first := params[0]
+	if first.Name != "DEPLOY_ENV" || first.Description != "Target environment" || first.Default != "staging" {
+		t.Errorf("first param = %+v, want DEPLOY_ENV with description and default", first)
+	}
+	if params[1].Name != "PORT" || params[1].Default != "" {
+		t.Errorf("second param = %+v, want PORT without default", params[1])
+	}
+}
+
+func TestParseRecipeRejectsInvalidParamName(t *testing.T) {
+	i18n.SetLang("en")
+	t.Cleanup(func() { i18n.SetLang("") })
+
+	_, err := parseRecipe([]byte(`commands:
+  deploy:
+    params:
+      - name: "1BAD"
+    subcommands:
+      - echo deploy
+`), "deploy")
+	if err == nil {
+		t.Fatal("parseRecipe() should fail for an invalid parameter name")
+	}
+	if !strings.Contains(err.Error(), "invalid parameter name") {
+		t.Errorf("error = %v, want invalid parameter name", err)
+	}
+}
+
+func TestParseRecipeRejectsDuplicateParam(t *testing.T) {
+	i18n.SetLang("en")
+	t.Cleanup(func() { i18n.SetLang("") })
+
+	_, err := parseRecipe([]byte(`commands:
+  deploy:
+    params:
+      - name: DEPLOY_ENV
+      - name: DEPLOY_ENV
+    subcommands:
+      - echo deploy
+`), "deploy")
+	if err == nil {
+		t.Fatal("parseRecipe() should fail for a duplicate parameter")
+	}
+	if !strings.Contains(err.Error(), "duplicate parameter") {
+		t.Errorf("error = %v, want duplicate parameter", err)
+	}
+}
+
+func TestExecutePassesEnv(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "env.txt")
+	prepared := &Prepared{
+		Name: "deploy",
+		Command: custom.Command{
+			Name:        "deploy",
+			Subcommands: []string{`printf '%s' "$DEPLOY_ENV" > ` + out},
+		},
+	}
+
+	err := Execute(prepared, custom.Context{Dir: dir, Env: map[string]string{"DEPLOY_ENV": "staging"}})
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read env: %v", err)
+	}
+	if string(got) != "staging" {
+		t.Errorf("env value = %q, want staging", string(got))
+	}
+}
+
+func TestRunPromptsParamsAndExecutes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	out := filepath.Join(t.TempDir(), "env.txt")
+	cachedRecipe(t, home, "deploy", `commands:
+  deploy:
+    params:
+      - name: DEPLOY_ENV
+        description: Target environment
+    subcommands:
+      - printf '%s' "$DEPLOY_ENV" > `+out+`
+`)
+	unsetenv(t, "DEPLOY_ENV")
+
+	// Ввод: подтверждение запуска, затем значение параметра.
+	if err := run([]string{"deploy"}, false, strings.NewReader("y\nprod\n")); err != nil {
+		t.Fatalf("run() error: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read env: %v", err)
+	}
+	if string(got) != "prod" {
+		t.Errorf("env value = %q, want prod", string(got))
+	}
+}

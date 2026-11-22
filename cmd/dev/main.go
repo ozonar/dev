@@ -852,9 +852,10 @@ With a recipe name the command downloads the recipe into the local cache,
 prints its name, description and cache time, and asks whether to run it.
 Use --force to refresh a cached recipe from the repository.
 
-Extra arguments after the recipe name are passed to the recipe as positional
-parameters $1, $2, ... For example:
-	 dev recipe frpc 8000`,
+Parameters taken from the environment, or asked
+interactively and exported to subcommands. For example:
+	 dev recipe frpc 8000
+	 dev recipe deploy DEPLOY_ENV=production`,
 	Args: cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := recipe.Run(args, recipeForce); err != nil {
@@ -1028,7 +1029,7 @@ func applyCheckScopeFlags(opts *check.Options) error {
 // Без аргументов выполняется анализ проекта. Незнакомая команда сверяется
 // с пользовательскими командами из ~/dev-command/custom.yml и локального
 // файла .custom директории запуска и, если найдена, запускается с пробросом
-// параметров: текущий путь, язык и фреймворк.
+// параметров: текущий путь, язык, фреймворк, аргументы и ввод.
 func runRoot(args []string) {
 	if len(args) == 0 {
 		runAnalyze()
@@ -1053,7 +1054,13 @@ func runRoot(args []string) {
 		return
 	}
 
-	ctx := custom.Context{Dir: cwd, Language: lang, Framework: framework}
+	ctx := custom.Context{
+		Dir:       cwd,
+		Language:  lang,
+		Framework: framework,
+		Args:      args[1:],
+		Input:     os.Stdin,
+	}
 	found, err := cfg.RunCommand(name, ctx)
 	if err != nil {
 		i18n.Red("Custom command %q failed: %v", name, err)

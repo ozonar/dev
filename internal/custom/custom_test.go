@@ -134,6 +134,272 @@ func TestRunCommandPassesArgsPositionally(t *testing.T) {
 	}
 }
 
+func TestRunCommandPassesEnv(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "env.txt")
+
+	cfg := &Config{Commands: map[string]Command{
+		"deploy": {Subcommands: []string{`printf '%s' "$DEPLOY_ENV" > ` + out}},
+	}}
+	// Переменная процесса не должна побеждать значение из контекста.
+	t.Setenv("DEPLOY_ENV", "from-process")
+	ctx := testContext(dir)
+	ctx.Env = map[string]string{"DEPLOY_ENV": "staging"}
+
+	found, err := cfg.RunCommand("deploy", ctx)
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if !found {
+		t.Error("RunCommand() found = false, want true")
+	}
+
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read out: %v", err)
+	}
+	if string(got) != "staging" {
+		t.Errorf("env value = %q, want %q", string(got), "staging")
+	}
+}
+
+// unsetenv убирает переменную окружения на время теста и восстанавливает её.
+func unsetenv(t *testing.T, key string) {
+	t.Helper()
+	old, ok := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("unset %s: %v", key, err)
+	}
+	t.Cleanup(func() {
+		if ok {
+			_ = os.Setenv(key, old)
+			return
+		}
+		_ = os.Unsetenv(key)
+	})
+}
+
+func TestResolveParamsPrefersArgument(t *testing.T) {
+	t.Setenv("DEPLOY_ENV", "from-env")
+	params := []Param{{Name: "DEPLOY_ENV", Default: "from-default"}}
+
+	values, positional, err := resolveParams(params, []string{"DEPLOY_ENV=from-arg", "8000"}, strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("resolveParams() error: %v", err)
+	}
+	if values["DEPLOY_ENV"] != "from-arg" {
+		t.Errorf("value = %q, want from-arg", values["DEPLOY_ENV"])
+	}
+	if len(positional) != 1 || positional[0] != "8000" {
+		t.Errorf("positional = %v, want [8000]", positional)
+	}
+}
+
+func TestResolveParamsUsesEnvironment(t *testing.T) {
+	t.Setenv("DEPLOY_ENV", "from-env")
+
+	values, _, err := resolveParams([]Param{{Name: "DEPLOY_ENV"}}, nil, strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("resolveParams() error: %v", err)
+	}
+	if values["DEPLOY_ENV"] != "from-env" {
+		t.Errorf("value = %q, want from-env", values["DEPLOY_ENV"])
+	}
+}
+
+func TestResolveParamsUsesEmptyEnvironment(t *testing.T) {
+	t.Setenv("DEPLOY_ENV", "")
+
+	values, _, err := resolveParams([]Param{{Name: "DEPLOY_ENV"}}, nil, strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("resolveParams() error: %v", err)
+	}
+	if values["DEPLOY_ENV"] != "" {
+		t.Errorf("value = %q, want empty value from the environment", values["DEPLOY_ENV"])
+	}
+}
+
+func TestResolveParamsPromptsAndUsesDefault(t *testing.T) {
+	unsetenv(t, "DEPLOY_ENV")
+
+	values, _, err := resolveParams(
+		[]Param{{Name: "DEPLOY_ENV", Default: "staging"}},
+		nil,
+		strings.NewReader("\n"),
+	)
+	if err != nil {
+		t.Fatalf("resolveParams() error: %v", err)
+	}
+	if values["DEPLOY_ENV"] != "staging" {
+		t.Errorf("value = %q, want staging", values["DEPLOY_ENV"])
+	}
+}
+
+func TestResolveParamsPromptsForValue(t *testing.T) {
+	unsetenv(t, "DEPLOY_ENV")
+
+	values, _, err := resolveParams([]Param{{Name: "DEPLOY_ENV"}}, nil, strings.NewReader("prod\n"))
+	if err != nil {
+		t.Fatalf("resolveParams() error: %v", err)
+	}
+	if values["DEPLOY_ENV"] != "prod" {
+		t.Errorf("value = %q, want prod", values["DEPLOY_ENV"])
+	}
+}
+
+func TestResolveParamsRepeatsOnEmptyRequiredValue(t *testing.T) {
+	unsetenv(t, "DEPLOY_ENV")
+
+	values, _, err := resolveParams([]Param{{Name: "DEPLOY_ENV"}}, nil, strings.NewReader("\n\nprod\n"))
+	if err != nil {
+		t.Fatalf("resolveParams() error: %v", err)
+	}
+	if values["DEPLOY_ENV"] != "prod" {
+		t.Errorf("value = %q, want prod", values["DEPLOY_ENV"])
+	}
+}
+
+func TestResolveParamsFailsOnEOF(t *testing.T) {
+	unsetenv(t, "DEPLOY_ENV")
+
+	if _, _, err := resolveParams([]Param{{Name: "DEPLOY_ENV"}}, nil, strings.NewReader("")); err == nil {
+		t.Fatal("resolveParams() should fail when a required parameter has no value")
+	}
+}
+
+func TestResolveParamsKeepsUndeclaredNamedArgs(t *testing.T) {
+	values, positional, err := resolveParams(
+		[]Param{{Name: "DEPLOY_ENV"}},
+		[]string{"OTHER=1", "DEPLOY_ENV=prod"},
+		strings.NewReader(""),
+	)
+	if err != nil {
+		t.Fatalf("resolveParams() error: %v", err)
+	}
+	if values["DEPLOY_ENV"] != "prod" {
+		t.Errorf("value = %q, want prod", values["DEPLOY_ENV"])
+	}
+	if len(positional) != 1 || positional[0] != "OTHER=1" {
+		t.Errorf("positional = %v, want [OTHER=1]", positional)
+	}
+}
+
+func TestRunCommandPromptsParams(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "env.txt")
+
+	cfg := &Config{Commands: map[string]Command{
+		"deploy": {
+			Params:      []Param{{Name: "DEPLOY_ENV", Description: "Target environment"}},
+			Subcommands: []string{`printf '%s' "$DEPLOY_ENV" > ` + out},
+		},
+	}}
+	unsetenv(t, "DEPLOY_ENV")
+	ctx := testContext(dir)
+	ctx.Input = strings.NewReader("prod\n")
+
+	found, err := cfg.RunCommand("deploy", ctx)
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if !found {
+		t.Error("RunCommand() found = false, want true")
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read out: %v", err)
+	}
+	if string(got) != "prod" {
+		t.Errorf("env value = %q, want prod", string(got))
+	}
+}
+
+func TestRunCommandParamFromArgument(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "env.txt")
+
+	cfg := &Config{Commands: map[string]Command{
+		"deploy": {
+			Params:      []Param{{Name: "DEPLOY_ENV"}},
+			Subcommands: []string{`printf '%s' "$DEPLOY_ENV" > ` + out},
+		},
+	}}
+	unsetenv(t, "DEPLOY_ENV")
+	ctx := testContext(dir)
+	ctx.Args = []string{"DEPLOY_ENV=prod"}
+	// Пустой ввод: при корректной работе параметр не должен запрашиваться.
+	ctx.Input = strings.NewReader("")
+
+	if _, err := cfg.RunCommand("deploy", ctx); err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read out: %v", err)
+	}
+	if string(got) != "prod" {
+		t.Errorf("env value = %q, want prod", string(got))
+	}
+}
+
+func TestLoadParsesParams(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	path := filepath.Join(tmp, "dev-command", "custom.yml")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+	content := `commands:
+  deploy:
+    params:
+      - name: DEPLOY_ENV
+        description: Target environment
+        default: staging
+    subcommands:
+      - echo "$DEPLOY_ENV"
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	params := cfg.Commands["deploy"].Params
+	if len(params) != 1 {
+		t.Fatalf("Params = %+v, want 1 parameter", params)
+	}
+	if params[0].Name != "DEPLOY_ENV" || params[0].Description != "Target environment" || params[0].Default != "staging" {
+		t.Errorf("param = %+v, want DEPLOY_ENV with description and default", params[0])
+	}
+}
+
+func TestLoadRejectsInvalidParams(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	path := filepath.Join(tmp, "dev-command", "custom.yml")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+	content := `commands:
+  deploy:
+    params:
+      - name: "1BAD"
+    subcommands:
+      - echo deploy
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() should reject an invalid parameter name")
+	}
+}
+
 func TestRunCommandArgsAreNotShellInterpreted(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.txt")

@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -310,4 +311,27 @@ func promptGoTarget(dirs []string, promptMsgid string) (string, error) {
 		return "", errors.New(i18n.T("invalid selection"))
 	}
 	return dirs[idx-1], nil
+}
+
+// ReadLine читает одну строку из in посимвольно, не буферизуя последующий
+// ввод: после возврата в in не остаётся прочитанных, но не использованных
+// байтов. ok=false, если ввод закончился, не дав ни одного байта.
+func ReadLine(in io.Reader) (string, bool) {
+	var b strings.Builder
+	buf := make([]byte, 1)
+	got := false
+	for {
+		n, err := in.Read(buf)
+		if n > 0 {
+			got = true
+			if buf[0] == '\n' {
+				break
+			}
+			b.WriteByte(buf[0])
+		}
+		if err != nil {
+			break
+		}
+	}
+	return b.String(), got
 }

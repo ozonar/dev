@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"dev/internal/common"
 	"dev/internal/custom"
 	"dev/internal/detector"
 	"dev/internal/i18n"
@@ -16,6 +17,12 @@ import (
 // С именем — готовит рецепт (из кэша или репозитория), показывает описание,
 // спрашивает подтверждение и выполняет его в текущей директории.
 func Run(args []string, force bool) error {
+	return run(args, force, os.Stdin)
+}
+
+// run — реализация Run с явным источником ввода: подтверждение и значения
+// параметров читаются из in, что позволяет тестировать сценарий.
+func run(args []string, force bool, in io.Reader) error {
 	cwd, _ := os.Getwd()
 
 	if len(args) == 0 {
@@ -38,11 +45,11 @@ func Run(args []string, force bool) error {
 	}
 
 	printPrepared(prepared)
-	if !confirm(os.Stdin) {
+	if !confirm(in) {
 		i18n.Yellow("Skipped.")
 		return nil
 	}
-	return execute(prepared, cwd, args[1:])
+	return execute(prepared, cwd, args[1:], in)
 }
 
 // printNotFound выводит отсутствующий рецепт и совпадения по подстроке.
@@ -80,28 +87,16 @@ func confirm(in io.Reader) bool {
 // readLine читает одну строку посимвольно, не буферизуя последующий ввод:
 // интерактивный рецепт должен получить свой stdin целиком.
 func readLine(in io.Reader) string {
-	var b strings.Builder
-	buf := make([]byte, 1)
-	for {
-		n, err := in.Read(buf)
-		if n > 0 {
-			if buf[0] == '\n' {
-				break
-			}
-			b.WriteByte(buf[0])
-		}
-		if err != nil {
-			break
-		}
-	}
-	return b.String()
+	line, _ := common.ReadLine(in)
+	return line
 }
 
 // execute выполняет рецепт в контексте текущего проекта.
 // Детекция нужна только для подстановок $(language) и $(framework).
-// params передаются рецепту как позиционные аргументы $1..$N.
-func execute(prepared *Prepared, cwd string, params []string) error {
-	ctx := custom.Context{Dir: cwd, Args: params}
+// args содержат позиционные параметры $1..$N и значения вида NAME=value;
+// параметры разрешает общий движок custom.
+func execute(prepared *Prepared, cwd string, args []string, in io.Reader) error {
+	ctx := custom.Context{Dir: cwd, Args: args, Input: in}
 	if info, err := detector.DetectProject(cwd); err == nil {
 		ctx.Language = info.Language
 		ctx.Framework = info.Framework

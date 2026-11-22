@@ -14,12 +14,14 @@ package custom
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"dev/internal/common"
 	"dev/internal/i18n"
 
 	"github.com/fatih/color"
@@ -34,14 +36,24 @@ const configPath = "~/dev-command/custom.yml"
 const localFileName = ".custom"
 
 // Context содержит параметры, пробрасываемые в пользовательскую команду:
-// текущий путь, язык и фреймворк проекта, а также позиционные аргументы.
+// текущий путь, язык и фреймворк проекта, позиционные аргументы,
+// дополнительные переменные окружения и источник ввода для параметров.
 type Context struct {
-	Dir       string // текущий путь
-	Language  string // язык проекта
-	Framework string // фреймворк проекта
-	// Args — позиционные аргументы, доступные в подкомандах как $1..$N.
-	// Заполняются только рецептами; обычные custom-команды их не получают.
-	Args []string
+	Dir       string            // текущий путь
+	Language  string            // язык проекта
+	Framework string            // фреймворк проекта
+	Args      []string          // Args — позиционные аргументы, доступные в подкомандах как $1..$N.
+	Env       map[string]string // Env — дополнительные переменные окружения
+	Input     io.Reader         // Input — источник ввода для интерактивных параметров; nil — os.Stdin.
+}
+
+// Param описывает параметр команды. Значение берётся из аргумента NAME=value,
+// затем из переменной окружения NAME; если значения нет, оно запрашивается
+// интерактивно. Значение передаётся подкомандам как переменная окружения.
+type Param struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	Default     string `yaml:"default"`
 }
 
 // Command описывает одну пользовательскую команду — список подкоманд.
@@ -51,6 +63,9 @@ type Command struct {
 	Name        string   `yaml:"name"`
 	Description string   `yaml:"description"`
 	Subcommands []string `yaml:"subcommands"`
+	// Params — параметры команды, запрашиваемые интерактивно при отсутствии
+	// значения в аргументах и окружении.
+	Params []Param `yaml:"params"`
 	// Path — путь, внутри которого команда доступна. Абсолютный путь либо "~"
 	// резолвятся как есть; относительный путь считается относительно текущей
 	// директории запуска. Пустое значение — команда доступна везде.
@@ -126,6 +141,11 @@ func loadFile(path string) (*Config, error) {
 	}
 	if cfg.Commands == nil {
 		cfg.Commands = map[string]Command{}
+	}
+	for _, name := range cfg.Names() {
+		if err := ValidateParams(cfg.Commands[name].Params); err != nil {
+			return nil, fmt.Errorf("parse %s: %s: %w", path, name, err)
+		}
 	}
 	return cfg, nil
 }
@@ -225,15 +245,22 @@ func (c *Config) RunCommand(name string, ctx Context) (bool, error) {
 		return false, nil
 	}
 
+	paramEnv, args, err := resolveParams(cmd.Params, ctx.Args, ctx.Input)
+	if err != nil {
+		return true, err
+	}
+	env := mergeEnv(ctx.Env, paramEnv)
+
 	for _, raw := range cmd.Subcommands {
 		line := Expand(raw, ctx)
 		color.Cyan("> %s", line)
 
 		// Аргументы передаются позиционно после текста скрипта: в нём они
 		// доступны как $1..$N и не участвуют в разборе shell-синтаксиса.
-		argv := append([]string{"-c", line, name}, ctx.Args...)
+		argv := append([]string{"-c", line, name}, args...)
 		sh := exec.Command("sh", argv...)
 		sh.Dir = ctx.Dir
+		sh.Env = commandEnv(env)
 		sh.Stdin = os.Stdin
 		sh.Stdout = os.Stdout
 		sh.Stderr = os.Stderr
@@ -242,6 +269,149 @@ func (c *Config) RunCommand(name string, ctx Context) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+// ValidateParams проверяет, что имена параметров пригодны для использования
+// как имена переменных окружения и не повторяются.
+func ValidateParams(params []Param) error {
+	seen := make(map[string]struct{}, len(params))
+	for _, param := range params {
+		if !isEnvName(param.Name) {
+			return fmt.Errorf(i18n.T("invalid parameter name %q"), param.Name)
+		}
+		if _, ok := seen[param.Name]; ok {
+			return fmt.Errorf(i18n.T("duplicate parameter %q"), param.Name)
+		}
+		seen[param.Name] = struct{}{}
+	}
+	return nil
+}
+
+// isEnvName проверяет, что строка является допустимым именем переменной
+// окружения: латинская буква или "_", далее буквы, цифры или "_".
+func isEnvName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i, r := range name {
+		switch {
+		case r == '_', r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z':
+		case i > 0 && r >= '0' && r <= '9':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// splitArgs отделяет аргументы NAME=value с объявленными именами параметров
+// от позиционных аргументов. Неизвестные NAME=value остаются позиционными.
+func splitArgs(params []Param, args []string) (map[string]string, []string) {
+	declared := make(map[string]struct{}, len(params))
+	for _, param := range params {
+		declared[param.Name] = struct{}{}
+	}
+	values := make(map[string]string)
+	positional := make([]string, 0, len(args))
+	for _, arg := range args {
+		name, value, ok := strings.Cut(arg, "=")
+		if ok {
+			if _, known := declared[name]; known {
+				values[name] = value
+				continue
+			}
+		}
+		positional = append(positional, arg)
+	}
+	return values, positional
+}
+
+// resolveParams определяет значения параметров команды. Приоритет:
+// аргумент NAME=value, затем переменная окружения, затем интерактивный ввод,
+// затем значение по умолчанию. Возвращает окружение подкоманд и позиционные
+// аргументы $1..$N.
+func resolveParams(params []Param, args []string, in io.Reader) (map[string]string, []string, error) {
+	values, positional := splitArgs(params, args)
+	for _, param := range params {
+		if _, ok := values[param.Name]; ok {
+			continue
+		}
+		if value, ok := os.LookupEnv(param.Name); ok {
+			values[param.Name] = value
+			continue
+		}
+		value, err := promptParam(param, in)
+		if err != nil {
+			return nil, nil, err
+		}
+		values[param.Name] = value
+	}
+	return values, positional, nil
+}
+
+// promptParam запрашивает значение параметра. Пустой ввод принимает значение
+// по умолчанию; параметр без значения по умолчанию обязателен.
+func promptParam(param Param, in io.Reader) (string, error) {
+	if in == nil {
+		in = os.Stdin
+	}
+	prompt := param.Name
+	if param.Description != "" {
+		prompt += " — " + param.Description
+	}
+	if param.Default != "" {
+		prompt += " [" + param.Default + "]"
+	}
+	for {
+		i18n.Printf("%s: ", prompt)
+		line, ok := common.ReadLine(in)
+		if !ok {
+			return "", fmt.Errorf(i18n.T("parameter %q is required but no value was provided"), param.Name)
+		}
+		value := strings.TrimSpace(line)
+		if value != "" {
+			return value, nil
+		}
+		if param.Default != "" {
+			return param.Default, nil
+		}
+		i18n.Yellow("Value is required.")
+	}
+}
+
+// mergeEnv объединяет базовое окружение с окружением параметров: значения
+// параметров приоритетнее.
+func mergeEnv(base, extra map[string]string) map[string]string {
+	if len(base) == 0 {
+		return extra
+	}
+	merged := make(map[string]string, len(base)+len(extra))
+	for key, value := range base {
+		merged[key] = value
+	}
+	for key, value := range extra {
+		merged[key] = value
+	}
+	return merged
+}
+
+// commandEnv возвращает окружение процесса с добавленными переменными extra.
+// Ключи сортируются для детерминированного порядка; при совпадении имён
+// побеждает значение из extra
+func commandEnv(extra map[string]string) []string {
+	env := os.Environ()
+	if len(extra) == 0 {
+		return env
+	}
+	keys := make([]string, 0, len(extra))
+	for key := range extra {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		env = append(env, key+"="+extra[key])
+	}
+	return env
 }
 
 // Expand подставляет в строку команды переменные окружения:

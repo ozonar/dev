@@ -149,7 +149,7 @@ func fetchHTTP(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf(i18n.T("unexpected HTTP status %d for %s"), resp.StatusCode, url)
 	}
@@ -327,6 +327,9 @@ func parseRecipe(data []byte, name string) (*custom.Command, error) {
 	}
 	if cmd.Name != "" && cmd.Name != name {
 		return nil, fmt.Errorf(i18n.T("recipe file name %q does not match recipe name %q"), cmd.Name, name)
+	}
+	if err := custom.ValidateParams(cmd.Params); err != nil {
+		return nil, err
 	}
 	return &cmd, nil
 }
