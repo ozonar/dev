@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: read
+  # Нужно для публикации комментария с результатом ревью в PR.
+  pull-requests: write
 
 jobs:
   ai-review:
@@ -66,4 +68,55 @@ jobs:
               cat "$RUNNER_TEMP/ai-review.log"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Комментарий к PR: обновляем существующий комментарий бота по маркеру,
+      # чтобы повторные запуски не создавали дубликаты обсуждений.
+      - name: Publish AI review comment
+        if: always() && github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/ai-review.log" ]; then
+            echo "AI review log is missing, nothing to publish."
+            exit 1
+          fi
+
+          MARKER="<!-- ai-review-comment -->"
+          COMMENT_FILE="$RUNNER_TEMP/ai-review-comment.md"
+          {
+            echo "$MARKER"
+            echo "## AI code review"
+            echo '```'
+            cat "$RUNNER_TEMP/ai-review.log"
+            echo '```'
+          } > "$COMMENT_FILE"
+
+          # GitHub ограничивает тело комментария 65536 символами.
+          MAX_BYTES=60000
+          if [ "$(wc -c < "$COMMENT_FILE")" -gt "$MAX_BYTES" ]; then
+            head -c "$MAX_BYTES" "$COMMENT_FILE" \
+              | iconv -f UTF-8 -t UTF-8 -c > "$RUNNER_TEMP/ai-review-comment.truncated.md"
+            {
+              cat "$RUNNER_TEMP/ai-review-comment.truncated.md"
+              printf '\n_Review log truncated, the full log is available in the job summary._\n'
+            } > "$COMMENT_FILE"
+          fi
+
+          EXISTING_IDS="$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-review-comment -->"))) | .id')"
+          EXISTING_ID="${EXISTING_IDS%%$'\n'*}"
+
+          if [ -n "$EXISTING_ID" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING_ID" \
+              -f body=@"$COMMENT_FILE" > /dev/null
+            echo "Updated existing review comment $EXISTING_ID."
+          else
+            gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" \
+              -f body=@"$COMMENT_FILE" > /dev/null
+            echo "Created new review comment."
           fi
