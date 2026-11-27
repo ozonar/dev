@@ -17,6 +17,7 @@ import (
 	"dev/internal/debug"
 	"dev/internal/detector"
 	"dev/internal/docker"
+	"dev/internal/flow"
 	"dev/internal/i18n"
 	"dev/internal/install"
 	"dev/internal/logs"
@@ -897,6 +898,103 @@ Use 'dev self-config' to set up your API endpoint, token, and model.`,
 	},
 }
 
+// Флаги dev flow / dev flow copy для неинтерактивного запуска.
+var (
+	flowBranch      string
+	flowFrom        string
+	flowDays        int
+	flowCopyBranch  string
+	flowCopyFrom    string
+	flowCopyChanges string
+	flowCopyDays    int
+)
+
+var flowCmd = &cobra.Command{
+	Use:   "flow [branch]",
+	Short: "Switch branch or create a new one, preserving your work",
+	Long: `Move between branches without losing work.
+
+Without flags the command shows recent non-root branches (your own first) and
+asks for a branch name or number. Uncommitted changes are stashed under the
+target branch name and restored on the target branch. A stash is dropped only
+after it was applied successfully.
+
+With --branch the command runs non-interactively.
+
+Examples:
+  dev flow
+  dev flow feature/login
+  dev flow --branch feature/login
+  dev flow --branch feature/login --from develop`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		branch := flowBranch
+		if len(args) > 0 {
+			if branch != "" {
+				i18n.Red("Error: branch is set both as an argument and with --branch")
+				os.Exit(1)
+			}
+			branch = args[0]
+		}
+		opts := flow.Options{Branch: branch, From: flowFrom, Days: flowDays}
+		if err := flow.Run(opts); err != nil {
+			i18n.Red("Error: %v", err)
+			os.Exit(1)
+		}
+	},
+}
+
+var flowCopyCmd = &cobra.Command{
+	Use:   "copy",
+	Short: "Create a branch and copy your work into it",
+	Long: `Create a new branch from a base branch and copy either uncommitted
+changes or all unique changes of the current branch.
+
+Without flags the command asks for the new branch name, the base branch and
+what to copy. With --branch it runs non-interactively.
+
+Examples:
+  dev flow copy
+  dev flow copy --branch hotfix/login
+  dev flow copy --branch hotfix/login --from main --changes all`,
+	Run: func(cmd *cobra.Command, args []string) {
+		changes, err := flow.ParseCopyChanges(flowCopyChanges)
+		if err != nil {
+			i18n.Red("Error: %v", err)
+			os.Exit(1)
+		}
+		opts := flow.CopyOptions{
+			Options: flow.Options{
+				Branch: flowCopyBranch,
+				From:   flowCopyFrom,
+				Days:   flowCopyDays,
+			},
+			Changes: changes,
+		}
+		if err := flow.RunCopy(opts); err != nil {
+			i18n.Red("Error: %v", err)
+			os.Exit(1)
+		}
+	},
+}
+
+func init() {
+	flowCmd.Flags().StringVarP(&flowBranch, "branch", "b", "",
+		"Target branch name (non-interactive)")
+	flowCmd.Flags().StringVar(&flowFrom, "from", "",
+		"Base branch for a new branch")
+	flowCmd.Flags().IntVar(&flowDays, "days", 30,
+		"Show branches active during the last N days")
+	flowCopyCmd.Flags().StringVarP(&flowCopyBranch, "branch", "b", "",
+		"New branch name (non-interactive)")
+	flowCopyCmd.Flags().StringVar(&flowCopyFrom, "from", "",
+		"Base branch to fork from")
+	flowCopyCmd.Flags().StringVar(&flowCopyChanges, "changes", "uncommitted",
+		"What to copy: uncommitted|all")
+	flowCopyCmd.Flags().IntVar(&flowCopyDays, "days", 30,
+		"Show branches active during the last N days")
+}
+
 var checkAll bool
 var checkCommit int
 var checkBranch string
@@ -1097,6 +1195,14 @@ func localizeCommand(cmd *cobra.Command) {
 	}
 }
 
+// localizeCommandTree локализует команду и все её подкоманды рекурсивно.
+func localizeCommandTree(cmd *cobra.Command) {
+	localizeCommand(cmd)
+	for _, c := range cmd.Commands() {
+		localizeCommandTree(c)
+	}
+}
+
 func main() {
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(cacheCmd)
@@ -1121,6 +1227,8 @@ func main() {
 	rootCmd.AddCommand(checkCmd)
 	checkCmd.AddCommand(checkFixCmd)
 	checkCmd.AddCommand(checkAICmd)
+	rootCmd.AddCommand(flowCmd)
+	flowCmd.AddCommand(flowCopyCmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateNewCmd)
 	// Разрешаем произвольные аргументы на корне, чтобы перехватывать
@@ -1138,11 +1246,8 @@ func main() {
 		i18n.SetLang(ai.LanguageFromConfig())
 	}
 
-	// Локализуем текст справки: root и все прямые подкоманды.
-	localizeCommand(rootCmd)
-	for _, c := range rootCmd.Commands() {
-		localizeCommand(c)
-	}
+	// Локализуем текст справки для всего дерева команд.
+	localizeCommandTree(rootCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, i18n.T("Error: %v", err))
