@@ -952,7 +952,7 @@ func printMigrationStatus(status *MigrationStatus, dbInfo *detector.DatabaseInfo
 	fmt.Println()
 	i18n.Cyan("Locks")
 	if status.Locks.Blocked {
-		i18n.Printf("  Status: %s\n", red(i18n.T("BLOCKED")))
+		i18n.Printf("  Status:  %s\n", red(i18n.T("BLOCKED")))
 		fmt.Println()
 		fmt.Printf("  %s\n", magenta(i18n.T("Blocking chain:")))
 		for i, link := range status.Locks.Chain {
@@ -979,7 +979,7 @@ func printMigrationStatus(status *MigrationStatus, dbInfo *detector.DatabaseInfo
 			}
 		}
 	} else {
-		i18n.Printf("  Status: %s\n", green(i18n.T("NOT BLOCKED")))
+		i18n.Printf("  Status:  %s\n", green(i18n.T("NOT BLOCKED")))
 	}
 
 	// Статус миграций Doctrine

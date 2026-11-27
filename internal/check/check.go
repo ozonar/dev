@@ -6,8 +6,6 @@ import (
 	"dev/internal/detector"
 	"dev/internal/i18n"
 	"dev/internal/toolchain"
-
-	"github.com/fatih/color"
 )
 
 // Options — параметры запуска команды dev check.
@@ -41,7 +39,7 @@ func Run(info *detector.ProjectInfo, opts Options) {
 	if opts.Mode == ModeFix {
 		modeLabel = "fix"
 	}
-	color.Cyan("Mode: %s\n", modeLabel)
+	i18n.Cyan("Mode: %s\n", modeLabel)
 
 	// Языки определяем по расширениям файлов выбранного объёма.
 	langs := languagesInFiles(scope.Files)

@@ -166,6 +166,8 @@
   "Invalid selection, nothing done": "Некорректный выбор, ничего не сделано",
   "expected host:port format, got %q": "Ожидался формат host:port, получено %q",
   "invalid port: %s": "Некорректный порт: %s",
+  "could not check port %d: %v": "Не удалось проверить порт %d: %v",
+  "could not check port %s:%s: %v": "Не удалось проверить порт %s:%s: %v",
   "nmap: %v": "nmap: %v",
 
   "=== internal/docker ===": "",
@@ -190,6 +192,7 @@
   "copy failed: %v": "Не удалось скопировать: %v",
   "could not set executable permissions: %v": "Не удалось установить права на выполнение: %v",
   "Installation successful as %s": "Установка выполнена успешно: %s",
+  "could not release %s: %v": "Не удалось освободить %s: %v",
 
   "=== internal/update ===": "",
   "could not get home directory: %v": "Не удалось получить домашнюю директорию: %v",
@@ -206,6 +209,8 @@
   "could not remove temporary file %s: %v": "Не удалось удалить временный файл %s: %v",
   "Update completed successfully!": "Обновление успешно завершено!",
   "%s not found in PATH": "%s не найден в PATH",
+  "could not create temporary file in %s: %v": "Не удалось создать временный файл в %s: %v",
+  "could not move downloaded file to %s: %v": "Не удалось переместить скачанный файл в %s: %v",
 
   "=== internal/custom ===": "",
   "command %q failed: %w": "Команда %q завершилась ошибкой: %w",
@@ -345,6 +350,8 @@
   "AI review verdict: CRITICAL": "Вердикт AI-ревью: CRITICAL",
   "AI review verdict: OK": "Вердикт AI-ревью: OK",
   "AI review verdict: unknown (the model did not report a verdict)": "Вердикт AI-ревью: неизвестен (модель не сообщила вердикт)",
+  "Could not prepare %s linters: %v": "Не удалось подготовить линтеры %s: %v",
+  "No Go module found for Go files in scope. Skipping %s.": "Для Go-файлов в выбранном объёме не найден go.mod. Пропуск %s.",
 
   "=== internal/migrate ===": "",
   "migrations for framework %s are not supported": "Миграции для фреймворка %s не поддерживаются",

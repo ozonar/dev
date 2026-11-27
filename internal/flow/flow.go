@@ -157,10 +157,10 @@ func RunCopy(opts CopyOptions) error {
 		return err
 	}
 	if localBranchExists(target) {
-		return fmt.Errorf("%s", i18n.T("branch %q already exists", target))
+		return fmt.Errorf("%s", i18n.T("Branch %q already exists", target))
 	}
 	if _, ok := remoteBranchRef(target); ok {
-		return fmt.Errorf("%s", i18n.T("branch %q already exists", target))
+		return fmt.Errorf("%s", i18n.T("Branch %q already exists", target))
 	}
 
 	base, err := chooseBase(opts.Options, def, interactive, false)
