@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	// defaultDays — период по умолчанию для показа последних веток.
-	defaultDays = 30
+	// DefaultDays — период по умолчанию для показа последних веток.
+	DefaultDays = 30
 	// recentLimit — максимальное число веток в списке выбора.
 	recentLimit = 20
 )
@@ -180,7 +180,7 @@ func RunCopy(opts CopyOptions) error {
 // withDefaults заполняет значения, без которых сценарий не имеет смысла.
 func withDefaults(opts Options) Options {
 	if opts.Days <= 0 {
-		opts.Days = defaultDays
+		opts.Days = DefaultDays
 	}
 	if opts.In == nil {
 		opts.In = os.Stdin
@@ -202,6 +202,10 @@ func promptTarget(recent []branch, days int, in io.Reader) (string, bool, error)
 			return "", false, fmt.Errorf("%s", i18n.T("invalid selection"))
 		}
 		return recent[n-1].Name, true, nil
+	}
+	// Число вне диапазона int — некорректный выбор, а не имя ветки.
+	if allDigits(input) {
+		return "", false, fmt.Errorf("%s", i18n.T("invalid selection"))
 	}
 	return input, false, nil
 }
@@ -263,6 +267,9 @@ func chooseBase(opts Options, def string, interactive, preferDevelop bool) (stri
 		}
 		return candidates[n-1], nil
 	}
+	if allDigits(input) {
+		return "", fmt.Errorf("%s", i18n.T("invalid selection"))
+	}
 	if !containsName(candidates, input) {
 		return "", fmt.Errorf("%s", i18n.T("base branch %q not found", input))
 	}
@@ -291,6 +298,19 @@ func promptLine(in io.Reader, msgid string, args ...interface{}) string {
 	i18n.Printf(msgid, args...)
 	line, _ := common.ReadLine(in)
 	return strings.TrimSpace(line)
+}
+
+// allDigits сообщает, состоит ли строка только из цифр.
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // confirm задаёт вопрос с подтверждением по умолчанию «да».
@@ -345,8 +365,11 @@ func switchTracking(cur, target, remote string) error {
 // createBranch создаёт ветку от обновлённой базы и переносит в неё стэш.
 func createBranch(cur, target, base string) error {
 	baseRef, warn := refreshBase(base)
+	if baseRef == "" {
+		return fmt.Errorf("%s: %w", i18n.T("base branch %q not found", base), warn)
+	}
 	if warn != nil {
-		i18n.Yellow("Could not update %s from origin: %v", base, warn)
+		i18n.Yellow("Could not fetch %s from origin, using local branch: %v", base, warn)
 	}
 	stash, stashed, err := pushStash(target, cur)
 	if err != nil {
@@ -370,8 +393,11 @@ func createBranch(cur, target, base string) error {
 // copyToBranch создаёт ветку от базы и переносит в неё выбранные изменения.
 func copyToBranch(cur, target, base string, changes CopyChanges) error {
 	baseRef, warn := refreshBase(base)
+	if baseRef == "" {
+		return fmt.Errorf("%s: %w", i18n.T("base branch %q not found", base), warn)
+	}
 	if warn != nil {
-		i18n.Yellow("Could not update %s from origin: %v", base, warn)
+		i18n.Yellow("Could not fetch %s from origin, using local branch: %v", base, warn)
 	}
 
 	var commits []string
@@ -398,7 +424,7 @@ func copyToBranch(cur, target, base string, changes CopyChanges) error {
 	for _, sha := range commits {
 		conflict, err := cherryPick(sha)
 		if err != nil {
-			if conflict {
+			if conflict || cherryPickInProgress() {
 				i18n.Red("Cherry-pick stopped at %s.", shortSHA(sha))
 				i18n.Yellow("Resolve conflicts, then run: git cherry-pick --continue")
 				i18n.Yellow("To abort: git cherry-pick --abort")
@@ -418,12 +444,18 @@ func copyToBranch(cur, target, base string, changes CopyChanges) error {
 	return nil
 }
 
-// refreshBase возвращает ссылку для ветвления. Ветка origin обновляется
-// через fetch; при сбое fetch используется уже известная origin-ссылка.
+// refreshBase возвращает ссылку для ветвления. Если ветка есть на origin,
+// она обновляется через fetch. При недоступном origin используется локальная
+// ветка, чтобы не ветвиться от устаревшей origin-ссылки; если локальной нет,
+// возвращается пустая ссылка и операция прерывается. Второй результат — ошибка
+// обновления, при которой работа может продолжаться от локальной ветки.
 func refreshBase(base string) (string, error) {
 	if remote, ok := remoteBranchRef(base); ok {
 		if err := gitStream("fetch", "origin", base); err != nil {
-			return remote, err
+			if localBranchExists(base) {
+				return base, err
+			}
+			return "", err
 		}
 		return remote, nil
 	}
@@ -460,9 +492,16 @@ func cherryPick(sha string) (bool, error) {
 	}
 	// Пустой коммит: git оставил операцию незавершённой, пропускаем её.
 	if skipErr := gitStream("cherry-pick", "--skip"); skipErr != nil {
-		return false, err
+		return false, fmt.Errorf("%w: %s", err,
+			i18n.T("cherry-pick state is unclear; run git cherry-pick --abort or --continue"))
 	}
 	return false, nil
+}
+
+// cherryPickInProgress сообщает, осталась ли незавершённая операция cherry-pick.
+func cherryPickInProgress() bool {
+	_, err := gitCapture("rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD")
+	return err == nil
 }
 
 // isMergeCommit сообщает, имеет ли коммит более одного родителя.

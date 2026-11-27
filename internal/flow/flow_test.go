@@ -92,7 +92,7 @@ func TestRecentBranchesFiltersRootsAndSortsMine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listLocalBranches: %v", err)
 	}
-	recent := recentBranches(branches, "main", time.Now().AddDate(0, 0, -30), 20)
+	recent := recentBranches(branches, "main", time.Now().AddDate(0, 0, -DefaultDays), 20)
 
 	var names []string
 	for _, b := range recent {
@@ -347,6 +347,38 @@ func TestRunSwitchRemoteOnlyBranch(t *testing.T) {
 	}
 	if up := gitRun(t, "rev-parse", "--abbrev-ref", "feature/remote@{upstream}"); up != "origin/feature/remote" {
 		t.Errorf("upstream = %s, want origin/feature/remote", up)
+	}
+}
+
+// TestRefreshBaseFallsBackToLocal проверяет, что при недоступном origin
+// используется локальная ветка, а не устаревшая origin-ссылка.
+func TestRefreshBaseFallsBackToLocal(t *testing.T) {
+	newRepo(t)
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	gitRun(t, "init", "-q", "--bare", remote)
+	gitRun(t, "remote", "add", "origin", remote)
+	gitRun(t, "push", "-q", "-u", "origin", "main")
+	gitRun(t, "branch", "develop")
+	gitRun(t, "push", "-q", "origin", "develop")
+
+	// Делаем origin недоступным: локальная develop остаётся.
+	gitRun(t, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "missing.git"))
+
+	ref, err := refreshBase("develop")
+	if err == nil {
+		t.Fatal("refreshBase must report the fetch failure")
+	}
+	if ref != "develop" {
+		t.Errorf("ref = %q, want local develop", ref)
+	}
+}
+
+// TestPromptTargetRejectsHugeNumber проверяет, что число вне диапазона int
+// не превращается в имя ветки.
+func TestPromptTargetRejectsHugeNumber(t *testing.T) {
+	in := strings.NewReader("999999999999999999999999\n")
+	if _, _, err := promptTarget(nil, DefaultDays, in); err == nil {
+		t.Fatal("huge number must be rejected as an invalid selection")
 	}
 }
 

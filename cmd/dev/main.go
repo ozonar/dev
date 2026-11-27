@@ -983,7 +983,7 @@ func init() {
 		"Target branch name (non-interactive)")
 	flowCmd.Flags().StringVar(&flowFrom, "from", "",
 		"Base branch for a new branch")
-	flowCmd.Flags().IntVar(&flowDays, "days", 30,
+	flowCmd.Flags().IntVar(&flowDays, "days", flow.DefaultDays,
 		"Show branches active during the last N days")
 	flowCopyCmd.Flags().StringVarP(&flowCopyBranch, "branch", "b", "",
 		"New branch name (non-interactive)")
@@ -991,7 +991,7 @@ func init() {
 		"Base branch to fork from")
 	flowCopyCmd.Flags().StringVar(&flowCopyChanges, "changes", "uncommitted",
 		"What to copy: uncommitted|all")
-	flowCopyCmd.Flags().IntVar(&flowCopyDays, "days", 30,
+	flowCopyCmd.Flags().IntVar(&flowCopyDays, "days", flow.DefaultDays,
 		"Show branches active during the last N days")
 }
 
