@@ -999,6 +999,7 @@ var checkAll bool
 var checkCommit int
 var checkBranch string
 var checkCode bool
+var checkExpand bool
 
 var checkCmd = &cobra.Command{
 	Use:     "review",
@@ -1045,7 +1046,11 @@ You can pass an optional instruction, for example:
 Use the same scope flags as 'dev review':
 	 dev review ai --all
 	 dev review ai --commit=3
-	 dev review ai --branch=master`,
+	 dev review ai --branch=master
+
+Use --expand to add whole functions around the changed lines
+until the context budget is reached:
+	 dev review ai --expand`,
 	Args: cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		runCheckAI(strings.Join(args, " "))
@@ -1059,6 +1064,7 @@ func init() {
 	checkCmd.PersistentFlags().IntVar(&checkCommit, "commit", 0, "Check changed code plus last N commits")
 	checkCmd.PersistentFlags().StringVar(&checkBranch, "branch", "", "Check diff with the given branch (master|develop)")
 	checkCmd.PersistentFlags().BoolVar(&checkCode, "code", false, "Check only changed code")
+	checkAICmd.Flags().BoolVar(&checkExpand, "expand", false, "Expand changed regions to whole functions within the context budget")
 	addLanguageFlags(checkCmd, true)
 }
 
@@ -1086,7 +1092,7 @@ func runCheck(opts check.Options) {
 // Любой непройденный исход завершает процесс с кодом 1, чтобы CI падал.
 func runCheckAI(text string) {
 	cwd, _ := os.Getwd()
-	opts := check.Options{}
+	opts := check.Options{Expand: checkExpand}
 	if err := applyCheckScopeFlags(&opts); err != nil {
 		i18n.Red("Error: %v", err)
 		os.Exit(1)

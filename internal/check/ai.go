@@ -40,9 +40,20 @@ func RunAI(info *detector.ProjectInfo, opts Options, instruction string) error {
 		return nil
 	}
 
-	// Ограничиваем размер отправляемого кода общим лимитом символов на ревью.
-	// Обрезаем по рунам, чтобы не разорвать многобайтовый символ UTF-8.
-	if len([]rune(text)) > ai.MaxReviewTotalChars {
+	if opts.Expand {
+		// Базовый текст изменений сохраняется, а остаток бюджета заполняется
+		// целыми функциями вокруг изменённых строк.
+		var added int
+		text, added = expandChangesToFunctions(text, ai.MaxReviewTotalChars)
+		if added > 0 {
+			i18n.Cyan("Expanded context: %d function(s) added, total %s of %s budget.",
+				added, formatSize(len([]rune(text))), formatSize(ai.MaxReviewTotalChars))
+		} else {
+			i18n.Yellow("Context expansion added nothing: no diff hunks or budget exhausted.")
+		}
+	} else if len([]rune(text)) > ai.MaxReviewTotalChars {
+		// Ограничиваем размер отправляемого кода общим лимитом символов на ревью.
+		// Обрезаем по рунам, чтобы не разорвать многобайтовый символ UTF-8.
 		i18n.Yellow("Code exceeds %d characters, truncating.", ai.MaxReviewTotalChars)
 		text = ai.ClampToChars(text, ai.MaxReviewTotalChars)
 	}
@@ -69,7 +80,7 @@ func resolveScopeForAI(opts Options) Scope {
 		return *opts.Scope
 	}
 	if opts.Interactive {
-		return promptScopeForAI()
+		return promptScopeForAI(opts.Expand, ai.MaxReviewTotalChars)
 	}
 	// Без интерактивности берём default (изменённый код или всё, если нет git).
 	return ScopeDefault()

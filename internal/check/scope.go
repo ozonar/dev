@@ -230,6 +230,7 @@ func diffPathArgs(paths []string) []string {
 }
 
 // changedDiffText возвращает текст незакоммиченных изменений (unstaged + staged)
+// и содержимое новых файлов: обычный diff untracked-файлы не показывает.
 func changedDiffText(paths []string) string {
 	pathArgs := diffPathArgs(paths)
 	if pathArgs == nil {
@@ -242,7 +243,64 @@ func changedDiffText(paths []string) string {
 	if out, err := gitOutput(append([]string{"diff", "--cached"}, pathArgs...)...); err == nil {
 		sb.WriteString(out)
 	}
+	sb.WriteString(untrackedFilesText(paths))
 	return sb.String()
+}
+
+// untrackedFilesText возвращает новые файлы в том же diff-формате, что и
+// staged-изменения: иначе размер ревью зависел бы от наличия git add.
+func untrackedFilesText(paths []string) string {
+	untracked := untrackedSet()
+	var sb strings.Builder
+	for _, path := range paths {
+		if !untracked[path] {
+			continue
+		}
+		lines, ok := readFileLines(path)
+		if !ok {
+			continue
+		}
+		sb.WriteString(untrackedFileDiff(filepath.ToSlash(path), trimTrailingEmpty(lines)))
+	}
+	return sb.String()
+}
+
+// untrackedFileDiff формирует diff нового файла в формате git.
+func untrackedFileDiff(path string, lines []string) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "diff --git a/%s b/%s\n", path, path)
+	sb.WriteString("new file mode 100644\n")
+	sb.WriteString("--- /dev/null\n")
+	fmt.Fprintf(&sb, "+++ b/%s\n", path)
+	if len(lines) == 0 {
+		return sb.String()
+	}
+	fmt.Fprintf(&sb, "@@ -0,0 +1,%d @@\n", len(lines))
+	for _, line := range lines {
+		sb.WriteString("+")
+		sb.WriteString(line)
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+// trimTrailingEmpty убирает завершающую пустую строку после Split.
+func trimTrailingEmpty(lines []string) []string {
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		return lines[:len(lines)-1]
+	}
+	return lines
+}
+
+// untrackedSet возвращает множество новых файлов, не отслеживаемых git.
+func untrackedSet() map[string]bool {
+	result := make(map[string]bool)
+	if out, err := gitOutput("ls-files", "--others", "--exclude-standard"); err == nil {
+		for _, f := range lines(out) {
+			result[f] = true
+		}
+	}
+	return result
 }
 
 // diffSinceCommitText возвращает текст изменений за последние n коммитов
@@ -551,8 +609,9 @@ func promptScope() Scope {
 // promptScopeForAI показывает пользователю варианты объёма для AI-ревью.
 // По умолчанию выбран вариант "Changed code".
 // Для AI-ревью показывается размер отправляемого текста (в символах).
-func promptScopeForAI() Scope {
-	return promptScopeWithOptions(scopeOptionsForAI(), scopeChanged, scopeSizeHint)
+// При expand подсказка показывает, до какого бюджета текст может вырасти.
+func promptScopeForAI(expand bool, budget int) Scope {
+	return promptScopeWithOptions(scopeOptionsForAI(), scopeChanged, scopeSizeHintForAI(expand, budget))
 }
 
 // promptScopeWithOptions показывает список вариантов выбора и ждёт ответа.
@@ -616,23 +675,53 @@ func parseInt(s string) (int, error) {
 	return n, err
 }
 
+// scopeText возвращает текст, который будет отправлен на ревью для заданного
+// вида объёма. ok=false означает, что текста нет.
+func scopeText(opt scopeOption) (string, bool) {
+	if opt.kind == scopeAll {
+		return "", false
+	}
+	scope := buildScope(opt)
+	if scope.kind == scopeAll {
+		return "", false
+	}
+	text := scope.GetChanges()
+	if text == "" {
+		return "", false
+	}
+	return text, true
+}
+
 // scopeSizeHint возвращает краткое представление размера текста, который
 // будет отправлен на ревью для заданного вида объёма. Возвращает пустую
 // строку, если размер неинформативен (нулевой или текста нет вовсе), —
 // тогда в меню размер не выводится.
 func scopeSizeHint(opt scopeOption) string {
-	if opt.kind == scopeAll {
+	text, ok := scopeText(opt)
+	if !ok {
 		return ""
 	}
-	scope := buildScope(opt)
-	if scope.kind == scopeAll {
-		return ""
+	return formatSize(len([]rune(text)))
+}
+
+// scopeSizeHintForAI возвращает подсказку о размере текста для AI-ревью.
+// При расширении контекста показывает фактический размер после добавления
+// целых функций вокруг изменённых строк.
+func scopeSizeHintForAI(expand bool, budget int) func(scopeOption) string {
+	return func(opt scopeOption) string {
+		text, ok := scopeText(opt)
+		if !ok {
+			return ""
+		}
+		size := len([]rune(text))
+		if expand {
+			expanded, added := expandChangesToFunctions(text, budget)
+			if added > 0 {
+				size = len([]rune(expanded))
+			}
+		}
+		return formatSize(size)
 	}
-	n := len(scope.GetChanges())
-	if n <= 0 {
-		return ""
-	}
-	return formatSize(n)
 }
 
 // scopeFileHint возвращает количество файлов в объёме, например "3 files".

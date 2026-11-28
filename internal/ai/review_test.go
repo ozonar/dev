@@ -21,6 +21,15 @@ func TestBuildReviewPrompt_ContainsText(t *testing.T) {
 	}
 }
 
+// TestBuildReviewPrompt_IncompleteContext проверяет, что промпт запрещает
+// считать отсутствие определения ошибкой компиляции.
+func TestBuildReviewPrompt_IncompleteContext(t *testing.T) {
+	prompt := buildReviewPrompt("diff --git a/foo.go b/foo.go")
+	if !strings.Contains(prompt, "НЕ значит, что он не определён") {
+		t.Errorf("prompt should forbid undefined conclusions from missing code")
+	}
+}
+
 // TestBuildReviewPrompt_EmptyText проверяет, что промпт корректен при
 // пустом тексте (промпт собирается, но код отсутствует).
 func TestBuildReviewPrompt_EmptyText(t *testing.T) {

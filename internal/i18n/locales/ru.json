@@ -334,6 +334,8 @@
   "Changed code + 3 commits": "Изменённый код + 3 коммита",
   "All code": "Весь код",
   "Diff with %s": "Diff с %s",
+  "Expanded context: %d function(s) added, total %s of %s budget.": "Контекст расширен: добавлено функций %d, итог %s из бюджета %s.",
+  "Context expansion added nothing: no diff hunks or budget exhausted.": "Расширение контекста ничего не добавило: нет изменённых участков или бюджет исчерпан.",
   "Changed files": "Изменённые файлы",
   "changed code": "изменённый код",
   "changed files": "изменённые файлы",
